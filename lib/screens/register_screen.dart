@@ -85,7 +85,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final isValidEmail = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email);
 
     if (!isValidEmail) {
-      return 'Email invalide';
+      return 'Adresse e-mail invalide';
     }
 
     return null;
@@ -141,7 +141,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 TextFormField(
                   controller: _emailController,
                   decoration: const InputDecoration(
-                    labelText: 'Email',
+                    labelText: 'Adresse e-mail',
                     border: OutlineInputBorder(),
                   ),
                   keyboardType: TextInputType.emailAddress,
