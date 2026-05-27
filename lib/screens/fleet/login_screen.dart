@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // 1. IMPORT DU STORAGE
 
+import '../../data/mock_account_data.dart';
 import '../../navigation/app_routes.dart';
 import '../../theme/app_colors.dart';
 
@@ -14,7 +16,12 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  
+  // Instance du stockage sécurisé
+  final _secureStorage = const FlutterSecureStorage(); 
+
   bool _passwordVisible = false;
+  bool _isLoading = false; // 2. ÉTAT DE CHARGEMENT POUR L'UX
 
   @override
   void dispose() {
@@ -23,12 +30,67 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _login() {
+  // 3. TRANSFORMATION DE LA MÉTHODE EN ASYNC
+  Future<void> _login() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    Navigator.of(context).pushReplacementNamed(AppRoutes.home);
+    // Activer l'indicateur de chargement
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final email = _emailController.text.trim();
+      final password = _passwordController.text;
+
+      // Vérifier les identifiants contre les données mockées
+      final account = MockAccountData.authenticate(email, password);
+
+      if (account == null) {
+        // Identifiants invalides
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Email ou mot de passe incorrect'),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Authentification réussie - générer un token mock
+      String mockJwtToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...token_${account.id}";
+
+      // 4. STOCKAGE SÉCURISÉ DU TOKEN ET DE L'ID UTILISATEUR
+      await _secureStorage.write(key: 'jwt_token', value: mockJwtToken);
+      await _secureStorage.write(key: 'user_id', value: account.id);
+      await _secureStorage.write(key: 'user_email', value: account.email);
+
+      // 5. REDIRECTION (avec vérification 'mounted' car opération async)
+      if (mounted) {
+        Navigator.of(context).pushReplacementNamed(AppRoutes.home);
+      }
+    } catch (e) {
+      // Gérer l'erreur
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur de connexion : ${e.toString()}'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    } finally {
+      // Désactiver le chargement si on est encore sur cet écran
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -57,7 +119,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         Icons.directions_car,
                         color: Colors.white,
                         size: 34,
-                      ),
+                        ),
                     ),
                     const SizedBox(height: 20),
                     const Text(
@@ -79,6 +141,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 40),
                     TextFormField(
                       controller: _emailController,
+                      enabled: !_isLoading, // Désactiver pendant le chargement
                       decoration: const InputDecoration(
                         labelText: 'Adresse e-mail',
                       ),
@@ -100,6 +163,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 18),
                     TextFormField(
                       controller: _passwordController,
+                      enabled: !_isLoading, // Désactiver pendant le chargement
                       decoration: InputDecoration(
                         labelText: 'Mot de passe',
                         suffixIcon: IconButton(
@@ -120,7 +184,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       obscureText: !_passwordVisible,
                       textInputAction: TextInputAction.done,
-                      onFieldSubmitted: (_) => _login(),
+                      onFieldSubmitted: (_) => _isLoading ? null : _login(),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
                           return 'Mot de passe obligatoire';
@@ -132,16 +196,21 @@ class _LoginScreenState extends State<LoginScreen> {
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(
-                        onPressed: () {},
+                        onPressed: _isLoading ? null : () {},
                         child: const Text('Mot de passe oublié ?'),
                       ),
                     ),
                     const SizedBox(height: 24),
-                    FilledButton.icon(
-                      onPressed: _login,
-                      icon: const Icon(Icons.login),
-                      label: const Text('Se connecter'),
-                    ),
+                    
+                    // 6. ADAPTATION DU BOUTON SELON L'ÉTAT DE CHARGEMENT
+                    _isLoading
+                        ? const CircularProgressIndicator()
+                        : FilledButton.icon(
+                            onPressed: _login,
+                            icon: const Icon(Icons.login),
+                            label: const Text('Se connecter'),
+                          ),
+                          
                     const SizedBox(height: 48),
                     const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
