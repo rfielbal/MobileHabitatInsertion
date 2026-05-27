@@ -1,0 +1,282 @@
+import 'package:flutter/material.dart';
+
+import '../../data/mock_fleet_data.dart';
+import '../../models/reservation.dart';
+import '../../theme/app_colors.dart';
+import '../../widgets/app_card.dart';
+import '../../widgets/brand_top_bar.dart';
+import '../../widgets/status_chip.dart';
+import 'pickup_screen.dart';
+import 'reservation_edit_screen.dart';
+import 'return_vehicle_screen.dart';
+import 'vehicle_detail_screen.dart';
+
+class BookingsScreen extends StatefulWidget {
+  const BookingsScreen({super.key});
+
+  @override
+  State<BookingsScreen> createState() => _BookingsScreenState();
+}
+
+class _BookingsScreenState extends State<BookingsScreen> {
+  bool _showHistory = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final reservations = MockFleetData.reservations.where((reservation) {
+      return _showHistory
+          ? reservation.status == ReservationStatus.completed
+          : reservation.status != ReservationStatus.completed;
+    }).toList();
+
+    return Scaffold(
+      appBar: const BrandTopBar(),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+          children: [
+            const Text(
+              'Mes Réservations',
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w500,
+                color: AppColors.onSurface,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                ChoiceChip(
+                  selected: !_showHistory,
+                  label: const Text('À venir (3)'),
+                  onSelected: (_) => setState(() => _showHistory = false),
+                  selectedColor: AppColors.primary,
+                  labelStyle: TextStyle(
+                    color: !_showHistory
+                        ? Colors.white
+                        : AppColors.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ChoiceChip(
+                  selected: _showHistory,
+                  label: const Text('Historique'),
+                  onSelected: (_) => setState(() => _showHistory = true),
+                  selectedColor: AppColors.primary,
+                  labelStyle: TextStyle(
+                    color: _showHistory
+                        ? Colors.white
+                        : AppColors.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            for (final reservation in reservations) ...[
+              _ReservationCard(
+                reservation: reservation,
+                onPrimaryAction: () => _openReservation(reservation),
+                onEdit: () => _editReservation(reservation),
+              ),
+              const SizedBox(height: 14),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openReservation(FleetReservation reservation) {
+    switch (reservation.status.action) {
+      case ReservationAction.pickup:
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (context) => PickupScreen(reservation: reservation),
+          ),
+        );
+      case ReservationAction.returnVehicle:
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (context) => ReturnVehicleScreen(reservation: reservation),
+          ),
+        );
+      case ReservationAction.details:
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (context) =>
+                VehicleDetailScreen(vehicle: reservation.vehicle),
+          ),
+        );
+      case ReservationAction.none:
+        break;
+    }
+  }
+
+  void _editReservation(FleetReservation reservation) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => ReservationEditScreen(reservation: reservation),
+      ),
+    );
+  }
+}
+
+class _ReservationCard extends StatelessWidget {
+  const _ReservationCard({
+    required this.reservation,
+    required this.onPrimaryAction,
+    required this.onEdit,
+  });
+
+  final FleetReservation reservation;
+  final VoidCallback onPrimaryAction;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final isCompleted = reservation.status == ReservationStatus.completed;
+
+    return AppCard(
+      opacity: isCompleted ? 0.78 : 1,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      reservation.vehicle.name,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.pin_drop_outlined,
+                          size: 16,
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            reservation.location,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppColors.onSurfaceVariant,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              StatusChip(
+                label: reservation.status.label,
+                color: _statusColor(reservation.status),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _DateBlock(
+                  label: 'Départ',
+                  value: reservation.startLabel,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _DateBlock(label: 'Retour', value: reservation.endLabel),
+              ),
+            ],
+          ),
+          if (!isCompleted) ...[
+            const SizedBox(height: 16),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                if (reservation.status == ReservationStatus.upcoming) ...[
+                  OutlinedButton(
+                    onPressed: onEdit,
+                    child: const Text('Modifier'),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                FilledButton(
+                  onPressed: onPrimaryAction,
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(0, 42),
+                    padding: const EdgeInsets.symmetric(horizontal: 18),
+                  ),
+                  child: Text(_primaryActionLabel(reservation.status)),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _primaryActionLabel(ReservationStatus status) {
+    return switch (status) {
+      ReservationStatus.pickupToday => 'Prise en charge',
+      ReservationStatus.returnToday => 'Retour véhicule',
+      ReservationStatus.upcoming => 'Détails',
+      ReservationStatus.completed => '',
+    };
+  }
+
+  Color _statusColor(ReservationStatus status) {
+    return switch (status) {
+      ReservationStatus.pickupToday => AppColors.maintenance,
+      ReservationStatus.returnToday => AppColors.primary,
+      ReservationStatus.upcoming => AppColors.primary,
+      ReservationStatus.completed => AppColors.secondary,
+    };
+  }
+}
+
+class _DateBlock extends StatelessWidget {
+  const _DateBlock({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: const TextStyle(
+            color: AppColors.outline,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(fontSize: 13, color: AppColors.onSurface),
+        ),
+      ],
+    );
+  }
+}
