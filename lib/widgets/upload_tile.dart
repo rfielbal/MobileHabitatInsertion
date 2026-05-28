@@ -9,17 +9,23 @@ class UploadTile extends StatelessWidget {
     required this.onTap,
     this.selected = false,
     this.large = false,
+    this.processing = false,
+    this.progress,
+    this.statusText,
   });
 
   final String label;
   final VoidCallback onTap;
   final bool selected;
   final bool large;
+  final bool processing;
+  final double? progress;
+  final String? statusText;
 
   @override
   Widget build(BuildContext context) {
     return OutlinedButton(
-      onPressed: onTap,
+      onPressed: processing ? null : onTap,
       style: OutlinedButton.styleFrom(
         minimumSize: Size.fromHeight(large ? 128 : 88),
         backgroundColor: selected
@@ -48,16 +54,47 @@ class UploadTile extends StatelessWidget {
               shape: BoxShape.circle,
             ),
             child: Icon(
-              selected ? Icons.check : Icons.videocam,
+              processing
+                  ? Icons.hourglass_top
+                  : selected
+                  ? Icons.check
+                  : Icons.videocam,
               color: selected ? Colors.white : AppColors.onSecondaryContainer,
             ),
           ),
           const SizedBox(height: 10),
           Text(
-            selected ? 'Vidéo ajoutée' : label,
+            processing
+                ? statusText ?? 'Compression en cours'
+                : selected
+                ? 'Vidéo ajoutée'
+                : label,
             textAlign: TextAlign.center,
             style: const TextStyle(fontWeight: FontWeight.w600),
           ),
+          if (processing || progress != null) ...[
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: progress?.clamp(0, 1).toDouble(),
+                minHeight: 6,
+                backgroundColor: AppColors.outlineVariant.withValues(
+                  alpha: 0.35,
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              progress == null
+                  ? 'Préparation de la vidéo'
+                  : '${(progress!.clamp(0, 1).toDouble() * 100).round()}%',
+              style: const TextStyle(
+                color: AppColors.onSurfaceVariant,
+                fontSize: 12,
+              ),
+            ),
+          ],
         ],
       ),
     );

@@ -6,6 +6,7 @@ import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/brand_top_bar.dart';
 import '../../widgets/status_chip.dart';
+import 'notifications_screen.dart';
 import 'pickup_screen.dart';
 import 'reservation_edit_screen.dart';
 import 'return_vehicle_screen.dart';
@@ -30,7 +31,9 @@ class _BookingsScreenState extends State<BookingsScreen> {
     }).toList();
 
     return Scaffold(
-      appBar: const BrandTopBar(),
+      appBar: BrandTopBar(
+        onNotificationsPressed: () => _openNotifications(context),
+      ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
@@ -118,6 +121,14 @@ class _BookingsScreenState extends State<BookingsScreen> {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (context) => ReservationEditScreen(reservation: reservation),
+      ),
+    );
+  }
+
+  void _openNotifications(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => const NotificationsScreen(),
       ),
     );
   }

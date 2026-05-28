@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/vehicle.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
+import '../../widgets/bottom_action_bar.dart';
 import '../../widgets/remote_vehicle_image.dart';
 
 class VehicleDetailScreen extends StatefulWidget {
@@ -27,23 +28,17 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.vehicle.name),
-        actions: [
-          IconButton(
-            tooltip: 'Options',
-            onPressed: () {},
-            icon: const Icon(Icons.more_vert),
+      appBar: AppBar(title: Text(widget.vehicle.name)),
+      bottomNavigationBar: BottomActionBar(
+        children: [
+          Expanded(
+            child: BottomActionButton(
+              label: 'Réserver ce véhicule',
+              icon: Icons.event_available,
+              onPressed: _canBook ? _bookVehicle : null,
+            ),
           ),
         ],
-      ),
-      bottomNavigationBar: SafeArea(
-        minimum: const EdgeInsets.all(16),
-        child: FilledButton.icon(
-          onPressed: _canBook ? _bookVehicle : null,
-          icon: const Icon(Icons.event_available),
-          label: const Text('Réserver ce véhicule'),
-        ),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -370,7 +365,7 @@ class _CalendarCard extends StatelessWidget {
             children: [
               IconButton(
                 tooltip: 'Mois précédent',
-                onPressed: () {},
+                onPressed: null,
                 icon: const Icon(Icons.chevron_left),
               ),
               const Text(
@@ -379,7 +374,7 @@ class _CalendarCard extends StatelessWidget {
               ),
               IconButton(
                 tooltip: 'Mois suivant',
-                onPressed: () {},
+                onPressed: null,
                 icon: const Icon(Icons.chevron_right),
               ),
             ],

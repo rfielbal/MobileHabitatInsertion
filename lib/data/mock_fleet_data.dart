@@ -28,6 +28,7 @@ class MockFleetData {
       seats: '5 Places',
       transmission: 'Automatique',
       energyInfo: '50km Élec.',
+      nextAvailableAt: DateTime(2026, 5, 27, 17),
       availabilityByDay: _availability,
     ),
     Vehicle(
@@ -42,6 +43,7 @@ class MockFleetData {
       seats: '2 Places',
       transmission: 'Manuelle',
       energyInfo: 'Électrique',
+      nextAvailableAt: DateTime(2026, 5, 28, 12),
       availabilityByDay: _availability,
     ),
     Vehicle(
@@ -56,6 +58,7 @@ class MockFleetData {
       seats: '5 Places',
       transmission: 'Automatique',
       energyInfo: '100% Élec.',
+      nextAvailableAt: DateTime(2026, 5, 27, 8),
       availabilityByDay: _availability,
     ),
     Vehicle(
@@ -70,6 +73,7 @@ class MockFleetData {
       seats: '5 Places',
       transmission: 'Manuelle',
       energyInfo: 'Diesel',
+      nextAvailableAt: DateTime(2026, 6, 14, 8),
       availabilityByDay: _availability,
     ),
   ];
@@ -88,6 +92,7 @@ class MockFleetData {
       seats: vehicle.seats,
       transmission: vehicle.transmission,
       energyInfo: vehicle.energyInfo,
+      nextAvailableAt: vehicle.nextAvailableAt,
       availabilityByDay: vehicle.availabilityByDay,
     );
   }
@@ -130,6 +135,7 @@ class MockFleetData {
           seats: '5 Places',
           transmission: 'Automatique',
           energyInfo: 'Électrique',
+          nextAvailableAt: DateTime(2026, 5, 26, 18),
           availabilityByDay: _availability,
         ),
         location: 'Siège Social - Paris',
@@ -151,6 +157,7 @@ class MockFleetData {
           seats: '5 Places',
           transmission: 'Automatique',
           energyInfo: 'Essence',
+          nextAvailableAt: DateTime(2026, 5, 27, 8),
           availabilityByDay: _availability,
         ),
         location: 'Agence Sud - Lyon',

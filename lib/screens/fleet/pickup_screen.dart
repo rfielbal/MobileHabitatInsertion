@@ -5,7 +5,9 @@ import 'package:video_compress/video_compress.dart';
 import '../../models/reservation.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
+import '../../widgets/bottom_action_bar.dart';
 import '../../widgets/upload_tile.dart';
+import 'report_issue_screen.dart';
 
 class PickupScreen extends StatefulWidget {
   const PickupScreen({super.key, required this.reservation});
@@ -22,14 +24,17 @@ class _PickupScreenState extends State<PickupScreen> {
   final _fuelController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
 
-  XFile? _videoFile;
   bool _hasVideo = false;
+  bool _isCompressing = false;
+  double? _compressionProgress;
+  Subscription? _compressionSubscription;
 
   @override
   void dispose() {
     _mileageController.dispose();
     _fuelController.dispose();
 
+    _compressionSubscription?.unsubscribe();
     // Nettoyage correct du plugin vidéo
     VideoCompress.dispose();
 
@@ -60,7 +65,26 @@ class _PickupScreenState extends State<PickupScreen> {
         maxDuration: const Duration(minutes: 1),
       );
 
-      if (video == null) return;
+      if (video == null) {
+        return;
+      }
+
+      setState(() {
+        _isCompressing = true;
+        _compressionProgress = 0;
+      });
+
+      _compressionSubscription?.unsubscribe();
+      _compressionSubscription = VideoCompress.compressProgress$.subscribe((
+        progress,
+      ) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _compressionProgress = (progress / 100).clamp(0, 1).toDouble();
+        });
+      });
 
       final compressedVideo = await VideoCompress.compressVideo(
         video.path,
@@ -69,26 +93,46 @@ class _PickupScreenState extends State<PickupScreen> {
       );
 
       if (compressedVideo == null || compressedVideo.path == null) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _isCompressing = false;
+          _compressionProgress = null;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Compression vidéo échouée')),
         );
         return;
       }
 
+      if (!mounted) {
+        return;
+      }
+
       setState(() {
-        _videoFile = XFile(compressedVideo.path!);
         _hasVideo = true;
+        _isCompressing = false;
+        _compressionProgress = 1;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Vidéo ajoutée avec succès'),),
+        const SnackBar(content: Text('Vidéo ajoutée avec succès')),
       );
 
-      print('Compressed path: ${compressedVideo.path}');
+      debugPrint('Vidéo compressée : ${compressedVideo.path}');
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Erreur vidéo : $e')));
+      if (mounted) {
+        setState(() {
+          _isCompressing = false;
+          _compressionProgress = null;
+        });
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Erreur vidéo : $e')));
+      }
     }
   }
 
@@ -112,13 +156,16 @@ class _PickupScreenState extends State<PickupScreen> {
         title: const Center(child: Text('Prise en charge')),
         actions: const [SizedBox(width: 48)],
       ),
-      bottomNavigationBar: SafeArea(
-        minimum: const EdgeInsets.all(16),
-        child: FilledButton.icon(
-          onPressed: _startTrip,
-          icon: const Icon(Icons.play_circle),
-          label: const Text('Démarrer le trajet'),
-        ),
+      bottomNavigationBar: BottomActionBar(
+        children: [
+          Expanded(
+            child: BottomActionButton(
+              label: 'Démarrer le trajet',
+              icon: Icons.play_circle,
+              onPressed: _startTrip,
+            ),
+          ),
+        ],
       ),
       body: SafeArea(
         child: Form(
@@ -162,6 +209,12 @@ class _PickupScreenState extends State<PickupScreen> {
                     ),
                   ],
                 ),
+              ),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: () => _openReportIssue(),
+                icon: const Icon(Icons.report_problem_outlined),
+                label: const Text('Signaler un problème à l’administrateur'),
               ),
               const SizedBox(height: 16),
               AppCard(
@@ -213,6 +266,9 @@ class _PickupScreenState extends State<PickupScreen> {
               UploadTile(
                 label: 'Ajouter vidéo de début',
                 selected: _hasVideo,
+                processing: _isCompressing,
+                progress: _compressionProgress,
+                statusText: 'Compression de la vidéo de début',
                 onTap: _recordVideo,
               ),
               const SizedBox(height: 8),
@@ -245,6 +301,17 @@ class _PickupScreenState extends State<PickupScreen> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  void _openReportIssue() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => ReportIssueScreen(
+          reservation: widget.reservation,
+          phaseLabel: 'Prise en charge',
         ),
       ),
     );
