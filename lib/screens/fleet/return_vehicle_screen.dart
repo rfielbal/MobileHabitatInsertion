@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:video_compress/video_compress.dart';
 
 import '../../models/reservation.dart';
 import '../../theme/app_colors.dart';
@@ -17,6 +19,9 @@ class ReturnVehicleScreen extends StatefulWidget {
 class _ReturnVehicleScreenState extends State<ReturnVehicleScreen> {
   final _formKey = GlobalKey<FormState>();
   final _mileageController = TextEditingController();
+  final ImagePicker _picker = ImagePicker();
+
+  XFile? _videoFile;
   bool _hasVideo = false;
   bool _keysReturned = false;
   bool _vehicleClean = false;
@@ -24,6 +29,10 @@ class _ReturnVehicleScreenState extends State<ReturnVehicleScreen> {
   @override
   void dispose() {
     _mileageController.dispose();
+
+    // Nettoyage correct du plugin vidéo
+    VideoCompress.dispose();
+
     super.dispose();
   }
 
@@ -40,7 +49,47 @@ class _ReturnVehicleScreenState extends State<ReturnVehicleScreen> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Trajet terminé')));
+
     Navigator.of(context).pop();
+  }
+
+  Future<void> _recordVideo() async {
+    try {
+      final video = await _picker.pickVideo(
+        source: ImageSource.camera,
+        maxDuration: const Duration(minutes: 1),
+      );
+
+      if (video == null) return;
+
+      final MediaInfo? compressedVideo = await VideoCompress.compressVideo(
+        video.path,
+        quality: VideoQuality.MediumQuality,
+        deleteOrigin: false,
+      );
+
+      if (compressedVideo == null || compressedVideo.path == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Compression vidéo échouée')),
+        );
+        return;
+      }
+
+      setState(() {
+        _videoFile = XFile(compressedVideo.path!);
+        _hasVideo = true;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vidéo ajoutée avec succès')),
+      );
+
+      print('Compressed path: ${compressedVideo.path}');
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Erreur vidéo : $e')));
+    }
   }
 
   @override
@@ -139,7 +188,7 @@ class _ReturnVehicleScreenState extends State<ReturnVehicleScreen> {
                 label: 'Ajouter vidéo de fin',
                 selected: _hasVideo,
                 large: true,
-                onTap: () => setState(() => _hasVideo = true),
+                onTap: _recordVideo,
               ),
               const SizedBox(height: 20),
               AppCard(

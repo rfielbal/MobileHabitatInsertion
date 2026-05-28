@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:video_compress/video_compress.dart';
 
 import '../../models/reservation.dart';
 import '../../theme/app_colors.dart';
@@ -18,12 +20,19 @@ class _PickupScreenState extends State<PickupScreen> {
   final _formKey = GlobalKey<FormState>();
   final _mileageController = TextEditingController();
   final _fuelController = TextEditingController();
+  final ImagePicker _picker = ImagePicker();
+
+  XFile? _videoFile;
   bool _hasVideo = false;
 
   @override
   void dispose() {
     _mileageController.dispose();
     _fuelController.dispose();
+
+    // Nettoyage correct du plugin vidéo
+    VideoCompress.dispose();
+
     super.dispose();
   }
 
@@ -40,7 +49,55 @@ class _PickupScreenState extends State<PickupScreen> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Trajet démarré')));
+
     Navigator.of(context).pop();
+  }
+
+  Future<void> _recordVideo() async {
+    try {
+      final video = await _picker.pickVideo(
+        source: ImageSource.camera,
+        maxDuration: const Duration(minutes: 1),
+      );
+
+      if (video == null) return;
+
+      final compressedVideo = await VideoCompress.compressVideo(
+        video.path,
+        quality: VideoQuality.MediumQuality,
+        deleteOrigin: false,
+      );
+
+      if (compressedVideo == null || compressedVideo.path == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Compression vidéo échouée')),
+        );
+        return;
+      }
+
+      setState(() {
+        _videoFile = XFile(compressedVideo.path!);
+        _hasVideo = true;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vidéo ajoutée avec succès'),),
+      );
+
+      print('Compressed path: ${compressedVideo.path}');
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Erreur vidéo : $e')));
+    }
+  }
+
+  String? _requiredNumber(String? value) {
+    final number = int.tryParse(value?.trim() ?? '');
+    if (number == null || number < 0) {
+      return 'Valeur obligatoire';
+    }
+    return null;
   }
 
   @override
@@ -156,7 +213,7 @@ class _PickupScreenState extends State<PickupScreen> {
               UploadTile(
                 label: 'Ajouter vidéo de début',
                 selected: _hasVideo,
-                onTap: () => setState(() => _hasVideo = true),
+                onTap: _recordVideo,
               ),
               const SizedBox(height: 8),
               const Text(
@@ -191,13 +248,5 @@ class _PickupScreenState extends State<PickupScreen> {
         ),
       ),
     );
-  }
-
-  String? _requiredNumber(String? value) {
-    final number = int.tryParse(value?.trim() ?? '');
-    if (number == null || number < 0) {
-      return 'Valeur obligatoire';
-    }
-    return null;
   }
 }
