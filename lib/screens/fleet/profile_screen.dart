@@ -1,18 +1,39 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/brand_top_bar.dart';
+import 'notifications_screen.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, required this.onLogout});
 
   final VoidCallback onLogout;
 
   @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  bool _notificationsEnabled = false;
+  bool _notificationsLoading = true;
+  bool _permissionPluginAvailable = true;
+  PermissionStatus? _notificationPermissionStatus;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNotificationStatus();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: const BrandTopBar(),
+      appBar: BrandTopBar(
+        onNotificationsPressed: () => _openNotifications(context),
+      ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
@@ -104,21 +125,144 @@ class ProfileScreen extends StatelessWidget {
                       color: AppColors.onSurfaceVariant,
                     ),
                     title: const Text('Notifications'),
-                    subtitle: const Text('Alertes de réservation et de retour'),
-                    trailing: Switch(value: true, onChanged: (_) {}),
+                    subtitle: Text(_notificationSubtitle),
+                    trailing: _notificationsLoading
+                        ? const SizedBox(
+                            height: 24,
+                            width: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Switch(
+                            value: _notificationsEnabled,
+                            onChanged: _permissionPluginAvailable
+                                ? _setNotificationsEnabled
+                                : null,
+                          ),
+                    onTap: _notificationsLoading || !_permissionPluginAvailable
+                        ? null
+                        : () =>
+                              _setNotificationsEnabled(!_notificationsEnabled),
                   ),
                   const Divider(height: 16),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.logout, color: AppColors.error),
                     title: const Text('Se déconnecter'),
-                    onTap: onLogout,
+                    onTap: widget.onLogout,
                   ),
                 ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  String get _notificationSubtitle {
+    if (!_permissionPluginAvailable) {
+      return 'Autorisation indisponible : relance complète nécessaire';
+    }
+    if (_notificationsLoading) {
+      return 'Vérification de l’autorisation';
+    }
+    if (_notificationsEnabled) {
+      return 'Alertes de réservation et de retour activées';
+    }
+    if (_notificationPermissionStatus?.isPermanentlyDenied ?? false) {
+      return 'Autorisation bloquée dans les réglages du téléphone';
+    }
+    return 'Alertes de réservation et de retour désactivées';
+  }
+
+  Future<void> _loadNotificationStatus() async {
+    try {
+      final status = await Permission.notification.status;
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _notificationPermissionStatus = status;
+        _notificationsEnabled = status.isGranted;
+        _notificationsLoading = false;
+        _permissionPluginAvailable = true;
+      });
+    } on MissingPluginException {
+      _handleMissingPermissionPlugin();
+    }
+  }
+
+  Future<void> _setNotificationsEnabled(bool enabled) async {
+    if (!enabled) {
+      setState(() {
+        _notificationsEnabled = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _notificationsLoading = true;
+    });
+
+    PermissionStatus status;
+    try {
+      status = await Permission.notification.request();
+    } on MissingPluginException {
+      _handleMissingPermissionPlugin();
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _notificationPermissionStatus = status;
+      _notificationsEnabled = status.isGranted;
+      _notificationsLoading = false;
+    });
+
+    if (status.isGranted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Notifications activées')));
+      return;
+    }
+
+    final snackBar = SnackBar(
+      content: const Text('Autorisation de notification refusée'),
+      action: status.isPermanentlyDenied
+          ? SnackBarAction(label: 'Réglages', onPressed: openAppSettings)
+          : null,
+    );
+
+    ScaffoldMessenger.of(context).showSnackBar(snackBar);
+  }
+
+  void _handleMissingPermissionPlugin() {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _permissionPluginAvailable = false;
+      _notificationsEnabled = false;
+      _notificationsLoading = false;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Relancez complètement l’application pour activer ce plugin natif',
+        ),
+      ),
+    );
+  }
+
+  void _openNotifications(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => const NotificationsScreen(),
       ),
     );
   }

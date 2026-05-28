@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:video_compress/video_compress.dart';
 
 import '../../models/reservation.dart';
+import '../../services/reservation_video_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
+import '../../widgets/bottom_action_bar.dart';
 import '../../widgets/upload_tile.dart';
+import 'report_issue_screen.dart';
 
 class ReturnVehicleScreen extends StatefulWidget {
   const ReturnVehicleScreen({super.key, required this.reservation});
@@ -19,19 +20,18 @@ class ReturnVehicleScreen extends StatefulWidget {
 class _ReturnVehicleScreenState extends State<ReturnVehicleScreen> {
   final _formKey = GlobalKey<FormState>();
   final _mileageController = TextEditingController();
-  final ImagePicker _picker = ImagePicker();
+  final _videoService = ReservationVideoService();
 
-  XFile? _videoFile;
-  bool _hasVideo = false;
+  ReservationVideoDraft? _returnVideo;
+  bool _isPreparingVideo = false;
   bool _keysReturned = false;
   bool _vehicleClean = false;
+
+  bool get _hasVideo => _returnVideo != null;
 
   @override
   void dispose() {
     _mileageController.dispose();
-
-    // Nettoyage correct du plugin vidéo
-    VideoCompress.dispose();
 
     super.dispose();
   }
@@ -55,40 +55,50 @@ class _ReturnVehicleScreenState extends State<ReturnVehicleScreen> {
 
   Future<void> _recordVideo() async {
     try {
-      final video = await _picker.pickVideo(
-        source: ImageSource.camera,
-        maxDuration: const Duration(minutes: 1),
+      setState(() {
+        _isPreparingVideo = true;
+      });
+
+      final video = await _videoService.recordReservationVideo(
+        reservationId: widget.reservation.id,
+        kind: ReservationVideoKind.returnVehicle,
       );
 
-      if (video == null) return;
+      if (video == null) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _isPreparingVideo = false;
+        });
+        return;
+      }
 
-      final MediaInfo? compressedVideo = await VideoCompress.compressVideo(
-        video.path,
-        quality: VideoQuality.MediumQuality,
-        deleteOrigin: false,
-      );
-
-      if (compressedVideo == null || compressedVideo.path == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Compression vidéo échouée')),
-        );
+      if (!mounted) {
         return;
       }
 
       setState(() {
-        _videoFile = XFile(compressedVideo.path!);
-        _hasVideo = true;
+        _returnVideo = video;
+        _isPreparingVideo = false;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Vidéo ajoutée avec succès')),
       );
 
-      print('Compressed path: ${compressedVideo.path}');
+      debugPrint('Vidéo de retour prête pour upload API : ${video.file.path}');
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Erreur vidéo : $e')));
+      if (mounted) {
+        setState(() {
+          _isPreparingVideo = false;
+        });
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Erreur vidéo : $e')));
+      }
     }
   }
 
@@ -96,12 +106,15 @@ class _ReturnVehicleScreenState extends State<ReturnVehicleScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Retour du véhicule')),
-      bottomNavigationBar: SafeArea(
-        minimum: const EdgeInsets.all(16),
-        child: FilledButton(
-          onPressed: _finishTrip,
-          child: const Text('Terminer le trajet'),
-        ),
+      bottomNavigationBar: BottomActionBar(
+        children: [
+          Expanded(
+            child: BottomActionButton(
+              label: 'Terminer le trajet',
+              onPressed: _finishTrip,
+            ),
+          ),
+        ],
       ),
       body: SafeArea(
         child: Form(
@@ -149,6 +162,12 @@ class _ReturnVehicleScreenState extends State<ReturnVehicleScreen> {
                   ],
                 ),
               ),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: () => _openReportIssue(),
+                icon: const Icon(Icons.report_problem_outlined),
+                label: const Text('Signaler un problème à l’administrateur'),
+              ),
               const SizedBox(height: 24),
               const Text(
                 'Informations de retour',
@@ -187,6 +206,8 @@ class _ReturnVehicleScreenState extends State<ReturnVehicleScreen> {
               UploadTile(
                 label: 'Ajouter vidéo de fin',
                 selected: _hasVideo,
+                processing: _isPreparingVideo,
+                statusText: 'Préparation de la vidéo de fin',
                 large: true,
                 onTap: _recordVideo,
               ),
@@ -223,6 +244,17 @@ class _ReturnVehicleScreenState extends State<ReturnVehicleScreen> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  void _openReportIssue() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => ReportIssueScreen(
+          reservation: widget.reservation,
+          phaseLabel: 'Retour véhicule',
         ),
       ),
     );

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/reservation.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
+import '../../widgets/bottom_action_bar.dart';
 
 class ReservationEditScreen extends StatefulWidget {
   const ReservationEditScreen({super.key, required this.reservation});
@@ -32,25 +33,20 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Modifier la réservation')),
-      bottomNavigationBar: SafeArea(
-        minimum: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Annuler'),
-              ),
+      bottomNavigationBar: BottomActionBar(
+        children: [
+          Expanded(
+            child: BottomActionButton(
+              label: 'Annuler',
+              onPressed: () => Navigator.of(context).pop(),
+              outlined: true,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: FilledButton(
-                onPressed: _save,
-                child: const Text('Enregistrer'),
-              ),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: BottomActionButton(label: 'Enregistrer', onPressed: _save),
+          ),
+        ],
       ),
       body: SafeArea(
         child: ListView(

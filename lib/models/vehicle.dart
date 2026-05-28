@@ -84,6 +84,7 @@ class Vehicle {
     required this.seats,
     required this.transmission,
     required this.energyInfo,
+    required this.nextAvailableAt,
     required this.availabilityByDay,
   });
 
@@ -98,5 +99,6 @@ class Vehicle {
   final String seats;
   final String transmission;
   final String energyInfo;
+  final DateTime nextAvailableAt;
   final Map<int, AvailabilityStatus> availabilityByDay;
 }

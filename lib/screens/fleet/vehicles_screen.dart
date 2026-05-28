@@ -5,7 +5,10 @@ import '../../models/vehicle.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/brand_top_bar.dart';
 import '../../widgets/vehicle_card.dart';
+import 'notifications_screen.dart';
 import 'vehicle_detail_screen.dart';
+
+enum VehicleSortMode { status, date }
 
 class VehiclesScreen extends StatefulWidget {
   const VehiclesScreen({super.key});
@@ -16,7 +19,7 @@ class VehiclesScreen extends StatefulWidget {
 
 class _VehiclesScreenState extends State<VehiclesScreen> {
   final _searchController = TextEditingController();
-  String _selectedCategory = 'Tous';
+  VehicleSortMode _sortMode = VehicleSortMode.status;
 
   @override
   void dispose() {
@@ -26,21 +29,32 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
 
   List<Vehicle> get _filteredVehicles {
     final query = _searchController.text.trim().toLowerCase();
-    return MockFleetData.sortedVehicles.where((vehicle) {
+    final vehicles = MockFleetData.vehicles.where((vehicle) {
       final matchesQuery =
           query.isEmpty ||
           vehicle.name.toLowerCase().contains(query) ||
           vehicle.plateNumber.toLowerCase().contains(query);
-      final matchesCategory =
-          _selectedCategory == 'Tous' || vehicle.category == _selectedCategory;
-      return matchesQuery && matchesCategory;
+      return matchesQuery;
     }).toList();
+
+    vehicles.sort((a, b) {
+      return switch (_sortMode) {
+        VehicleSortMode.status => a.status.sortRank.compareTo(
+          b.status.sortRank,
+        ),
+        VehicleSortMode.date => a.nextAvailableAt.compareTo(b.nextAvailableAt),
+      };
+    });
+
+    return vehicles;
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: const BrandTopBar(),
+      appBar: BrandTopBar(
+        onNotificationsPressed: () => _openNotifications(context),
+      ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
@@ -58,28 +72,43 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
               controller: _searchController,
               onChanged: (_) => setState(() {}),
               decoration: const InputDecoration(
-                hintText: 'Rechercher un modèle, plaque...',
+                hintText: 'Rechercher une plaque...',
                 prefixIcon: Icon(Icons.search),
               ),
             ),
             const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
+            Row(
               children: [
-                _CategoryChip(
-                  label: 'Tous',
-                  selected: _selectedCategory == 'Tous',
-                  onSelected: _selectCategory,
+                const Text(
+                  'Trier par',
+                  style: TextStyle(
+                    color: AppColors.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-                _CategoryChip(
-                  label: 'Utilitaires',
-                  selected: _selectedCategory == 'Utilitaires',
-                  onSelected: _selectCategory,
-                ),
-                _CategoryChip(
-                  label: 'Berline',
-                  selected: _selectedCategory == 'Berline',
-                  onSelected: _selectCategory,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: SegmentedButton<VehicleSortMode>(
+                    segments: const [
+                      ButtonSegment(
+                        value: VehicleSortMode.status,
+                        label: Text('Statut'),
+                        icon: Icon(Icons.sort),
+                      ),
+                      ButtonSegment(
+                        value: VehicleSortMode.date,
+                        label: Text('Date'),
+                        icon: Icon(Icons.event),
+                      ),
+                    ],
+                    selected: {_sortMode},
+                    showSelectedIcon: false,
+                    onSelectionChanged: (selection) {
+                      setState(() {
+                        _sortMode = selection.first;
+                      });
+                    },
+                  ),
                 ),
               ],
             ),
@@ -107,36 +136,11 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
     );
   }
 
-  void _selectCategory(String category) {
-    setState(() {
-      _selectedCategory = category;
-    });
-  }
-}
-
-class _CategoryChip extends StatelessWidget {
-  const _CategoryChip({
-    required this.label,
-    required this.selected,
-    required this.onSelected,
-  });
-
-  final String label;
-  final bool selected;
-  final ValueChanged<String> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return ChoiceChip(
-      selected: selected,
-      label: Text(label),
-      onSelected: (_) => onSelected(label),
-      selectedColor: AppColors.surfaceContainer,
-      backgroundColor: AppColors.surfaceLowest,
-      side: BorderSide(
-        color: selected ? AppColors.surfaceContainer : AppColors.outlineVariant,
+  void _openNotifications(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => const NotificationsScreen(),
       ),
-      shape: const StadiumBorder(),
     );
   }
 }

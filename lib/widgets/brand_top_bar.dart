@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../data/notification_store.dart';
 import '../theme/app_colors.dart';
 
 class BrandTopBar extends StatelessWidget implements PreferredSizeWidget {
-  const BrandTopBar({super.key});
+  const BrandTopBar({super.key, required this.onNotificationsPressed});
+
+  final VoidCallback onNotificationsPressed;
 
   @override
   Size get preferredSize => const Size.fromHeight(64);
@@ -45,13 +48,42 @@ class BrandTopBar extends StatelessWidget implements PreferredSizeWidget {
         ],
       ),
       actions: [
-        IconButton(
-          tooltip: 'Notifications',
-          onPressed: () {},
-          icon: const Icon(Icons.notifications_none),
+        ValueListenableBuilder<Set<int>>(
+          valueListenable: NotificationStore.readIds,
+          builder: (context, readIds, _) {
+            final notificationCount = NotificationStore.items
+                .where((item) => !readIds.contains(item.id))
+                .length;
+
+            return IconButton(
+              tooltip: 'Notifications',
+              onPressed: onNotificationsPressed,
+              icon: _NotificationIcon(count: notificationCount),
+            );
+          },
         ),
         const SizedBox(width: 4),
       ],
+    );
+  }
+}
+
+class _NotificationIcon extends StatelessWidget {
+  const _NotificationIcon({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    if (count <= 0) {
+      return const Icon(Icons.notifications_none);
+    }
+
+    return Badge(
+      label: Text(count > 9 ? '9+' : '$count'),
+      backgroundColor: AppColors.error,
+      textColor: Colors.white,
+      child: const Icon(Icons.notifications_none),
     );
   }
 }
