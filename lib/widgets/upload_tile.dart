@@ -65,7 +65,7 @@ class UploadTile extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             processing
-                ? statusText ?? 'Compression en cours'
+                ? statusText ?? 'Traitement en cours'
                 : selected
                 ? 'Vidéo ajoutée'
                 : label,

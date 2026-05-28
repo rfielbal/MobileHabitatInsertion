@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:video_compress/video_compress.dart';
 
 import '../../models/reservation.dart';
+import '../../services/reservation_video_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/bottom_action_bar.dart';
@@ -22,21 +21,17 @@ class _PickupScreenState extends State<PickupScreen> {
   final _formKey = GlobalKey<FormState>();
   final _mileageController = TextEditingController();
   final _fuelController = TextEditingController();
-  final ImagePicker _picker = ImagePicker();
+  final _videoService = ReservationVideoService();
 
-  bool _hasVideo = false;
-  bool _isCompressing = false;
-  double? _compressionProgress;
-  Subscription? _compressionSubscription;
+  ReservationVideoDraft? _departureVideo;
+  bool _isPreparingVideo = false;
+
+  bool get _hasVideo => _departureVideo != null;
 
   @override
   void dispose() {
     _mileageController.dispose();
     _fuelController.dispose();
-
-    _compressionSubscription?.unsubscribe();
-    // Nettoyage correct du plugin vidéo
-    VideoCompress.dispose();
 
     super.dispose();
   }
@@ -60,49 +55,22 @@ class _PickupScreenState extends State<PickupScreen> {
 
   Future<void> _recordVideo() async {
     try {
-      final video = await _picker.pickVideo(
-        source: ImageSource.camera,
-        maxDuration: const Duration(minutes: 1),
+      setState(() {
+        _isPreparingVideo = true;
+      });
+
+      final video = await _videoService.recordReservationVideo(
+        reservationId: widget.reservation.id,
+        kind: ReservationVideoKind.departure,
       );
 
       if (video == null) {
-        return;
-      }
-
-      setState(() {
-        _isCompressing = true;
-        _compressionProgress = 0;
-      });
-
-      _compressionSubscription?.unsubscribe();
-      _compressionSubscription = VideoCompress.compressProgress$.subscribe((
-        progress,
-      ) {
         if (!mounted) {
           return;
         }
         setState(() {
-          _compressionProgress = (progress / 100).clamp(0, 1).toDouble();
+          _isPreparingVideo = false;
         });
-      });
-
-      final compressedVideo = await VideoCompress.compressVideo(
-        video.path,
-        quality: VideoQuality.MediumQuality,
-        deleteOrigin: false,
-      );
-
-      if (compressedVideo == null || compressedVideo.path == null) {
-        if (!mounted) {
-          return;
-        }
-        setState(() {
-          _isCompressing = false;
-          _compressionProgress = null;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Compression vidéo échouée')),
-        );
         return;
       }
 
@@ -111,21 +79,19 @@ class _PickupScreenState extends State<PickupScreen> {
       }
 
       setState(() {
-        _hasVideo = true;
-        _isCompressing = false;
-        _compressionProgress = 1;
+        _departureVideo = video;
+        _isPreparingVideo = false;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Vidéo ajoutée avec succès')),
       );
 
-      debugPrint('Vidéo compressée : ${compressedVideo.path}');
+      debugPrint('Vidéo de départ prête pour upload API : ${video.file.path}');
     } catch (e) {
       if (mounted) {
         setState(() {
-          _isCompressing = false;
-          _compressionProgress = null;
+          _isPreparingVideo = false;
         });
       }
       if (mounted) {
@@ -266,9 +232,8 @@ class _PickupScreenState extends State<PickupScreen> {
               UploadTile(
                 label: 'Ajouter vidéo de début',
                 selected: _hasVideo,
-                processing: _isCompressing,
-                progress: _compressionProgress,
-                statusText: 'Compression de la vidéo de début',
+                processing: _isPreparingVideo,
+                statusText: 'Préparation de la vidéo de début',
                 onTap: _recordVideo,
               ),
               const SizedBox(height: 8),
