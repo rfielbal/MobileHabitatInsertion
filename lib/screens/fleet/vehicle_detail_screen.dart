@@ -4,6 +4,7 @@ import '../../models/vehicle.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/bottom_action_bar.dart';
+import '../../widgets/known_issues_card.dart';
 import '../../widgets/remote_vehicle_image.dart';
 
 class VehicleDetailScreen extends StatefulWidget {
@@ -16,8 +17,8 @@ class VehicleDetailScreen extends StatefulWidget {
 }
 
 class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
-  int? _startDay = 9;
-  int? _endDay = 11;
+  int? _startDay;
+  int? _endDay;
   TimeOfDay _startTime = const TimeOfDay(hour: 8, minute: 30);
   TimeOfDay _endTime = const TimeOfDay(hour: 18, minute: 0);
   String? _calendarError;
@@ -44,6 +45,10 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
         children: [
           _VehicleHero(vehicle: widget.vehicle),
+          const SizedBox(height: 24),
+          _VehicleInformation(vehicle: widget.vehicle),
+          const SizedBox(height: 24),
+          KnownIssuesCard(issues: widget.vehicle.knownIssues),
           const SizedBox(height: 24),
           const Text(
             'Disponibilité',
@@ -106,6 +111,15 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
             endTime: _endTime,
             onPickStartTime: () => _pickTime(isStart: true),
             onPickEndTime: () => _pickTime(isStart: false),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'La réservation peut couvrir une journée complète, y compris 00:00 → 00:00 si nécessaire.',
+            style: TextStyle(
+              color: AppColors.onSurfaceVariant,
+              fontSize: 12,
+              height: 1.35,
+            ),
           ),
         ],
       ),
@@ -185,6 +199,99 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   }
 }
 
+class _VehicleInformation extends StatelessWidget {
+  const _VehicleInformation({required this.vehicle});
+
+  final Vehicle vehicle;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      child: Column(
+        children: [
+          _InformationRow(
+            icon: Icons.confirmation_number_outlined,
+            label: 'Numéro véhicule',
+            value: vehicle.internalNumber,
+          ),
+          const Divider(height: 24),
+          _InformationRow(
+            icon: Icons.location_city_outlined,
+            label: 'Site',
+            value: vehicle.site,
+          ),
+          const Divider(height: 24),
+          _InformationRow(
+            icon: Icons.local_parking_outlined,
+            label: 'Stationnement',
+            value: vehicle.parkingDescription,
+          ),
+          const Divider(height: 24),
+          _InformationRow(
+            icon: Icons.speed_outlined,
+            label: 'Kilométrage connu',
+            value: '${vehicle.currentMileage} km',
+          ),
+          if (vehicle.energyType.usesFuelLevel) ...[
+            const Divider(height: 24),
+            _InformationRow(
+              icon: Icons.local_gas_station_outlined,
+              label: 'Carburant',
+              value: vehicle.fuelLevelLabel,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _InformationRow extends StatelessWidget {
+  const _InformationRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: AppColors.onSurfaceVariant),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  color: AppColors.outline,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: AppColors.onSurface,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _VehicleHero extends StatelessWidget {
   const _VehicleHero({required this.vehicle});
 
@@ -223,18 +330,18 @@ class _VehicleHero extends StatelessWidget {
                       ),
                     ],
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.ev_station,
                         size: 16,
                         color: AppColors.primary,
                       ),
-                      SizedBox(width: 4),
+                      const SizedBox(width: 4),
                       Text(
-                        'HYBRIDE',
-                        style: TextStyle(
+                        vehicle.energyType.label.toUpperCase(),
+                        style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                         ),
@@ -471,14 +578,15 @@ class _CalendarDay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final blocked =
-        status == AvailabilityStatus.reserved ||
-        status == AvailabilityStatus.maintenance;
+    final hasAvailabilityMarker = status != AvailabilityStatus.free;
     final backgroundColor = isInRange
         ? AppColors.primary
-        : blocked
+        : hasAvailabilityMarker
         ? status.color.withValues(alpha: 0.16)
         : Colors.transparent;
+    final borderColor = isInRange || !hasAvailabilityMarker
+        ? Colors.transparent
+        : status.color.withValues(alpha: 0.45);
     final textColor = disabled
         ? AppColors.outlineVariant
         : isInRange
@@ -495,19 +603,20 @@ class _CalendarDay extends StatelessWidget {
             decoration: BoxDecoration(
               color: backgroundColor,
               borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: borderColor),
             ),
             alignment: Alignment.center,
             child: Text(
               label,
               style: TextStyle(
                 color: textColor,
-                fontWeight: isSelected || blocked
+                fontWeight: isSelected || hasAvailabilityMarker
                     ? FontWeight.w700
                     : FontWeight.w400,
               ),
             ),
           ),
-          if (!disabled && !isInRange && !blocked)
+          if (!disabled && !isInRange && !hasAvailabilityMarker)
             Positioned(
               bottom: 2,
               child: Container(

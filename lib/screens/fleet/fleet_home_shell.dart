@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../navigation/app_routes.dart';
+import '../../services/auth_session_service.dart';
 import '../../widgets/fleet_bottom_navigation.dart';
 import 'bookings_screen.dart';
 import 'profile_screen.dart';
@@ -14,6 +15,7 @@ class FleetHomeShell extends StatefulWidget {
 }
 
 class _FleetHomeShellState extends State<FleetHomeShell> {
+  final _authSessionService = const AuthSessionService();
   int _currentIndex = 0;
 
   @override
@@ -38,7 +40,11 @@ class _FleetHomeShellState extends State<FleetHomeShell> {
     );
   }
 
-  void _logout() {
+  Future<void> _logout() async {
+    await _authSessionService.clearSession();
+    if (!mounted) {
+      return;
+    }
     Navigator.of(
       context,
     ).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);

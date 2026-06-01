@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../models/reservation.dart';
+import '../../services/reservation_video_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/bottom_action_bar.dart';
+import '../../widgets/upload_tile.dart';
 
 class ReportIssueScreen extends StatefulWidget {
   const ReportIssueScreen({
@@ -22,7 +24,13 @@ class ReportIssueScreen extends StatefulWidget {
 class _ReportIssueScreenState extends State<ReportIssueScreen> {
   final _formKey = GlobalKey<FormState>();
   final _descriptionController = TextEditingController();
+  final _videoService = ReservationVideoService();
+
+  ReservationVideoDraft? _issueVideo;
+  bool _isPreparingVideo = false;
   String _issueType = 'Problème véhicule';
+
+  bool get _hasVideo => _issueVideo != null;
 
   @override
   void dispose() {
@@ -39,6 +47,62 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
       const SnackBar(content: Text('Signalement envoyé à l’administrateur')),
     );
     Navigator.of(context).pop();
+  }
+
+  Future<void> _recordIssueVideo() async {
+    try {
+      setState(() {
+        _isPreparingVideo = true;
+      });
+
+      final video = await _videoService.recordReservationVideo(
+        reservationId: widget.reservation.id,
+        kind: _videoKind,
+      );
+
+      if (video == null) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _isPreparingVideo = false;
+        });
+        return;
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _issueVideo = video;
+        _isPreparingVideo = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vidéo ajoutée au signalement')),
+      );
+
+      debugPrint(
+        'Vidéo de signalement prête pour upload API : ${video.file.path}',
+      );
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isPreparingVideo = false;
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Erreur vidéo : $e')));
+    }
+  }
+
+  ReservationVideoKind get _videoKind {
+    return widget.phaseLabel.toLowerCase().contains('retour')
+        ? ReservationVideoKind.returnVehicle
+        : ReservationVideoKind.departure;
   }
 
   @override
@@ -83,7 +147,7 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            widget.reservation.vehicle.name,
+                            '${widget.reservation.vehicle.internalNumber} • ${widget.reservation.vehicle.name}',
                             style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
@@ -134,6 +198,23 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
                 },
               ),
               const SizedBox(height: 16),
+              UploadTile(
+                label: 'Ajouter une vidéo si nécessaire',
+                selected: _hasVideo,
+                processing: _isPreparingVideo,
+                statusText: 'Préparation de la vidéo',
+                onTap: _recordIssueVideo,
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Ajoutez une vidéo uniquement si le problème n’est pas déjà connu ou visible dans les anomalies signalées.',
+                style: TextStyle(
+                  color: AppColors.onSurfaceVariant,
+                  fontSize: 13,
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 16),
               TextFormField(
                 controller: _descriptionController,
                 decoration: const InputDecoration(
@@ -150,13 +231,27 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
                 },
               ),
               const SizedBox(height: 16),
-              const AppCard(
-                child: Text(
-                  'Le signalement sera relié à la réservation et visible côté administration lorsque l’API sera branchée.',
-                  style: TextStyle(
-                    color: AppColors.onSurfaceVariant,
-                    height: 1.35,
-                  ),
+              AppCard(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.admin_panel_settings_outlined,
+                      color: AppColors.primary,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        _hasVideo
+                            ? 'Le signalement partira avec la vidéo et déclenchera une alerte administrateur.'
+                            : 'Le signalement déclenchera une alerte administrateur. La vidéo reste optionnelle.',
+                        style: const TextStyle(
+                          color: AppColors.onSurfaceVariant,
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],

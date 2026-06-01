@@ -1,8 +1,8 @@
 /// Modèle pour un compte utilisateur
 class Account {
   final String id;
+  final String identifier;
   final String email;
-  final String password;
   final String firstName;
   final String lastName;
   final String role; // 'admin', 'manager', 'driver', 'user'
@@ -10,11 +10,12 @@ class Account {
   final bool isActive;
   final String phone;
   final String company;
+  final String pole;
 
   const Account({
     required this.id,
+    required this.identifier,
     required this.email,
-    required this.password,
     required this.firstName,
     required this.lastName,
     required this.role,
@@ -22,6 +23,7 @@ class Account {
     required this.isActive,
     required this.phone,
     required this.company,
+    required this.pole,
   });
 }
 
@@ -32,8 +34,8 @@ class MockAccountData {
   static final accounts = <Account>[
     Account(
       id: 'user-001',
+      identifier: 'sean.thompson',
       email: 'sean.thompson@habitat.fr',
-      password: '123456',
       firstName: 'Sean',
       lastName: 'Thompson',
       role: 'driver',
@@ -41,11 +43,12 @@ class MockAccountData {
       isActive: true,
       phone: '+33 6 12 34 56 78',
       company: 'Habitat Insertion Paris',
+      pole: 'Insertion',
     ),
     Account(
       id: 'user-002',
+      identifier: 'raphael.coursier',
       email: 'raphaël.coursier@habitat.fr',
-      password: '123456',
       firstName: 'Raphaël',
       lastName: 'Coursier',
       role: 'manager',
@@ -53,11 +56,12 @@ class MockAccountData {
       isActive: true,
       phone: '+33 6 23 45 67 89',
       company: 'Habitat Insertion Lille',
+      pole: 'Logistique',
     ),
     Account(
       id: 'user-003',
+      identifier: 'thomas.dominois',
       email: 'thomas.dominois@habitat.fr',
-      password: '123456',
       firstName: 'Thomas',
       lastName: 'Dominois',
       role: 'admin',
@@ -65,11 +69,12 @@ class MockAccountData {
       isActive: true,
       phone: '+33 6 34 56 78 90',
       company: 'Habitat Insertion',
+      pole: 'Administration',
     ),
     Account(
       id: 'user-004',
+      identifier: 'sophie.durand',
       email: 'sophie.durand@habitat.fr',
-      password: '123456',
       firstName: 'Sophie',
       lastName: 'Durand',
       role: 'driver',
@@ -77,11 +82,12 @@ class MockAccountData {
       isActive: true,
       phone: '+33 6 45 67 89 01',
       company: 'Habitat Insertion Lyon',
+      pole: 'Accompagnement',
     ),
     Account(
       id: 'user-005',
+      identifier: 'saphia.touier',
       email: 'saphia.touier@habitat.fr',
-      password: '123456',
       firstName: 'Saphia',
       lastName: 'Touier',
       role: 'driver',
@@ -89,11 +95,12 @@ class MockAccountData {
       isActive: true,
       phone: '+33 6 56 78 90 12',
       company: 'Habitat Insertion Marseille',
+      pole: 'Insertion',
     ),
     Account(
       id: 'user-006',
+      identifier: 'vincent.rouget',
       email: 'vincent.rouget@habitat.fr',
-      password: '123456',
       firstName: 'Vincent',
       lastName: 'Rouget',
       role: 'user',
@@ -101,11 +108,12 @@ class MockAccountData {
       isActive: false,
       phone: '+33 6 67 89 01 23',
       company: 'Habitat Insertion Toulouse',
+      pole: 'Technique',
     ),
     Account(
       id: 'user-007',
+      identifier: 'test',
       email: 'test@habitat.fr',
-      password: '123456',
       firstName: 'Test',
       lastName: 'User',
       role: 'driver',
@@ -113,16 +121,18 @@ class MockAccountData {
       isActive: true,
       phone: '+33 6 78 90 12 34',
       company: 'Habitat Insertion Nice',
+      pole: 'Insertion',
     ),
   ];
 
-  /// Méthode pour trouver un compte par email et vérifier le mot de passe
-  static Account? authenticate(String email, String password) {
+  /// Méthode pour trouver un compte actif par e-mail ou identifiant interne.
+  static Account? authenticate(String identifier) {
+    final normalizedIdentifier = identifier.trim().toLowerCase();
     try {
       return accounts.firstWhere(
         (account) =>
-            account.email == email &&
-            account.password == password &&
+            (account.email.toLowerCase() == normalizedIdentifier ||
+                account.identifier.toLowerCase() == normalizedIdentifier) &&
             account.isActive,
       );
     } catch (e) {

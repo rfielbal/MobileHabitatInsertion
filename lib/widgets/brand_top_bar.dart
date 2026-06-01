@@ -37,12 +37,16 @@ class BrandTopBar extends StatelessWidget implements PreferredSizeWidget {
             ),
           ),
           const SizedBox(width: 12),
-          const Text(
-            'FlotteManager',
-            style: TextStyle(
-              color: AppColors.primary,
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
+          const Expanded(
+            child: Text(
+              'FlotteManager',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: AppColors.primary,
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],

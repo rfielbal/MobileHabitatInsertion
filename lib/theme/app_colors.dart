@@ -31,4 +31,5 @@ class AppColors {
 
   static const maintenance = Color(0xFFD97706);
   static const available = Color(0xFF059669);
+  static const partialAvailability = Color(0xFF7C3AED);
 }

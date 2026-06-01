@@ -32,6 +32,7 @@ class FleetReservation {
     required this.startLabel,
     required this.endLabel,
     required this.status,
+    required this.expectedStartMileage,
   });
 
   final String id;
@@ -40,4 +41,5 @@ class FleetReservation {
   final String startLabel;
   final String endLabel;
   final ReservationStatus status;
+  final int expectedStartMileage;
 }

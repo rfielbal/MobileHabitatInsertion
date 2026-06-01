@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../services/auth_session_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/brand_top_bar.dart';
@@ -10,13 +11,16 @@ import 'notifications_screen.dart';
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, required this.onLogout});
 
-  final VoidCallback onLogout;
+  final Future<void> Function() onLogout;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  final _authSessionService = const AuthSessionService();
+
+  AccountSession? _session;
   bool _notificationsEnabled = false;
   bool _notificationsLoading = true;
   bool _permissionPluginAvailable = true;
@@ -25,6 +29,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    _loadSession();
     _loadNotificationStatus();
   }
 
@@ -64,13 +69,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
                   const SizedBox(width: 16),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Amine Bernard',
-                          style: TextStyle(
+                          _session?.fullName ?? 'Utilisateur mobile',
+                          style: const TextStyle(
                             color: AppColors.onSurface,
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
@@ -78,8 +83,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         SizedBox(height: 4),
                         Text(
-                          'Salarié',
-                          style: TextStyle(
+                          _session?.roleLabel ?? 'Utilisateur mobile',
+                          style: const TextStyle(
                             color: AppColors.onSurfaceVariant,
                             fontSize: 13,
                           ),
@@ -91,25 +96,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            const AppCard(
+            AppCard(
               child: Column(
                 children: [
                   _ProfileRow(
                     icon: Icons.mail_outline,
                     label: 'Adresse e-mail',
-                    value: 'amine.bernard@flottemanager.fr',
+                    value: _session?.email ?? 'Non connecté',
                   ),
-                  Divider(height: 24),
+                  const Divider(height: 24),
                   _ProfileRow(
                     icon: Icons.badge_outlined,
                     label: 'Rôle',
-                    value: 'Utilisateur mobile',
+                    value: _session?.roleLabel ?? 'Utilisateur mobile',
                   ),
-                  Divider(height: 24),
+                  const Divider(height: 24),
+                  _ProfileRow(
+                    icon: Icons.groups_outlined,
+                    label: 'Pôle',
+                    value: _session?.pole ?? 'Non défini',
+                  ),
+                  const Divider(height: 24),
                   _ProfileRow(
                     icon: Icons.lock_outline,
                     label: 'Sécurité',
-                    value: 'Session locale de démonstration',
+                    value: 'Session conservée sur ce téléphone',
                   ),
                 ],
               ),
@@ -173,6 +184,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return 'Autorisation bloquée dans les réglages du téléphone';
     }
     return 'Alertes de réservation et de retour désactivées';
+  }
+
+  Future<void> _loadSession() async {
+    final session = await _authSessionService.readSession();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _session = session;
+    });
   }
 
   Future<void> _loadNotificationStatus() async {

@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // 1. IMPORT DU STORAGE
 
 import '../../data/mock_account_data.dart';
 import '../../navigation/app_routes.dart';
+import '../../services/auth_session_service.dart';
 import '../../theme/app_colors.dart';
-import 'forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -15,46 +14,36 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  
-  // Instance du stockage sécurisé
-  final _secureStorage = const FlutterSecureStorage(); 
+  final _identifierController = TextEditingController();
+  final _authSessionService = const AuthSessionService();
 
-  bool _passwordVisible = false;
-  bool _isLoading = false; // 2. ÉTAT DE CHARGEMENT POUR L'UX
+  bool _isLoading = false;
 
   @override
   void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
+    _identifierController.dispose();
     super.dispose();
   }
 
-  // 3. TRANSFORMATION DE LA MÉTHODE EN ASYNC
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    // Activer l'indicateur de chargement
     setState(() {
       _isLoading = true;
     });
 
     try {
-      final email = _emailController.text.trim();
-      final password = _passwordController.text;
+      final identifier = _identifierController.text.trim();
 
-      // Vérifier les identifiants contre les données mockées
-      final account = MockAccountData.authenticate(email, password);
+      final account = MockAccountData.authenticate(identifier);
 
       if (account == null) {
-        // Identifiants invalides
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Email ou mot de passe incorrect'),
+              content: Text('Identifiant inconnu ou compte désactivé'),
               backgroundColor: Colors.redAccent,
             ),
           );
@@ -62,20 +51,12 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      // Authentification réussie - générer un token mock
-      String mockJwtToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...token_${account.id}";
+      await _authSessionService.saveMockAccountSession(account);
 
-      // 4. STOCKAGE SÉCURISÉ DU TOKEN ET DE L'ID UTILISATEUR
-      await _secureStorage.write(key: 'jwt_token', value: mockJwtToken);
-      await _secureStorage.write(key: 'user_id', value: account.id);
-      await _secureStorage.write(key: 'user_email', value: account.email);
-
-      // 5. REDIRECTION (avec vérification 'mounted' car opération async)
       if (mounted) {
         Navigator.of(context).pushReplacementNamed(AppRoutes.home);
       }
     } catch (e) {
-      // Gérer l'erreur
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -85,7 +66,6 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     } finally {
-      // Désactiver le chargement si on est encore sur cet écran
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -120,7 +100,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         Icons.directions_car,
                         color: Colors.white,
                         size: 34,
-                        ),
+                      ),
                     ),
                     const SizedBox(height: 20),
                     const Text(
@@ -133,7 +113,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Connectez-vous pour gérer votre flotte',
+                      'Connexion interne à la flotte',
                       style: TextStyle(
                         color: AppColors.onSurfaceVariant,
                         fontSize: 14,
@@ -141,76 +121,24 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 40),
                     TextFormField(
-                      controller: _emailController,
-                      enabled: !_isLoading, // Désactiver pendant le chargement
+                      controller: _identifierController,
+                      enabled: !_isLoading,
                       decoration: const InputDecoration(
-                        labelText: 'Adresse e-mail',
+                        labelText: 'E-mail ou identifiant',
+                        prefixIcon: Icon(Icons.badge_outlined),
                       ),
-                      keyboardType: TextInputType.emailAddress,
-                      textInputAction: TextInputAction.next,
-                      validator: (value) {
-                        final email = value?.trim() ?? '';
-                        if (email.isEmpty) {
-                          return 'Adresse e-mail obligatoire';
-                        }
-                        if (!RegExp(
-                          r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
-                        ).hasMatch(email)) {
-                          return 'Adresse e-mail invalide';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 18),
-                    TextFormField(
-                      controller: _passwordController,
-                      enabled: !_isLoading, // Désactiver pendant le chargement
-                      decoration: InputDecoration(
-                        labelText: 'Mot de passe',
-                        suffixIcon: IconButton(
-                          tooltip: _passwordVisible
-                              ? 'Masquer le mot de passe'
-                              : 'Afficher le mot de passe',
-                          onPressed: () {
-                            setState(() {
-                              _passwordVisible = !_passwordVisible;
-                            });
-                          },
-                          icon: Icon(
-                            _passwordVisible
-                                ? Icons.visibility
-                                : Icons.visibility_off,
-                          ),
-                        ),
-                      ),
-                      obscureText: !_passwordVisible,
+                      keyboardType: TextInputType.text,
                       textInputAction: TextInputAction.done,
                       onFieldSubmitted: (_) => _isLoading ? null : _login(),
                       validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Mot de passe obligatoire';
+                        final identifier = value?.trim() ?? '';
+                        if (identifier.isEmpty) {
+                          return 'E-mail ou identifiant obligatoire';
                         }
                         return null;
                       },
                     ),
-                    const SizedBox(height: 12),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (context) =>
-                                  const ForgotPasswordScreen(),
-                            ),
-                          );
-                        },
-                        child: const Text('Mot de passe oublié ?'),
-                      ),
-                    ),
                     const SizedBox(height: 24),
-                    
-                    // 6. ADAPTATION DU BOUTON SELON L'ÉTAT DE CHARGEMENT
                     _isLoading
                         ? const CircularProgressIndicator()
                         : FilledButton.icon(
@@ -218,7 +146,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             icon: const Icon(Icons.login),
                             label: const Text('Se connecter'),
                           ),
-                          
+
                     const SizedBox(height: 48),
                     const Row(
                       mainAxisAlignment: MainAxisAlignment.center,

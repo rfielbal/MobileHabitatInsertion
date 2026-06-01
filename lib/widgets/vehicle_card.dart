@@ -27,11 +27,11 @@ class VehicleCard extends StatelessWidget {
             _VehicleThumbnail(vehicle: vehicle),
             const SizedBox(width: 12),
             Expanded(
-              child: SizedBox(
-                height: 96,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 110),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -58,27 +58,39 @@ class VehicleCard extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.surface,
-                            borderRadius: BorderRadius.circular(5),
-                            border: Border.all(color: AppColors.outlineVariant),
-                          ),
-                          child: Text(
-                            vehicle.plateNumber,
-                            style: const TextStyle(
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            _MetadataPill(label: vehicle.internalNumber),
+                            _MetadataPill(label: vehicle.plateNumber),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.location_city_outlined,
+                              size: 14,
                               color: AppColors.onSurfaceVariant,
-                              fontSize: 11,
-                              fontFeatures: [FontFeature.tabularFigures()],
                             ),
-                          ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                '${vehicle.site} • ${vehicle.parkingDescription}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: AppColors.onSurfaceVariant,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
+                    const SizedBox(height: 8),
                     Row(
                       children: [
                         Icon(
@@ -131,7 +143,7 @@ class _VehicleThumbnail extends StatelessWidget {
       children: [
         RemoteVehicleImage(
           imageUrl: vehicle.imageUrl,
-          height: 96,
+          height: 110,
           width: 96,
           borderRadius: 10,
         ),
@@ -163,6 +175,32 @@ class _VehicleThumbnail extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _MetadataPill extends StatelessWidget {
+  const _MetadataPill({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(color: AppColors.outlineVariant),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: AppColors.onSurfaceVariant,
+          fontSize: 11,
+          fontFeatures: [FontFeature.tabularFigures()],
+        ),
+      ),
     );
   }
 }

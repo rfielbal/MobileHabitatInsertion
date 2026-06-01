@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../models/reservation.dart';
-import '../../services/reservation_video_service.dart';
+import '../../models/vehicle.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/bottom_action_bar.dart';
-import '../../widgets/upload_tile.dart';
+import '../../widgets/known_issues_card.dart';
 import 'report_issue_screen.dart';
 
 class ReturnVehicleScreen extends StatefulWidget {
@@ -20,29 +20,21 @@ class ReturnVehicleScreen extends StatefulWidget {
 class _ReturnVehicleScreenState extends State<ReturnVehicleScreen> {
   final _formKey = GlobalKey<FormState>();
   final _mileageController = TextEditingController();
-  final _videoService = ReservationVideoService();
+  final _fuelController = TextEditingController();
 
-  ReservationVideoDraft? _returnVideo;
-  bool _isPreparingVideo = false;
   bool _keysReturned = false;
   bool _vehicleClean = false;
-
-  bool get _hasVideo => _returnVideo != null;
 
   @override
   void dispose() {
     _mileageController.dispose();
+    _fuelController.dispose();
 
     super.dispose();
   }
 
   void _finishTrip() {
-    if (!_formKey.currentState!.validate() || !_hasVideo) {
-      if (!_hasVideo) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Ajoutez une vidéo de fin')),
-        );
-      }
+    if (!_formKey.currentState!.validate()) {
       return;
     }
 
@@ -53,53 +45,25 @@ class _ReturnVehicleScreenState extends State<ReturnVehicleScreen> {
     Navigator.of(context).pop();
   }
 
-  Future<void> _recordVideo() async {
-    try {
-      setState(() {
-        _isPreparingVideo = true;
-      });
-
-      final video = await _videoService.recordReservationVideo(
-        reservationId: widget.reservation.id,
-        kind: ReservationVideoKind.returnVehicle,
-      );
-
-      if (video == null) {
-        if (!mounted) {
-          return;
-        }
-        setState(() {
-          _isPreparingVideo = false;
-        });
-        return;
-      }
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _returnVideo = video;
-        _isPreparingVideo = false;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Vidéo ajoutée avec succès')),
-      );
-
-      debugPrint('Vidéo de retour prête pour upload API : ${video.file.path}');
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isPreparingVideo = false;
-        });
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Erreur vidéo : $e')));
-      }
+  String? _validateReturnMileage(String? value) {
+    final number = int.tryParse(value?.trim() ?? '');
+    if (number == null) {
+      return 'Kilométrage obligatoire';
     }
+    if (number < widget.reservation.expectedStartMileage) {
+      return 'Le kilométrage ne peut pas être inférieur au départ';
+    }
+    return null;
+  }
+
+  String? _requiredFuelLevel(String? value) {
+    if (!widget.reservation.vehicle.energyType.usesFuelLevel) {
+      return null;
+    }
+    if ((value ?? '').trim().isEmpty) {
+      return 'Niveau obligatoire';
+    }
+    return null;
   }
 
   @override
@@ -143,14 +107,14 @@ class _ReturnVehicleScreenState extends State<ReturnVehicleScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            widget.reservation.vehicle.name,
+                            '${widget.reservation.vehicle.internalNumber} • ${widget.reservation.vehicle.name}',
                             style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
                           Text(
-                            '${widget.reservation.vehicle.plateNumber} • ${widget.reservation.vehicle.category}',
+                            '${widget.reservation.vehicle.site} • ${widget.reservation.vehicle.plateNumber}',
                             style: const TextStyle(
                               color: AppColors.onSurfaceVariant,
                               fontSize: 13,
@@ -166,8 +130,10 @@ class _ReturnVehicleScreenState extends State<ReturnVehicleScreen> {
               OutlinedButton.icon(
                 onPressed: () => _openReportIssue(),
                 icon: const Icon(Icons.report_problem_outlined),
-                label: const Text('Signaler un problème à l’administrateur'),
+                label: const Text('Signaler une anomalie à l’administrateur'),
               ),
+              const SizedBox(height: 16),
+              KnownIssuesCard(issues: widget.reservation.vehicle.knownIssues),
               const SizedBox(height: 24),
               const Text(
                 'Informations de retour',
@@ -176,18 +142,26 @@ class _ReturnVehicleScreenState extends State<ReturnVehicleScreen> {
               const SizedBox(height: 14),
               TextFormField(
                 controller: _mileageController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Kilométrage de retour (km)',
+                  hintText:
+                      'Départ confirmé : ${widget.reservation.expectedStartMileage} km',
                 ),
                 keyboardType: TextInputType.number,
-                validator: (value) {
-                  final number = int.tryParse(value?.trim() ?? '');
-                  if (number == null || number <= 0) {
-                    return 'Kilométrage obligatoire';
-                  }
-                  return null;
-                },
+                validator: _validateReturnMileage,
               ),
+              if (widget.reservation.vehicle.energyType.usesFuelLevel) ...[
+                const SizedBox(height: 18),
+                TextFormField(
+                  controller: _fuelController,
+                  decoration: InputDecoration(
+                    labelText: 'Niveau de carburant au retour',
+                    hintText:
+                        'Dernier niveau connu : ${widget.reservation.vehicle.fuelLevelLabel}',
+                  ),
+                  validator: _requiredFuelLevel,
+                ),
+              ],
               const SizedBox(height: 24),
               const Text(
                 'État du véhicule',
@@ -195,21 +169,12 @@ class _ReturnVehicleScreenState extends State<ReturnVehicleScreen> {
               ),
               const SizedBox(height: 6),
               const Text(
-                "Veuillez filmer l'extérieur et l'intérieur du véhicule pour valider son état.",
+                "La vidéo est nécessaire uniquement si une anomalie est constatée. Utilisez le bouton de signalement dans ce cas.",
                 style: TextStyle(
                   color: AppColors.onSurfaceVariant,
                   fontSize: 13,
                   height: 1.35,
                 ),
-              ),
-              const SizedBox(height: 12),
-              UploadTile(
-                label: 'Ajouter vidéo de fin',
-                selected: _hasVideo,
-                processing: _isPreparingVideo,
-                statusText: 'Préparation de la vidéo de fin',
-                large: true,
-                onTap: _recordVideo,
               ),
               const SizedBox(height: 20),
               AppCard(

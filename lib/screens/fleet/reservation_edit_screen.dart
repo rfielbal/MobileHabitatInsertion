@@ -73,7 +73,7 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          widget.reservation.vehicle.name,
+                          '${widget.reservation.vehicle.internalNumber} • ${widget.reservation.vehicle.name}',
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
@@ -134,7 +134,7 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
             ),
             const SizedBox(height: 14),
             const Text(
-              'Cette modification est locale pour la maquette. Elle sera reliée à l’API plus tard.',
+              'Cette modification sera reliée à l’API métier pour vérifier les conflits de réservation.',
               style: TextStyle(
                 color: AppColors.onSurfaceVariant,
                 fontSize: 13,

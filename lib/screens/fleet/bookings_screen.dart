@@ -162,7 +162,7 @@ class _ReservationCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      reservation.vehicle.name,
+                      '${reservation.vehicle.internalNumber} • ${reservation.vehicle.name}',
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
