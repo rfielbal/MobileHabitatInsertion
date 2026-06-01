@@ -10,27 +10,27 @@ class BrandTopBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onNotificationsPressed;
 
   @override
-  Size get preferredSize => const Size.fromHeight(64);
+  Size get preferredSize => const Size.fromHeight(68);
 
   @override
   Widget build(BuildContext context) {
     return AppBar(
       automaticallyImplyLeading: false,
-      toolbarHeight: 64,
+      toolbarHeight: 68,
       backgroundColor: AppColors.surface,
       titleSpacing: 16,
       title: Row(
         children: [
           Container(
-            height: 36,
-            width: 36,
+            height: 44,
+            width: 44,
             decoration: const BoxDecoration(
               color: AppColors.surfaceHighest,
               shape: BoxShape.circle,
             ),
             clipBehavior: Clip.antiAlias,
             child: Padding(
-              padding: const EdgeInsets.all(3),
+              padding: const EdgeInsets.all(2),
               child: Image.asset(
                 AppAssets.homeLogo,
                 fit: BoxFit.contain,
@@ -51,7 +51,7 @@ class BrandTopBar extends StatelessWidget implements PreferredSizeWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: AppColors.primary,
-                fontSize: 22,
+                fontSize: 24,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -59,12 +59,13 @@ class BrandTopBar extends StatelessWidget implements PreferredSizeWidget {
         ],
       ),
       actions: [
-        ValueListenableBuilder<Set<int>>(
-          valueListenable: NotificationStore.readIds,
-          builder: (context, readIds, _) {
-            final notificationCount = NotificationStore.items
-                .where((item) => !readIds.contains(item.id))
-                .length;
+        AnimatedBuilder(
+          animation: Listenable.merge([
+            NotificationStore.items,
+            NotificationStore.readIds,
+          ]),
+          builder: (context, _) {
+            final notificationCount = NotificationStore.unreadCount;
 
             return IconButton(
               tooltip: 'Notifications',

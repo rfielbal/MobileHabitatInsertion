@@ -6,7 +6,7 @@ import '../theme/app_colors.dart';
 class NotificationStore {
   const NotificationStore._();
 
-  static const items = [
+  static const _initialItems = [
     AppNotification(
       id: 1,
       title: 'Départ prévu aujourd’hui',
@@ -33,10 +33,13 @@ class NotificationStore {
     ),
   ];
 
+  static final ValueNotifier<List<AppNotification>> items = ValueNotifier(
+    List<AppNotification>.of(_initialItems),
+  );
   static final ValueNotifier<Set<int>> readIds = ValueNotifier(<int>{});
 
   static int get unreadCount {
-    return items.where((item) => !readIds.value.contains(item.id)).length;
+    return items.value.where((item) => !readIds.value.contains(item.id)).length;
   }
 
   static bool isRead(int id) {
@@ -49,5 +52,19 @@ class NotificationStore {
     }
 
     readIds.value = {...readIds.value, id};
+  }
+
+  static void delete(int id) {
+    items.value = [
+      for (final item in items.value)
+        if (item.id != id) item,
+    ];
+
+    if (readIds.value.contains(id)) {
+      readIds.value = {
+        for (final readId in readIds.value)
+          if (readId != id) readId,
+      };
+    }
   }
 }

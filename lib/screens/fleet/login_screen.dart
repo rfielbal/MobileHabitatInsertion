@@ -94,16 +94,16 @@ class _LoginScreenState extends State<LoginScreen> {
                       borderRadius: BorderRadius.circular(18),
                       child: Image.asset(
                         AppAssets.appLogo,
-                        height: 72,
-                        width: 72,
+                        height: 92,
+                        width: 92,
                         fit: BoxFit.cover,
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 18),
                     const Text(
                       'Wheello',
                       style: TextStyle(
-                        fontSize: 28,
+                        fontSize: 32,
                         fontWeight: FontWeight.w800,
                         color: AppColors.onSurface,
                       ),
