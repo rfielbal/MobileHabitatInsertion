@@ -7,18 +7,18 @@ import 'screens/fleet/login_screen.dart';
 import 'theme/app_theme.dart';
 
 void main() {
-  runApp(const FleetManagerApp());
+  runApp(const WheelloApp());
 }
 
-class FleetManagerApp extends StatelessWidget {
-  const FleetManagerApp({super.key, this.forceLogin = false});
+class WheelloApp extends StatelessWidget {
+  const WheelloApp({super.key, this.forceLogin = false});
 
   final bool forceLogin;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'FlotteManager',
+      title: 'Wheello',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       home: forceLogin ? const LoginScreen() : const AuthGate(),

@@ -5,10 +5,10 @@ import 'package:mobile_habitat_insertion/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
 void main() {
-  testWidgets('FlotteManager login screen is displayed', (tester) async {
-    await tester.pumpWidget(const FleetManagerApp(forceLogin: true));
+  testWidgets('Wheello login screen is displayed', (tester) async {
+    await tester.pumpWidget(const WheelloApp(forceLogin: true));
 
-    expect(find.text('FlotteManager'), findsOneWidget);
+    expect(find.text('Wheello'), findsOneWidget);
     expect(find.text('E-mail ou identifiant'), findsOneWidget);
     expect(find.text('Mot de passe'), findsNothing);
   });

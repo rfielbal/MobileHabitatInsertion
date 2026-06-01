@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/notification_store.dart';
+import '../theme/app_assets.dart';
 import '../theme/app_colors.dart';
 
 class BrandTopBar extends StatelessWidget implements PreferredSizeWidget {
@@ -28,18 +29,24 @@ class BrandTopBar extends StatelessWidget implements PreferredSizeWidget {
               shape: BoxShape.circle,
             ),
             clipBehavior: Clip.antiAlias,
-            child: Image.network(
-              'https://lh3.googleusercontent.com/aida-public/AB6AXuBV1bjdeU_1MjpHJsXfGufZfwqMPmtDadnWLRkMUcfmUvhKUGoXs_t9wMfSVICI1mKiI781VcIJ_5_wkyBpfrjEBzZP1GorL6pMzjuxTidNmXaI-dzAKuadPD37MwPoRyaRyq05H_GA8mMykDYz7avF91-awbroBeEBVwDO35EFOPky3j4X3J0BEPvdYb0Wht2R1c7rBOtWo0XKaqun3Gr8-shgF-tBVE5Nrlt7OI6EMfCg3t46PgF4zauLTx0VdtKAYlDW45Pe-no',
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) {
-                return const Icon(Icons.person, color: AppColors.primary);
-              },
+            child: Padding(
+              padding: const EdgeInsets.all(3),
+              child: Image.asset(
+                AppAssets.homeLogo,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) {
+                  return const Icon(
+                    Icons.directions_car,
+                    color: AppColors.primary,
+                  );
+                },
+              ),
             ),
           ),
           const SizedBox(width: 12),
           const Expanded(
             child: Text(
-              'FlotteManager',
+              'Wheello',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(

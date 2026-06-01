@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../data/mock_account_data.dart';
 import '../../navigation/app_routes.dart';
 import '../../services/auth_session_service.dart';
+import '../../theme/app_assets.dart';
 import '../../theme/app_colors.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -89,22 +90,18 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Container(
-                      height: 64,
-                      width: 64,
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryContainer,
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: const Icon(
-                        Icons.directions_car,
-                        color: Colors.white,
-                        size: 34,
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(18),
+                      child: Image.asset(
+                        AppAssets.appLogo,
+                        height: 72,
+                        width: 72,
+                        fit: BoxFit.cover,
                       ),
                     ),
                     const SizedBox(height: 20),
                     const Text(
-                      'FlotteManager',
+                      'Wheello',
                       style: TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.w800,
