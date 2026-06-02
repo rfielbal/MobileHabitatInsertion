@@ -75,6 +75,11 @@ class ApiException implements Exception {
       return 'Connexion impossible : la clé privée JWT ou sa passphrase est mal configurée côté serveur.';
     }
 
+    if (message.contains('DateTimeImmutable') &&
+        message.contains('Doctrine\\DBAL\\Types\\DateTimeType')) {
+      return 'Réservation impossible : l’API reçoit une date valide, mais le backend doit convertir ses dates en DateTime mutable avant l’enregistrement.';
+    }
+
     return message;
   }
 }
