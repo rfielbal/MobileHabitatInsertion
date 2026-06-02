@@ -33,7 +33,10 @@ class _FleetHomeShellState extends State<FleetHomeShell> {
         index: _currentIndex,
         children: [
           VehiclesScreen(onReservationChanged: _refreshReservationData),
-          BookingsScreen(refreshVersion: _reservationRefreshVersion),
+          BookingsScreen(
+            key: ValueKey('bookings-$_reservationRefreshVersion'),
+            refreshVersion: _reservationRefreshVersion,
+          ),
           ProfileScreen(onLogout: _logout),
         ],
       ),

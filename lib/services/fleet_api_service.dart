@@ -60,7 +60,10 @@ class FleetApiService {
   }
 
   Future<List<FleetReservation>> fetchReservations() async {
-    final response = await _apiClient.getJson('/metier/mes-reservations');
+    final response = await _apiClient.getJson(
+      '/metier/mes-reservations',
+      queryParameters: _refreshQueryParameters(),
+    );
     final reservations = FleetApiMappers.itemsFromResponse(
       response,
     ).map(FleetApiMappers.reservationFromJson).toList();
@@ -80,11 +83,20 @@ class FleetApiService {
     try {
       final response = await _apiClient.getJson(
         '/metier/vehicules/${vehicle.id}/disponibilites',
-        queryParameters: {'mois': _monthParameter(month)},
+        queryParameters: {
+          'mois': _monthParameter(month),
+          ..._refreshQueryParameters(),
+        },
       );
 
-      availabilityByDay.addAll(_availabilityByDayFromResponse(response, month));
-      return availabilityByDay;
+      final apiAvailabilityByDay = _availabilityByDayFromResponse(
+        response,
+        month,
+      );
+      if (apiAvailabilityByDay.isNotEmpty) {
+        availabilityByDay.addAll(apiAvailabilityByDay);
+        return availabilityByDay;
+      }
     } on ApiException catch (error) {
       if (error.statusCode != 404) {
         rethrow;
@@ -239,6 +251,7 @@ class FleetApiService {
       queryParameters: {
         'dateDebut': FleetApiMappers.iso(startAt),
         'dateFin': FleetApiMappers.iso(endAt),
+        ..._refreshQueryParameters(),
       },
     );
     final availableVehicleIds = FleetApiMappers.itemsFromResponse(
@@ -326,6 +339,51 @@ class FleetApiService {
       }
     }
 
+    void parseStatusMap(Map<String, dynamic> valuesByDay) {
+      for (final entry in valuesByDay.entries) {
+        if (int.tryParse(entry.key) == null &&
+            DateTime.tryParse(entry.key) == null) {
+          continue;
+        }
+
+        if (entry.value is Map<String, dynamic>) {
+          final value = entry.value as Map<String, dynamic>;
+          if (value['dateDebut'] != null && value['dateFin'] != null) {
+            addRangeStatus(
+              value['dateDebut'],
+              value['dateFin'],
+              value['statut'] ??
+                  value['status'] ??
+                  value['etat'] ??
+                  value['availability'] ??
+                  value['disponibilite'] ??
+                  value['disponible'] ??
+                  value['estDisponible'] ??
+                  value['isAvailable'] ??
+                  value['type'] ??
+                  AvailabilityStatus.reserved.name,
+            );
+            continue;
+          }
+
+          addStatus(
+            entry.key,
+            value['statut'] ??
+                value['status'] ??
+                value['etat'] ??
+                value['availability'] ??
+                value['disponibilite'] ??
+                value['disponible'] ??
+                value['estDisponible'] ??
+                value['isAvailable'] ??
+                value['type'],
+          );
+        } else {
+          addStatus(entry.key, entry.value);
+        }
+      }
+    }
+
     if (response is List) {
       for (final entry in response) {
         parseEntry(entry);
@@ -345,43 +403,32 @@ class FleetApiService {
       'jours',
       'days',
       'reservations',
+      'calendrier',
+      'calendar',
+      'availabilityByDay',
+      'disponibilitesParJour',
     ]) {
       final value = response[key];
       if (value is List) {
         for (final entry in value) {
           parseEntry(entry);
         }
+      } else if (value is Map<String, dynamic>) {
+        parseStatusMap(value);
       }
     }
 
-    for (final entry in response.entries) {
-      if (int.tryParse(entry.key) != null ||
-          DateTime.tryParse(entry.key) != null) {
-        if (entry.value is Map<String, dynamic>) {
-          final value = entry.value as Map<String, dynamic>;
-          addStatus(
-            entry.key,
-            value['statut'] ??
-                value['status'] ??
-                value['etat'] ??
-                value['availability'] ??
-                value['disponibilite'] ??
-                value['disponible'] ??
-                value['estDisponible'] ??
-                value['isAvailable'] ??
-                value['type'],
-          );
-        } else {
-          addStatus(entry.key, entry.value);
-        }
-      }
-    }
+    parseStatusMap(response);
 
     return availabilityByDay;
   }
 
   String _monthParameter(DateTime month) {
     return '${month.year}-${month.month.toString().padLeft(2, '0')}';
+  }
+
+  Map<String, String> _refreshQueryParameters() {
+    return {'_': DateTime.now().millisecondsSinceEpoch.toString()};
   }
 
   int? _dayFromApiValue(Object? value, DateTime month) {

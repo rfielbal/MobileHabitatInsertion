@@ -20,10 +20,8 @@ class VehicleDetailScreen extends StatefulWidget {
 
 class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   final _fleetApiService = FleetApiService();
-  final DateTime _calendarMonth = DateTime(
-    DateTime.now().year,
-    DateTime.now().month,
-  );
+  late final DateTime _minimumCalendarMonth;
+  late DateTime _calendarMonth;
   late Map<int, AvailabilityStatus> _availabilityByDay;
   int? _startDay;
   int? _endDay;
@@ -33,16 +31,21 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   bool _availabilityLoading = true;
   String? _availabilityError;
   bool _isSubmitting = false;
+  int _availabilityRequestVersion = 0;
 
   bool get _canBook =>
       _startDay != null &&
       _endDay != null &&
       _calendarError == null &&
+      !_availabilityLoading &&
       !_isSubmitting;
 
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    _minimumCalendarMonth = DateTime(now.year, now.month);
+    _calendarMonth = _minimumCalendarMonth;
     _availabilityByDay = Map<int, AvailabilityStatus>.of(
       widget.vehicle.availabilityByDay,
     );
@@ -110,6 +113,9 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
             availabilityByDay: _availabilityByDay,
             startDay: _startDay,
             endDay: _endDay,
+            canGoToPreviousMonth: _canGoToPreviousMonth,
+            onPreviousMonth: () => _changeMonth(-1),
+            onNextMonth: () => _changeMonth(1),
             onDaySelected: _selectDay,
           ),
           if (_calendarError != null) ...[
@@ -274,6 +280,9 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   }
 
   Future<void> _loadAvailability() async {
+    final requestVersion = ++_availabilityRequestVersion;
+    final requestedMonth = _calendarMonth;
+
     setState(() {
       _availabilityLoading = true;
       _availabilityError = null;
@@ -283,10 +292,10 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
       final availabilityByDay = await _fleetApiService
           .fetchVehicleAvailabilityForMonth(
             vehicle: widget.vehicle,
-            month: _calendarMonth,
+            month: requestedMonth,
           );
 
-      if (!mounted) {
+      if (!mounted || requestVersion != _availabilityRequestVersion) {
         return;
       }
 
@@ -295,7 +304,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
         _availabilityLoading = false;
       });
     } catch (_) {
-      if (!mounted) {
+      if (!mounted || requestVersion != _availabilityRequestVersion) {
         return;
       }
 
@@ -305,6 +314,40 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
             'Disponibilités non synchronisées, seules les données connues sont affichées.';
       });
     }
+  }
+
+  bool get _canGoToPreviousMonth {
+    return _calendarMonth.year > _minimumCalendarMonth.year ||
+        (_calendarMonth.year == _minimumCalendarMonth.year &&
+            _calendarMonth.month > _minimumCalendarMonth.month);
+  }
+
+  void _changeMonth(int offset) {
+    final nextMonth = DateTime(
+      _calendarMonth.year,
+      _calendarMonth.month + offset,
+    );
+
+    if (_isBeforeCurrentMonth(nextMonth)) {
+      return;
+    }
+
+    setState(() {
+      _calendarMonth = nextMonth;
+      _availabilityByDay = const {};
+      _startDay = null;
+      _endDay = null;
+      _calendarError = null;
+      _availabilityError = null;
+    });
+
+    _loadAvailability();
+  }
+
+  bool _isBeforeCurrentMonth(DateTime month) {
+    return month.year < _minimumCalendarMonth.year ||
+        (month.year == _minimumCalendarMonth.year &&
+            month.month < _minimumCalendarMonth.month);
   }
 
   DateTime? _selectedDateTime(int? day, TimeOfDay time) {
@@ -575,6 +618,9 @@ class _CalendarCard extends StatelessWidget {
     required this.availabilityByDay,
     required this.startDay,
     required this.endDay,
+    required this.canGoToPreviousMonth,
+    required this.onPreviousMonth,
+    required this.onNextMonth,
     required this.onDaySelected,
   });
 
@@ -582,6 +628,9 @@ class _CalendarCard extends StatelessWidget {
   final Map<int, AvailabilityStatus> availabilityByDay;
   final int? startDay;
   final int? endDay;
+  final bool canGoToPreviousMonth;
+  final VoidCallback onPreviousMonth;
+  final VoidCallback onNextMonth;
   final ValueChanged<int> onDaySelected;
 
   @override
@@ -598,16 +647,16 @@ class _CalendarCard extends StatelessWidget {
             children: [
               IconButton(
                 tooltip: 'Mois précédent',
-                onPressed: null,
+                onPressed: canGoToPreviousMonth ? onPreviousMonth : null,
                 icon: const Icon(Icons.chevron_left),
               ),
               Text(
                 '${_monthLabel(month.month)} ${month.year}',
-                style: TextStyle(fontWeight: FontWeight.w700),
+                style: const TextStyle(fontWeight: FontWeight.w700),
               ),
               IconButton(
                 tooltip: 'Mois suivant',
-                onPressed: null,
+                onPressed: onNextMonth,
                 icon: const Icon(Icons.chevron_right),
               ),
             ],
@@ -704,18 +753,18 @@ class _CalendarDay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasAvailabilityMarker = status != AvailabilityStatus.free;
-    final backgroundColor = isInRange
-        ? AppColors.primary
-        : hasAvailabilityMarker
-        ? status.color.withValues(alpha: 0.16)
-        : Colors.transparent;
-    final borderColor = isInRange || !hasAvailabilityMarker
+    final isHighlighted = isSelected || isInRange;
+    final backgroundColor = disabled
         ? Colors.transparent
-        : status.color.withValues(alpha: 0.45);
+        : isHighlighted
+        ? AppColors.primary
+        : status.color.withValues(alpha: 0.18);
+    final borderColor = disabled || isHighlighted
+        ? Colors.transparent
+        : status.color.withValues(alpha: 0.52);
     final textColor = disabled
         ? AppColors.outlineVariant
-        : isInRange
+        : isHighlighted
         ? Colors.white
         : AppColors.onSurface;
 
@@ -736,24 +785,10 @@ class _CalendarDay extends StatelessWidget {
               label,
               style: TextStyle(
                 color: textColor,
-                fontWeight: isSelected || hasAvailabilityMarker
-                    ? FontWeight.w700
-                    : FontWeight.w400,
+                fontWeight: isHighlighted ? FontWeight.w700 : FontWeight.w600,
               ),
             ),
           ),
-          if (!disabled && !isInRange && !hasAvailabilityMarker)
-            Positioned(
-              bottom: 2,
-              child: Container(
-                height: 5,
-                width: 5,
-                decoration: BoxDecoration(
-                  color: status.color,
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ),
         ],
       ),
     );

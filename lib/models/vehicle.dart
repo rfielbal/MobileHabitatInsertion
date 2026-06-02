@@ -63,7 +63,7 @@ extension AvailabilityStatusX on AvailabilityStatus {
 
   Color get color {
     return switch (this) {
-      AvailabilityStatus.free => AppColors.outlineVariant,
+      AvailabilityStatus.free => AppColors.available,
       AvailabilityStatus.reserved => AppColors.error,
       AvailabilityStatus.maintenance => AppColors.maintenance,
       AvailabilityStatus.partial => AppColors.partialAvailability,
