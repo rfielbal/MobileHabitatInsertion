@@ -24,11 +24,14 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     DateTime.now().year,
     DateTime.now().month,
   );
+  late Map<int, AvailabilityStatus> _availabilityByDay;
   int? _startDay;
   int? _endDay;
   TimeOfDay _startTime = const TimeOfDay(hour: 8, minute: 30);
   TimeOfDay _endTime = const TimeOfDay(hour: 18, minute: 0);
   String? _calendarError;
+  bool _availabilityLoading = true;
+  String? _availabilityError;
   bool _isSubmitting = false;
 
   bool get _canBook =>
@@ -36,6 +39,15 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
       _endDay != null &&
       _calendarError == null &&
       !_isSubmitting;
+
+  @override
+  void initState() {
+    super.initState();
+    _availabilityByDay = Map<int, AvailabilityStatus>.of(
+      widget.vehicle.availabilityByDay,
+    );
+    _loadAvailability();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -67,6 +79,20 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
           ),
           const SizedBox(height: 14),
           const _AvailabilityLegend(),
+          if (_availabilityLoading) ...[
+            const SizedBox(height: 12),
+            const LinearProgressIndicator(),
+          ],
+          if (_availabilityError != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              _availabilityError!,
+              style: const TextStyle(
+                color: AppColors.onSurfaceVariant,
+                fontSize: 12,
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
           const Center(
             child: Text(
@@ -81,7 +107,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
           const SizedBox(height: 12),
           _CalendarCard(
             month: _calendarMonth,
-            availabilityByDay: widget.vehicle.availabilityByDay,
+            availabilityByDay: _availabilityByDay,
             startDay: _startDay,
             endDay: _endDay,
             onDaySelected: _selectDay,
@@ -140,8 +166,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   }
 
   void _selectDay(int day) {
-    final status =
-        widget.vehicle.availabilityByDay[day] ?? AvailabilityStatus.free;
+    final status = _availabilityByDay[day] ?? AvailabilityStatus.free;
 
     if (!status.canStartReservation) {
       setState(() {
@@ -173,8 +198,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     }
 
     for (var day = _startDay!; day <= _endDay!; day++) {
-      final status =
-          widget.vehicle.availabilityByDay[day] ?? AvailabilityStatus.free;
+      final status = _availabilityByDay[day] ?? AvailabilityStatus.free;
       if (!status.canStartReservation) {
         return true;
       }
@@ -245,6 +269,40 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
       setState(() {
         _isSubmitting = false;
         _calendarError = 'Réservation impossible : $e';
+      });
+    }
+  }
+
+  Future<void> _loadAvailability() async {
+    setState(() {
+      _availabilityLoading = true;
+      _availabilityError = null;
+    });
+
+    try {
+      final availabilityByDay = await _fleetApiService
+          .fetchVehicleAvailabilityForMonth(
+            vehicle: widget.vehicle,
+            month: _calendarMonth,
+          );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _availabilityByDay = availabilityByDay;
+        _availabilityLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _availabilityLoading = false;
+        _availabilityError =
+            'Disponibilités non synchronisées, seules les données connues sont affichées.';
       });
     }
   }

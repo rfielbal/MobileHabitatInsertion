@@ -13,7 +13,9 @@ import 'return_vehicle_screen.dart';
 import 'vehicle_detail_screen.dart';
 
 class BookingsScreen extends StatefulWidget {
-  const BookingsScreen({super.key});
+  const BookingsScreen({super.key, this.refreshVersion = 0});
+
+  final int refreshVersion;
 
   @override
   State<BookingsScreen> createState() => _BookingsScreenState();
@@ -28,6 +30,15 @@ class _BookingsScreenState extends State<BookingsScreen> {
   void initState() {
     super.initState();
     _reservationsFuture = _fleetApiService.fetchReservations();
+  }
+
+  @override
+  void didUpdateWidget(covariant BookingsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.refreshVersion != widget.refreshVersion) {
+      _reloadReservations();
+    }
   }
 
   @override

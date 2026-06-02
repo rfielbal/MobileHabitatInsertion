@@ -24,9 +24,8 @@ class ApiClient {
     Map<String, String>? queryParameters,
     bool authenticated = true,
   }) async {
-    final decoded = await _sendJson(
-      method: 'GET',
-      path: path,
+    final decoded = await getJson(
+      path,
       queryParameters: queryParameters,
       authenticated: authenticated,
     );
@@ -36,6 +35,19 @@ class ApiClient {
     }
 
     throw const ApiException(message: 'Réponse API inattendue.');
+  }
+
+  Future<Object?> getJson(
+    String path, {
+    Map<String, String>? queryParameters,
+    bool authenticated = true,
+  }) {
+    return _sendJson(
+      method: 'GET',
+      path: path,
+      queryParameters: queryParameters,
+      authenticated: authenticated,
+    );
   }
 
   Future<Map<String, dynamic>> postMap(

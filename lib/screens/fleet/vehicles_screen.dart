@@ -12,7 +12,9 @@ import 'vehicle_detail_screen.dart';
 enum VehicleSortMode { priority, status, date }
 
 class VehiclesScreen extends StatefulWidget {
-  const VehiclesScreen({super.key});
+  const VehiclesScreen({super.key, this.onReservationChanged});
+
+  final VoidCallback? onReservationChanged;
 
   @override
   State<VehiclesScreen> createState() => _VehiclesScreenState();
@@ -184,6 +186,7 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
         .then((updated) {
           if (updated ?? false) {
             _reloadVehicles();
+            widget.onReservationChanged?.call();
           }
         });
   }

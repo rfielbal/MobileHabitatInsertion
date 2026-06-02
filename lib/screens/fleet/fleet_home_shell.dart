@@ -18,6 +18,7 @@ class FleetHomeShell extends StatefulWidget {
 class _FleetHomeShellState extends State<FleetHomeShell> {
   final _authSessionService = const AuthSessionService();
   int _currentIndex = 0;
+  int _reservationRefreshVersion = 0;
 
   @override
   void initState() {
@@ -31,8 +32,8 @@ class _FleetHomeShellState extends State<FleetHomeShell> {
       body: IndexedStack(
         index: _currentIndex,
         children: [
-          const VehiclesScreen(),
-          const BookingsScreen(),
+          VehiclesScreen(onReservationChanged: _refreshReservationData),
+          BookingsScreen(refreshVersion: _reservationRefreshVersion),
           ProfileScreen(onLogout: _logout),
         ],
       ),
@@ -41,6 +42,9 @@ class _FleetHomeShellState extends State<FleetHomeShell> {
         onChanged: (index) {
           setState(() {
             _currentIndex = index;
+            if (index == 1) {
+              _reservationRefreshVersion++;
+            }
           });
         },
       ),
@@ -55,5 +59,11 @@ class _FleetHomeShellState extends State<FleetHomeShell> {
     Navigator.of(
       context,
     ).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
+  }
+
+  void _refreshReservationData() {
+    setState(() {
+      _reservationRefreshVersion++;
+    });
   }
 }

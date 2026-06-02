@@ -119,10 +119,27 @@ class FleetApiMappers {
     );
   }
 
-  static List<Map<String, dynamic>> itemsFromResponse(
-    Map<String, dynamic> response,
-  ) {
-    return _listOfMaps(response['items'] ?? response['hydra:member']);
+  static List<Map<String, dynamic>> itemsFromResponse(Object? response) {
+    if (response is List) {
+      return _listOfMaps(response);
+    }
+
+    if (response is! Map<String, dynamic>) {
+      return const [];
+    }
+
+    return _listOfMaps(
+      response['items'] ??
+          response['hydra:member'] ??
+          response['member'] ??
+          response['data'] ??
+          response['results'] ??
+          response['reservations'] ??
+          response['vehicules'] ??
+          response['sites'] ??
+          response['notifications'] ??
+          response['constats'],
+    );
   }
 
   static String iso(DateTime date) => date.toIso8601String();
