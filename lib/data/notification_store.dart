@@ -1,7 +1,9 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 
 import '../models/app_notification.dart';
+import '../models/reservation.dart';
 import '../services/notification_api_service.dart';
+import '../theme/app_colors.dart';
 
 class NotificationStore {
   const NotificationStore._();
@@ -27,11 +29,23 @@ class NotificationStore {
     error.value = null;
 
     try {
+      final localNotifications = [
+        for (final item in items.value)
+          if (_isLocalNotification(item.id)) item,
+      ];
+      final localReadIds = {
+        for (final id in readIds.value)
+          if (_isLocalNotification(id)) id,
+      };
       final payloads = await _apiService.fetchNotifications();
-      items.value = payloads.map((payload) => payload.notification).toList();
+      items.value = [
+        ...payloads.map((payload) => payload.notification),
+        ...localNotifications,
+      ];
       readIds.value = {
         for (final payload in payloads)
           if (payload.read) payload.notification.id,
+        ...localReadIds,
       };
     } catch (e) {
       error.value = e.toString();
@@ -45,12 +59,65 @@ class NotificationStore {
       return;
     }
 
+    if (_isLocalNotification(id)) {
+      readIds.value = {...readIds.value, id};
+      return;
+    }
+
     await _apiService.markAsRead(id);
     readIds.value = {...readIds.value, id};
   }
 
   static Future<void> delete(int id) async {
+    if (_isLocalNotification(id)) {
+      _deleteFromLocalState(id);
+      return;
+    }
+
     await _apiService.deleteNotification(id);
+    _deleteFromLocalState(id);
+  }
+
+  static void upsertDepartureReminders(
+    List<FleetReservation> reservations,
+    DateTime now,
+  ) {
+    final reminders = [
+      for (final reservation in reservations)
+        if (reservation.shouldCreateDepartureReminderAt(now))
+          AppNotification(
+            id: _departureReminderId(reservation),
+            title: 'Départ à confirmer',
+            body:
+                'Le formulaire de départ de ${reservation.vehicle.name} devait être envoyé à ${_timeLabel(reservation.startAt)}.',
+            timeLabel: 'Maintenant',
+            icon: Icons.assignment_late_outlined,
+            color: AppColors.maintenance,
+          ),
+    ];
+
+    final reminderIds = reminders
+        .map((notification) => notification.id)
+        .toSet();
+
+    items.value = [
+      for (final item in items.value)
+        if (!_isLocalNotification(item.id) || reminderIds.contains(item.id))
+          item,
+      for (final reminder in reminders)
+        if (!items.value.any((item) => item.id == reminder.id)) reminder,
+    ];
+  }
+
+  static bool _isLocalNotification(int id) {
+    return id < 0;
+  }
+
+  static int _departureReminderId(FleetReservation reservation) {
+    return -1000000 - reservation.id.hashCode.abs();
+  }
+
+  static void _deleteFromLocalState(int id) {
     items.value = [
       for (final item in items.value)
         if (item.id != id) item,
@@ -62,5 +129,11 @@ class NotificationStore {
           if (readId != id) readId,
       };
     }
+  }
+
+  static String _timeLabel(DateTime date) {
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
   }
 }

@@ -48,7 +48,8 @@ class FleetApiService {
       }
     }
 
-    final vehicles = vehiclesById.values.toList();
+    var vehicles = vehiclesById.values.toList();
+    vehicles = await _withCurrentReservationState(vehicles);
     vehicles.sort((a, b) {
       final statusSort = a.status.sortRank.compareTo(b.status.sortRank);
       if (statusSort != 0) {
@@ -57,6 +58,21 @@ class FleetApiService {
       return a.name.compareTo(b.name);
     });
     return vehicles;
+  }
+
+  Future<List<String>> fetchUserSiteLabels() async {
+    final response = await _apiClient.getJson(
+      '/metier/mes-sites',
+      queryParameters: _refreshQueryParameters(),
+    );
+    final sites = FleetApiMappers.itemsFromResponse(response)
+        .map(FleetApiMappers.siteLabelFromJson)
+        .where((site) => site.trim().isNotEmpty)
+        .toSet()
+        .toList();
+
+    sites.sort();
+    return sites;
   }
 
   Future<List<FleetReservation>> fetchReservations() async {
@@ -68,7 +84,7 @@ class FleetApiService {
       response,
     ).map(FleetApiMappers.reservationFromJson).toList();
 
-    reservations.sort((a, b) => b.startAt.compareTo(a.startAt));
+    reservations.sort((a, b) => a.startAt.compareTo(b.startAt));
     return reservations;
   }
 
@@ -170,6 +186,10 @@ class FleetApiService {
     );
 
     return FleetApiMappers.reservationFromJson(response);
+  }
+
+  Future<void> deleteReservation(FleetReservation reservation) async {
+    await _apiClient.delete('/reservations/${reservation.id}');
   }
 
   Future<void> startConstat(FleetReservation reservation) async {
@@ -431,6 +451,66 @@ class FleetApiService {
     return {'_': DateTime.now().millisecondsSinceEpoch.toString()};
   }
 
+  Future<List<Vehicle>> _withCurrentReservationState(
+    List<Vehicle> vehicles,
+  ) async {
+    final now = DateTime.now();
+
+    try {
+      final reservations = await fetchReservations();
+      final activeReservationsByVehicleId = <String, FleetReservation>{};
+
+      for (final reservation in reservations) {
+        if (reservation.startAt.isAfter(now) ||
+            !reservation.endAt.isAfter(now)) {
+          continue;
+        }
+
+        final vehicleId = reservation.vehicle.id;
+        final existing = activeReservationsByVehicleId[vehicleId];
+        if (existing == null || reservation.endAt.isAfter(existing.endAt)) {
+          activeReservationsByVehicleId[vehicleId] = reservation;
+        }
+      }
+
+      return [
+        for (final vehicle in vehicles)
+          if (activeReservationsByVehicleId.containsKey(vehicle.id))
+            vehicle.copyWith(
+              status: VehicleStatus.inUse,
+              subtitle:
+                  'En usage jusqu’au ${_dateTimeUntilLabel(activeReservationsByVehicleId[vehicle.id]!.endAt)}',
+              nextAvailableAt: activeReservationsByVehicleId[vehicle.id]!.endAt,
+              priorityRank: VehicleStatus.inUse.sortRank,
+            )
+          else
+            vehicle,
+      ];
+    } catch (_) {
+      return vehicles;
+    }
+  }
+
+  String _dateTimeUntilLabel(DateTime date) {
+    const months = [
+      'janvier',
+      'février',
+      'mars',
+      'avril',
+      'mai',
+      'juin',
+      'juillet',
+      'août',
+      'septembre',
+      'octobre',
+      'novembre',
+      'décembre',
+    ];
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+    return '${date.day} ${months[date.month - 1]} à $hour:$minute';
+  }
+
   int? _dayFromApiValue(Object? value, DateTime month) {
     if (value is int) {
       return _validDay(value, month);
@@ -485,7 +565,7 @@ class FleetApiService {
       return AvailabilityStatus.maintenance;
     }
     if (status.contains('partiel') || status.contains('partial')) {
-      return AvailabilityStatus.partial;
+      return AvailabilityStatus.free;
     }
     if (status.contains('reserve') ||
         status.contains('réserv') ||

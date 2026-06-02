@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../../data/notification_store.dart';
 import '../../models/reservation.dart';
+import '../../models/vehicle.dart';
 import '../../services/fleet_api_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
+import '../../widgets/availability_calendar.dart';
 import '../../widgets/brand_top_bar.dart';
 import '../../widgets/status_chip.dart';
 import 'notifications_screen.dart';
@@ -24,12 +27,17 @@ class BookingsScreen extends StatefulWidget {
 class _BookingsScreenState extends State<BookingsScreen> {
   final _fleetApiService = FleetApiService();
   late Future<List<FleetReservation>> _reservationsFuture;
+  late final DateTime _minimumCalendarMonth;
+  late DateTime _calendarMonth;
   bool _showHistory = false;
 
   @override
   void initState() {
     super.initState();
-    _reservationsFuture = _fleetApiService.fetchReservations();
+    final now = DateTime.now();
+    _minimumCalendarMonth = DateTime(now.year, now.month);
+    _calendarMonth = _minimumCalendarMonth;
+    _reservationsFuture = _fetchReservations();
   }
 
   @override
@@ -90,6 +98,14 @@ class _BookingsScreenState extends State<BookingsScreen> {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    _ReservationCalendarSection(
+                      month: _calendarMonth,
+                      reservations: allReservations,
+                      canGoToPreviousMonth: _canGoToPreviousCalendarMonth,
+                      onPreviousMonth: () => _changeCalendarMonth(-1),
+                      onNextMonth: () => _changeCalendarMonth(1),
+                    ),
+                    const SizedBox(height: 18),
                     Row(
                       children: [
                         ChoiceChip(
@@ -136,8 +152,10 @@ class _BookingsScreenState extends State<BookingsScreen> {
                       for (final reservation in reservations) ...[
                         _ReservationCard(
                           reservation: reservation,
+                          now: DateTime.now(),
                           onPrimaryAction: () => _openReservation(reservation),
                           onEdit: () => _editReservation(reservation),
+                          onCancel: () => _cancelReservation(reservation),
                         ),
                         const SizedBox(height: 14),
                       ],
@@ -152,19 +170,17 @@ class _BookingsScreenState extends State<BookingsScreen> {
   }
 
   void _openReservation(FleetReservation reservation) {
+    final now = DateTime.now();
+
+    if (reservation.shouldShowDepartureActionAt(now) ||
+        reservation.status == ReservationStatus.pickupToday) {
+      _openPickupForm(reservation);
+      return;
+    }
+
     switch (reservation.status.action) {
       case ReservationAction.pickup:
-        Navigator.of(context)
-            .push<bool>(
-              MaterialPageRoute<bool>(
-                builder: (context) => PickupScreen(reservation: reservation),
-              ),
-            )
-            .then((updated) {
-              if (updated ?? false) {
-                _reloadReservations();
-              }
-            });
+        _openPickupForm(reservation);
       case ReservationAction.returnVehicle:
         Navigator.of(context)
             .push<bool>(
@@ -213,8 +229,118 @@ class _BookingsScreenState extends State<BookingsScreen> {
 
   void _reloadReservations() {
     setState(() {
-      _reservationsFuture = _fleetApiService.fetchReservations();
+      _reservationsFuture = _fetchReservations();
     });
+  }
+
+  Future<List<FleetReservation>> _fetchReservations() async {
+    final reservations = await _fleetApiService.fetchReservations();
+    NotificationStore.upsertDepartureReminders(reservations, DateTime.now());
+    return reservations;
+  }
+
+  void _openPickupForm(FleetReservation reservation) {
+    final now = DateTime.now();
+
+    if (!reservation.canOpenPickupFormAt(now)) {
+      final availableAt = reservation.startAt.subtract(
+        FleetReservation.pickupFormLeadTime,
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Le formulaire de départ sera disponible à ${_timeLabel(availableAt)}.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    Navigator.of(context)
+        .push<bool>(
+          MaterialPageRoute<bool>(
+            builder: (context) => PickupScreen(reservation: reservation),
+          ),
+        )
+        .then((updated) {
+          if (updated ?? false) {
+            _reloadReservations();
+          }
+        });
+  }
+
+  Future<void> _cancelReservation(FleetReservation reservation) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Annuler la réservation'),
+        content: Text(
+          'Confirmer l’annulation de la réservation du ${reservation.startLabel} ?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Retour'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('Annuler'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    try {
+      await _fleetApiService.deleteReservation(reservation);
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Réservation annulée')));
+      _reloadReservations();
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Annulation impossible : $e')));
+    }
+  }
+
+  bool get _canGoToPreviousCalendarMonth {
+    return _calendarMonth.year > _minimumCalendarMonth.year ||
+        (_calendarMonth.year == _minimumCalendarMonth.year &&
+            _calendarMonth.month > _minimumCalendarMonth.month);
+  }
+
+  void _changeCalendarMonth(int offset) {
+    final nextMonth = DateTime(
+      _calendarMonth.year,
+      _calendarMonth.month + offset,
+    );
+
+    if (nextMonth.year < _minimumCalendarMonth.year ||
+        (nextMonth.year == _minimumCalendarMonth.year &&
+            nextMonth.month < _minimumCalendarMonth.month)) {
+      return;
+    }
+
+    setState(() {
+      _calendarMonth = nextMonth;
+    });
+  }
+
+  String _timeLabel(DateTime date) {
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
   }
 
   void _openNotifications(BuildContext context) {
@@ -229,13 +355,17 @@ class _BookingsScreenState extends State<BookingsScreen> {
 class _ReservationCard extends StatelessWidget {
   const _ReservationCard({
     required this.reservation,
+    required this.now,
     required this.onPrimaryAction,
     required this.onEdit,
+    required this.onCancel,
   });
 
   final FleetReservation reservation;
+  final DateTime now;
   final VoidCallback onPrimaryAction;
   final VoidCallback onEdit;
+  final VoidCallback onCancel;
 
   @override
   Widget build(BuildContext context) {
@@ -310,15 +440,26 @@ class _ReservationCard extends StatelessWidget {
             const SizedBox(height: 16),
             const Divider(height: 1),
             const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+            Wrap(
+              alignment: WrapAlignment.end,
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                if (reservation.status == ReservationStatus.upcoming) ...[
+                if (reservation.canBeEditedAt(now)) ...[
                   OutlinedButton(
                     onPressed: onEdit,
                     child: const Text('Modifier'),
                   ),
-                  const SizedBox(width: 8),
+                ],
+                if (reservation.canBeCancelledAt(now)) ...[
+                  OutlinedButton(
+                    onPressed: onCancel,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.error,
+                      side: const BorderSide(color: AppColors.error),
+                    ),
+                    child: const Text('Annuler'),
+                  ),
                 ],
                 FilledButton(
                   onPressed: onPrimaryAction,
@@ -337,8 +478,13 @@ class _ReservationCard extends StatelessWidget {
   }
 
   String _primaryActionLabel(ReservationStatus status) {
+    if (reservation.shouldShowDepartureActionAt(now) ||
+        status == ReservationStatus.pickupToday) {
+      return 'Départ';
+    }
+
     return switch (status) {
-      ReservationStatus.pickupToday => 'Prise en charge',
+      ReservationStatus.pickupToday => 'Départ',
       ReservationStatus.returnToday => 'Retour véhicule',
       ReservationStatus.upcoming => 'Détails',
       ReservationStatus.completed => '',
@@ -352,6 +498,75 @@ class _ReservationCard extends StatelessWidget {
       ReservationStatus.upcoming => AppColors.primary,
       ReservationStatus.completed => AppColors.secondary,
     };
+  }
+}
+
+class _ReservationCalendarSection extends StatelessWidget {
+  const _ReservationCalendarSection({
+    required this.month,
+    required this.reservations,
+    required this.canGoToPreviousMonth,
+    required this.onPreviousMonth,
+    required this.onNextMonth,
+  });
+
+  final DateTime month;
+  final List<FleetReservation> reservations;
+  final bool canGoToPreviousMonth;
+  final VoidCallback onPreviousMonth;
+  final VoidCallback onNextMonth;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Calendrier',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 10),
+        const AvailabilityLegend(statuses: [AvailabilityStatus.reserved]),
+        const SizedBox(height: 10),
+        AvailabilityCalendar(
+          month: month,
+          availabilityByDay: _reservationDaysByMonth(),
+          canGoToPreviousMonth: canGoToPreviousMonth,
+          onPreviousMonth: onPreviousMonth,
+          onNextMonth: onNextMonth,
+        ),
+      ],
+    );
+  }
+
+  Map<int, AvailabilityStatus> _reservationDaysByMonth() {
+    final availabilityByDay = <int, AvailabilityStatus>{};
+
+    for (final reservation in reservations) {
+      if (reservation.status == ReservationStatus.completed) {
+        continue;
+      }
+
+      var current = DateTime(
+        reservation.startAt.year,
+        reservation.startAt.month,
+        reservation.startAt.day,
+      );
+      final end = DateTime(
+        reservation.endAt.year,
+        reservation.endAt.month,
+        reservation.endAt.day,
+      );
+
+      while (!current.isAfter(end)) {
+        if (current.year == month.year && current.month == month.month) {
+          availabilityByDay[current.day] = AvailabilityStatus.reserved;
+        }
+        current = current.add(const Duration(days: 1));
+      }
+    }
+
+    return availabilityByDay;
   }
 }
 

@@ -2,13 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 
-enum VehicleStatus { inUse, partiallyAvailable, available, maintenance }
+enum VehicleStatus { inUse, available, maintenance }
 
 extension VehicleStatusX on VehicleStatus {
   String get label {
     return switch (this) {
       VehicleStatus.inUse => 'En usage',
-      VehicleStatus.partiallyAvailable => 'Disponible partiellement',
       VehicleStatus.available => 'Libre',
       VehicleStatus.maintenance => 'En maintenance',
     };
@@ -17,7 +16,6 @@ extension VehicleStatusX on VehicleStatus {
   Color get color {
     return switch (this) {
       VehicleStatus.inUse => AppColors.error,
-      VehicleStatus.partiallyAvailable => AppColors.partialAvailability,
       VehicleStatus.available => AppColors.available,
       VehicleStatus.maintenance => AppColors.maintenance,
     };
@@ -26,7 +24,6 @@ extension VehicleStatusX on VehicleStatus {
   IconData get icon {
     return switch (this) {
       VehicleStatus.inUse => Icons.directions_car,
-      VehicleStatus.partiallyAvailable => Icons.local_shipping,
       VehicleStatus.available => Icons.electric_car,
       VehicleStatus.maintenance => Icons.build,
     };
@@ -35,7 +32,6 @@ extension VehicleStatusX on VehicleStatus {
   int get sortRank {
     return switch (this) {
       VehicleStatus.inUse => 1,
-      VehicleStatus.partiallyAvailable => 2,
       VehicleStatus.available => 3,
       VehicleStatus.maintenance => 4,
     };
@@ -44,12 +40,12 @@ extension VehicleStatusX on VehicleStatus {
   bool get canBeUsedAsFilter {
     return switch (this) {
       VehicleStatus.inUse || VehicleStatus.available => true,
-      VehicleStatus.partiallyAvailable || VehicleStatus.maintenance => false,
+      VehicleStatus.maintenance => false,
     };
   }
 }
 
-enum AvailabilityStatus { free, reserved, maintenance, partial }
+enum AvailabilityStatus { free, reserved, maintenance }
 
 extension AvailabilityStatusX on AvailabilityStatus {
   String get label {
@@ -57,7 +53,6 @@ extension AvailabilityStatusX on AvailabilityStatus {
       AvailabilityStatus.free => 'Libre',
       AvailabilityStatus.reserved => 'Réservé',
       AvailabilityStatus.maintenance => 'Maintenance',
-      AvailabilityStatus.partial => 'Disponible partiellement',
     };
   }
 
@@ -66,13 +61,12 @@ extension AvailabilityStatusX on AvailabilityStatus {
       AvailabilityStatus.free => AppColors.available,
       AvailabilityStatus.reserved => AppColors.error,
       AvailabilityStatus.maintenance => AppColors.maintenance,
-      AvailabilityStatus.partial => AppColors.partialAvailability,
     };
   }
 
   bool get canStartReservation {
     return switch (this) {
-      AvailabilityStatus.free || AvailabilityStatus.partial => true,
+      AvailabilityStatus.free => true,
       AvailabilityStatus.reserved || AvailabilityStatus.maintenance => false,
     };
   }
@@ -161,4 +155,37 @@ class Vehicle {
   final DateTime nextAvailableAt;
   final Map<int, AvailabilityStatus> availabilityByDay;
   final List<VehicleIssue> knownIssues;
+
+  Vehicle copyWith({
+    VehicleStatus? status,
+    String? subtitle,
+    DateTime? nextAvailableAt,
+    int? priorityRank,
+  }) {
+    return Vehicle(
+      id: id,
+      internalNumber: internalNumber,
+      name: name,
+      brand: brand,
+      model: model,
+      plateNumber: plateNumber,
+      category: category,
+      status: status ?? this.status,
+      subtitle: subtitle ?? this.subtitle,
+      imageUrl: imageUrl,
+      location: location,
+      site: site,
+      parkingDescription: parkingDescription,
+      seats: seats,
+      transmission: transmission,
+      energyType: energyType,
+      energyInfo: energyInfo,
+      currentMileage: currentMileage,
+      fuelLevelLabel: fuelLevelLabel,
+      priorityRank: priorityRank ?? this.priorityRank,
+      nextAvailableAt: nextAvailableAt ?? this.nextAvailableAt,
+      availabilityByDay: availabilityByDay,
+      knownIssues: knownIssues,
+    );
+  }
 }

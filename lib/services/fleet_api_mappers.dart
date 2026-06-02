@@ -87,6 +87,12 @@ class FleetApiMappers {
     final startAt = _date(json['dateDebut']) ?? DateTime.now();
     final endAt =
         _date(json['dateFin']) ?? startAt.add(const Duration(hours: 1));
+    final createdAt =
+        _date(json['createdAt']) ??
+        _date(json['created_at']) ??
+        _date(json['dateCreation']) ??
+        _date(json['dateReservation']) ??
+        _date(json['creeLe']);
 
     return FleetReservation(
       id: _text(json['id'], fallback: '0'),
@@ -98,6 +104,7 @@ class FleetApiMappers {
       endLabel: _reservationDateLabel(endAt),
       status: _reservationStatus(startAt, endAt, json['statut']),
       expectedStartMileage: vehicle.currentMileage,
+      createdAt: createdAt,
     );
   }
 
@@ -117,6 +124,10 @@ class FleetApiMappers {
         color: _notificationColor(type),
       ),
     );
+  }
+
+  static String siteLabelFromJson(Map<String, dynamic> json) {
+    return _siteLabel(json);
   }
 
   static List<Map<String, dynamic>> itemsFromResponse(Object? response) {
@@ -158,7 +169,7 @@ class FleetApiMappers {
       'maintenance' || 'en_maintenance' => VehicleStatus.maintenance,
       'partiel' ||
       'partiellement_disponible' ||
-      'partial' => VehicleStatus.partiallyAvailable,
+      'partial' => VehicleStatus.available,
       _ => VehicleStatus.available,
     };
   }

@@ -125,7 +125,6 @@ class VehicleCard extends StatelessWidget {
   IconData _metadataIcon(VehicleStatus status) {
     return switch (status) {
       VehicleStatus.inUse => Icons.person_outline,
-      VehicleStatus.partiallyAvailable => Icons.schedule,
       VehicleStatus.available => Icons.battery_charging_full,
       VehicleStatus.maintenance => Icons.garage_outlined,
     };

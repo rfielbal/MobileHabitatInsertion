@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../services/auth_session_service.dart';
+import '../../services/fleet_api_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/brand_top_bar.dart';
@@ -19,8 +20,11 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final _authSessionService = const AuthSessionService();
+  final _fleetApiService = FleetApiService();
 
   AccountSession? _session;
+  List<String> _sites = const [];
+  bool _sitesLoading = true;
   bool _notificationsEnabled = false;
   bool _notificationsLoading = true;
   bool _permissionPluginAvailable = true;
@@ -30,6 +34,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     _loadSession();
+    _loadSites();
     _loadNotificationStatus();
   }
 
@@ -118,6 +123,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const Divider(height: 24),
                   _ProfileRow(
+                    icon: Icons.location_city_outlined,
+                    label: 'Site(s)',
+                    value: _sitesLabel,
+                  ),
+                  const Divider(height: 24),
+                  _ProfileRow(
                     icon: Icons.lock_outline,
                     label: 'Sécurité',
                     value: 'Session conservée sur ce téléphone',
@@ -186,6 +197,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return 'Alertes de réservation et de retour désactivées';
   }
 
+  String get _sitesLabel {
+    if (_sitesLoading) {
+      return 'Chargement des sites';
+    }
+    if (_sites.isEmpty) {
+      return 'Aucun site rattaché';
+    }
+    return _sites.join('\n');
+  }
+
   Future<void> _loadSession() async {
     final session = await _authSessionService.readSession();
     if (!mounted) {
@@ -194,6 +215,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() {
       _session = session;
     });
+  }
+
+  Future<void> _loadSites() async {
+    try {
+      final sites = await _fleetApiService.fetchUserSiteLabels();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _sites = sites;
+        _sitesLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _sites = const [];
+        _sitesLoading = false;
+      });
+    }
   }
 
   Future<void> _loadNotificationStatus() async {

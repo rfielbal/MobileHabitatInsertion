@@ -5,6 +5,7 @@ import '../../services/api_exception.dart';
 import '../../services/fleet_api_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
+import '../../widgets/availability_calendar.dart';
 import '../../widgets/bottom_action_bar.dart';
 import '../../widgets/known_issues_card.dart';
 import '../../widgets/remote_vehicle_image.dart';
@@ -23,8 +24,8 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   late final DateTime _minimumCalendarMonth;
   late DateTime _calendarMonth;
   late Map<int, AvailabilityStatus> _availabilityByDay;
-  int? _startDay;
-  int? _endDay;
+  DateTime? _startDate;
+  DateTime? _endDate;
   TimeOfDay _startTime = const TimeOfDay(hour: 8, minute: 30);
   TimeOfDay _endTime = const TimeOfDay(hour: 18, minute: 0);
   String? _calendarError;
@@ -34,8 +35,8 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   int _availabilityRequestVersion = 0;
 
   bool get _canBook =>
-      _startDay != null &&
-      _endDay != null &&
+      _startDate != null &&
+      _endDate != null &&
       _calendarError == null &&
       !_availabilityLoading &&
       !_isSubmitting;
@@ -81,7 +82,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 14),
-          const _AvailabilityLegend(),
+          const AvailabilityLegend(),
           if (_availabilityLoading) ...[
             const SizedBox(height: 12),
             const LinearProgressIndicator(),
@@ -108,11 +109,11 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          _CalendarCard(
+          AvailabilityCalendar(
             month: _calendarMonth,
             availabilityByDay: _availabilityByDay,
-            startDay: _startDay,
-            endDay: _endDay,
+            rangeStartDate: _startDate,
+            rangeEndDate: _endDate,
             canGoToPreviousMonth: _canGoToPreviousMonth,
             onPreviousMonth: () => _changeMonth(-1),
             onNextMonth: () => _changeMonth(1),
@@ -149,9 +150,8 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
           ],
           const SizedBox(height: 18),
           _BookingSummary(
-            month: _calendarMonth,
-            startDay: _startDay,
-            endDay: _endDay,
+            startDate: _startDate,
+            endDate: _endDate,
             startTime: _startTime,
             endTime: _endTime,
             onPickStartTime: () => _pickTime(isStart: true),
@@ -173,6 +173,11 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
 
   void _selectDay(int day) {
     final status = _availabilityByDay[day] ?? AvailabilityStatus.free;
+    final selectedDate = DateTime(
+      _calendarMonth.year,
+      _calendarMonth.month,
+      day,
+    );
 
     if (!status.canStartReservation) {
       setState(() {
@@ -182,28 +187,42 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     }
 
     setState(() {
-      if (_startDay == null || _endDay != null) {
-        _startDay = day;
-        _endDay = null;
-      } else if (day < _startDay!) {
-        _endDay = _startDay;
-        _startDay = day;
+      if (_startDate == null || _endDate != null) {
+        _startDate = selectedDate;
+        _endDate = null;
+      } else if (selectedDate.isBefore(_startDate!)) {
+        _endDate = _startDate;
+        _startDate = selectedDate;
       } else {
-        _endDay = day;
+        _endDate = selectedDate;
       }
 
-      _calendarError = _rangeContainsUnavailableDay()
+      _calendarError = _visibleRangeContainsUnavailableDay()
           ? 'La période contient une date réservée ou en maintenance'
           : null;
     });
   }
 
-  bool _rangeContainsUnavailableDay() {
-    if (_startDay == null || _endDay == null) {
+  bool _visibleRangeContainsUnavailableDay() {
+    if (_startDate == null || _endDate == null) {
       return false;
     }
 
-    for (var day = _startDay!; day <= _endDay!; day++) {
+    final monthStart = DateTime(_calendarMonth.year, _calendarMonth.month);
+    final endOfMonth = DateTime(
+      _calendarMonth.year,
+      _calendarMonth.month + 1,
+      0,
+    );
+
+    if (_endDate!.isBefore(monthStart) || _startDate!.isAfter(endOfMonth)) {
+      return false;
+    }
+
+    final start = _startDate!.isAfter(monthStart) ? _startDate!.day : 1;
+    final end = _endDate!.isBefore(endOfMonth) ? _endDate!.day : endOfMonth.day;
+
+    for (var day = start; day <= end; day++) {
       final status = _availabilityByDay[day] ?? AvailabilityStatus.free;
       if (!status.canStartReservation) {
         return true;
@@ -231,8 +250,8 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   }
 
   Future<void> _bookVehicle() async {
-    final startAt = _selectedDateTime(_startDay, _startTime);
-    final endAt = _selectedDateTime(_endDay, _endTime);
+    final startAt = _selectedDateTime(_startDate, _startTime);
+    final endAt = _selectedDateTime(_endDate, _endTime);
 
     if (startAt == null || endAt == null || !startAt.isBefore(endAt)) {
       setState(() {
@@ -246,6 +265,22 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     });
 
     try {
+      final unavailable = await _rangeContainsUnavailableDay(
+        startAt: startAt,
+        endAt: endAt,
+      );
+      if (unavailable) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _isSubmitting = false;
+          _calendarError =
+              'La période contient une date réservée ou en maintenance';
+        });
+        return;
+      }
+
       await _fleetApiService.createReservation(
         vehicle: widget.vehicle,
         startAt: startAt,
@@ -335,8 +370,6 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     setState(() {
       _calendarMonth = nextMonth;
       _availabilityByDay = const {};
-      _startDay = null;
-      _endDay = null;
       _calendarError = null;
       _availabilityError = null;
     });
@@ -350,18 +383,46 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
             month.month < _minimumCalendarMonth.month);
   }
 
-  DateTime? _selectedDateTime(int? day, TimeOfDay time) {
-    if (day == null) {
+  Future<bool> _rangeContainsUnavailableDay({
+    required DateTime startAt,
+    required DateTime endAt,
+  }) async {
+    var month = DateTime(startAt.year, startAt.month);
+    final lastMonth = DateTime(endAt.year, endAt.month);
+
+    while (!month.isAfter(lastMonth)) {
+      final availabilityByDay = await _fleetApiService
+          .fetchVehicleAvailabilityForMonth(
+            vehicle: widget.vehicle,
+            month: month,
+          );
+      final firstDay =
+          month.year == startAt.year && month.month == startAt.month
+          ? startAt.day
+          : 1;
+      final lastDay = month.year == endAt.year && month.month == endAt.month
+          ? endAt.day
+          : DateTime(month.year, month.month + 1, 0).day;
+
+      for (var day = firstDay; day <= lastDay; day++) {
+        final status = availabilityByDay[day] ?? AvailabilityStatus.free;
+        if (!status.canStartReservation) {
+          return true;
+        }
+      }
+
+      month = DateTime(month.year, month.month + 1);
+    }
+
+    return false;
+  }
+
+  DateTime? _selectedDateTime(DateTime? date, TimeOfDay time) {
+    if (date == null) {
       return null;
     }
 
-    return DateTime(
-      _calendarMonth.year,
-      _calendarMonth.month,
-      day,
-      time.hour,
-      time.minute,
-    );
+    return DateTime(date.year, date.month, date.day, time.hour, time.minute);
   }
 }
 
@@ -577,238 +638,18 @@ class _Divider extends StatelessWidget {
   }
 }
 
-class _AvailabilityLegend extends StatelessWidget {
-  const _AvailabilityLegend();
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 14,
-      runSpacing: 10,
-      children: AvailabilityStatus.values.map((status) {
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              height: 10,
-              width: 10,
-              decoration: BoxDecoration(
-                color: status.color,
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              status.label,
-              style: const TextStyle(
-                color: AppColors.onSurfaceVariant,
-                fontSize: 11,
-              ),
-            ),
-          ],
-        );
-      }).toList(),
-    );
-  }
-}
-
-class _CalendarCard extends StatelessWidget {
-  const _CalendarCard({
-    required this.month,
-    required this.availabilityByDay,
-    required this.startDay,
-    required this.endDay,
-    required this.canGoToPreviousMonth,
-    required this.onPreviousMonth,
-    required this.onNextMonth,
-    required this.onDaySelected,
-  });
-
-  final DateTime month;
-  final Map<int, AvailabilityStatus> availabilityByDay;
-  final int? startDay;
-  final int? endDay;
-  final bool canGoToPreviousMonth;
-  final VoidCallback onPreviousMonth;
-  final VoidCallback onNextMonth;
-  final ValueChanged<int> onDaySelected;
-
-  @override
-  Widget build(BuildContext context) {
-    final firstDay = DateTime(month.year, month.month);
-    final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
-    final leadingEmptyDays = firstDay.weekday - 1;
-
-    return AppCard(
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              IconButton(
-                tooltip: 'Mois précédent',
-                onPressed: canGoToPreviousMonth ? onPreviousMonth : null,
-                icon: const Icon(Icons.chevron_left),
-              ),
-              Text(
-                '${_monthLabel(month.month)} ${month.year}',
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-              IconButton(
-                tooltip: 'Mois suivant',
-                onPressed: onNextMonth,
-                icon: const Icon(Icons.chevron_right),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          const Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _WeekDayLabel('L'),
-              _WeekDayLabel('M'),
-              _WeekDayLabel('M'),
-              _WeekDayLabel('J'),
-              _WeekDayLabel('V'),
-              _WeekDayLabel('S'),
-              _WeekDayLabel('D'),
-            ],
-          ),
-          const SizedBox(height: 12),
-          GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 7,
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 4,
-            childAspectRatio: 1.08,
-            children: [
-              for (var index = 0; index < leadingEmptyDays; index++)
-                _CalendarDay(
-                  label: '',
-                  disabled: true,
-                  isSelected: false,
-                  isInRange: false,
-                  status: AvailabilityStatus.free,
-                  onTap: null,
-                ),
-              for (var day = 1; day <= daysInMonth; day++)
-                _CalendarDay(
-                  label: '$day',
-                  disabled: false,
-                  isSelected: day == startDay || day == endDay,
-                  isInRange: _isInRange(day),
-                  status: availabilityByDay[day] ?? AvailabilityStatus.free,
-                  onTap: () => onDaySelected(day),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  bool _isInRange(int day) {
-    if (startDay == null || endDay == null) {
-      return false;
-    }
-    return day >= startDay! && day <= endDay!;
-  }
-}
-
-class _WeekDayLabel extends StatelessWidget {
-  const _WeekDayLabel(this.label);
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 32,
-      child: Text(
-        label,
-        textAlign: TextAlign.center,
-        style: const TextStyle(color: AppColors.outline, fontSize: 12),
-      ),
-    );
-  }
-}
-
-class _CalendarDay extends StatelessWidget {
-  const _CalendarDay({
-    required this.label,
-    required this.disabled,
-    required this.isSelected,
-    required this.isInRange,
-    required this.status,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool disabled;
-  final bool isSelected;
-  final bool isInRange;
-  final AvailabilityStatus status;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final isHighlighted = isSelected || isInRange;
-    final backgroundColor = disabled
-        ? Colors.transparent
-        : isHighlighted
-        ? AppColors.primary
-        : status.color.withValues(alpha: 0.18);
-    final borderColor = disabled || isHighlighted
-        ? Colors.transparent
-        : status.color.withValues(alpha: 0.52);
-    final textColor = disabled
-        ? AppColors.outlineVariant
-        : isHighlighted
-        ? Colors.white
-        : AppColors.onSurface;
-
-    return InkWell(
-      borderRadius: BorderRadius.circular(999),
-      onTap: disabled ? null : onTap,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              color: backgroundColor,
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: borderColor),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              label,
-              style: TextStyle(
-                color: textColor,
-                fontWeight: isHighlighted ? FontWeight.w700 : FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _BookingSummary extends StatelessWidget {
   const _BookingSummary({
-    required this.month,
-    required this.startDay,
-    required this.endDay,
+    required this.startDate,
+    required this.endDate,
     required this.startTime,
     required this.endTime,
     required this.onPickStartTime,
     required this.onPickEndTime,
   });
 
-  final DateTime month;
-  final int? startDay;
-  final int? endDay;
+  final DateTime? startDate;
+  final DateTime? endDate;
   final TimeOfDay startTime;
   final TimeOfDay endTime;
   final VoidCallback onPickStartTime;
@@ -824,7 +665,7 @@ class _BookingSummary extends StatelessWidget {
               Expanded(
                 child: _DateSummary(
                   label: 'Départ',
-                  value: _dayLabel(month, startDay),
+                  value: dateLabel(startDate),
                 ),
               ),
               Container(
@@ -843,7 +684,7 @@ class _BookingSummary extends StatelessWidget {
               Expanded(
                 child: _DateSummary(
                   label: 'Retour',
-                  value: _dayLabel(month, endDay),
+                  value: dateLabel(endDate),
                   alignRight: true,
                 ),
               ),
@@ -934,31 +775,4 @@ class _TimeButton extends StatelessWidget {
       ),
     );
   }
-}
-
-String _dayLabel(DateTime month, int? day) {
-  if (day == null) {
-    return '-';
-  }
-  final date = DateTime(month.year, month.month, day);
-  const weekDays = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
-  return '${weekDays[date.weekday - 1]} $day ${_monthLabel(month.month)}';
-}
-
-String _monthLabel(int month) {
-  const months = [
-    'Janvier',
-    'Février',
-    'Mars',
-    'Avril',
-    'Mai',
-    'Juin',
-    'Juillet',
-    'Août',
-    'Septembre',
-    'Octobre',
-    'Novembre',
-    'Décembre',
-  ];
-  return months[month - 1];
 }
