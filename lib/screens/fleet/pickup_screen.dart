@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../models/reservation.dart';
 import '../../models/vehicle.dart';
+import '../../services/api_exception.dart';
+import '../../services/fleet_api_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/bottom_action_bar.dart';
@@ -20,7 +22,9 @@ class PickupScreen extends StatefulWidget {
 class _PickupScreenState extends State<PickupScreen> {
   final _formKey = GlobalKey<FormState>();
   final _fuelController = TextEditingController();
+  final _fleetApiService = FleetApiService();
   bool _mileageConfirmed = false;
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -29,7 +33,7 @@ class _PickupScreenState extends State<PickupScreen> {
     super.dispose();
   }
 
-  void _startTrip() {
+  Future<void> _startTrip() async {
     if (!_formKey.currentState!.validate() || !_mileageConfirmed) {
       if (!_mileageConfirmed) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -39,11 +43,43 @@ class _PickupScreenState extends State<PickupScreen> {
       return;
     }
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Trajet démarré')));
+    setState(() {
+      _isSubmitting = true;
+    });
 
-    Navigator.of(context).pop();
+    try {
+      await _fleetApiService.startConstat(widget.reservation);
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Trajet démarré')));
+
+      Navigator.of(context).pop(true);
+    } on ApiException catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isSubmitting = false;
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isSubmitting = false;
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Démarrage impossible : $e')));
+    }
   }
 
   String? _requiredFuelLevel(String? value) {
@@ -72,9 +108,9 @@ class _PickupScreenState extends State<PickupScreen> {
         children: [
           Expanded(
             child: BottomActionButton(
-              label: 'Démarrer le trajet',
+              label: _isSubmitting ? 'Démarrage...' : 'Démarrer le trajet',
               icon: Icons.play_circle,
-              onPressed: _startTrip,
+              onPressed: _isSubmitting ? null : _startTrip,
             ),
           ),
         ],

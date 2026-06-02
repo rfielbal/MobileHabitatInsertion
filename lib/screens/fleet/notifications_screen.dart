@@ -14,6 +14,12 @@ class NotificationsScreen extends StatefulWidget {
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
   @override
+  void initState() {
+    super.initState();
+    NotificationStore.refresh();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Notifications')),
@@ -34,27 +40,40 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               animation: Listenable.merge([
                 NotificationStore.items,
                 NotificationStore.readIds,
+                NotificationStore.loading,
+                NotificationStore.error,
               ]),
               builder: (context, _) {
                 final notifications = NotificationStore.items.value;
                 final readIds = NotificationStore.readIds.value;
+                final isLoading = NotificationStore.loading.value;
+                final error = NotificationStore.error.value;
 
-                if (notifications.isEmpty) {
-                  return const _EmptyNotifications();
+                if (isLoading && notifications.isEmpty) {
+                  return const Center(child: CircularProgressIndicator());
                 }
 
                 return Column(
                   children: [
-                    for (final notification in notifications) ...[
-                      _NotificationCard(
-                        notification: notification,
-                        read: readIds.contains(notification.id),
-                        onTap: () =>
-                            NotificationStore.markAsRead(notification.id),
-                        onDelete: () => _deleteNotification(notification),
+                    if (error != null) ...[
+                      _NotificationsError(
+                        message: 'Impossible de synchroniser les notifications',
+                        onRetry: NotificationStore.refresh,
                       ),
                       const SizedBox(height: 12),
                     ],
+                    if (notifications.isEmpty)
+                      const _EmptyNotifications()
+                    else
+                      for (final notification in notifications) ...[
+                        _NotificationCard(
+                          notification: notification,
+                          read: readIds.contains(notification.id),
+                          onTap: () => _markAsRead(notification),
+                          onDelete: () => _deleteNotification(notification),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
                   ],
                 );
               },
@@ -65,11 +84,38 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     );
   }
 
-  void _deleteNotification(AppNotification notification) {
-    NotificationStore.delete(notification.id);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Notification supprimée : ${notification.title}')),
-    );
+  Future<void> _markAsRead(AppNotification notification) async {
+    try {
+      await NotificationStore.markAsRead(notification.id);
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Lecture impossible : $e')));
+    }
+  }
+
+  Future<void> _deleteNotification(AppNotification notification) async {
+    try {
+      await NotificationStore.delete(notification.id);
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Notification supprimée : ${notification.title}'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Suppression impossible : $e')));
+    }
   }
 }
 
@@ -218,6 +264,32 @@ class _EmptyNotifications extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _NotificationsError extends StatelessWidget {
+  const _NotificationsError({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      child: Row(
+        children: [
+          const Icon(Icons.sync_problem, color: AppColors.maintenance),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(color: AppColors.onSurfaceVariant),
+            ),
+          ),
+          TextButton(onPressed: onRetry, child: const Text('Réessayer')),
+        ],
       ),
     );
   }

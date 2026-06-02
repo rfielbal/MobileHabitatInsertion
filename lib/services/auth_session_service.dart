@@ -23,6 +23,7 @@ class AccountSession {
   final String pole;
 
   String get fullName => '$firstName $lastName';
+  bool get isMockSession => token.contains('.mock_token_');
 
   String get roleLabel {
     return switch (role) {
@@ -53,13 +54,35 @@ class AuthSessionService {
     final token =
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.mock_token_${account.id}';
 
-    await _storage.write(key: tokenKey, value: token);
-    await _storage.write(key: userIdKey, value: account.id);
-    await _storage.write(key: userEmailKey, value: account.email);
-    await _storage.write(key: firstNameKey, value: account.firstName);
-    await _storage.write(key: lastNameKey, value: account.lastName);
-    await _storage.write(key: roleKey, value: account.role);
-    await _storage.write(key: poleKey, value: account.pole);
+    await saveSession(
+      AccountSession(
+        token: token,
+        userId: account.id,
+        email: account.email,
+        firstName: account.firstName,
+        lastName: account.lastName,
+        role: account.role,
+        pole: account.pole,
+      ),
+    );
+  }
+
+  Future<void> saveSession(AccountSession session) async {
+    await _storage.write(key: tokenKey, value: session.token);
+    await _storage.write(key: userIdKey, value: session.userId);
+    await _storage.write(key: userEmailKey, value: session.email);
+    await _storage.write(key: firstNameKey, value: session.firstName);
+    await _storage.write(key: lastNameKey, value: session.lastName);
+    await _storage.write(key: roleKey, value: session.role);
+    await _storage.write(key: poleKey, value: session.pole);
+  }
+
+  Future<String?> readToken() async {
+    try {
+      return _storage.read(key: tokenKey);
+    } on MissingPluginException {
+      return null;
+    }
   }
 
   Future<AccountSession?> readSession() async {

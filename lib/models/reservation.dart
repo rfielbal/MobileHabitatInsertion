@@ -29,6 +29,8 @@ class FleetReservation {
     required this.id,
     required this.vehicle,
     required this.location,
+    required this.startAt,
+    required this.endAt,
     required this.startLabel,
     required this.endLabel,
     required this.status,
@@ -38,6 +40,8 @@ class FleetReservation {
   final String id;
   final Vehicle vehicle;
   final String location;
+  final DateTime startAt;
+  final DateTime endAt;
   final String startLabel;
   final String endLabel;
   final ReservationStatus status;

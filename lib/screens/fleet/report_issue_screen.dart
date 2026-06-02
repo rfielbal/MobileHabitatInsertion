@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../models/reservation.dart';
+import '../../services/api_exception.dart';
+import '../../services/fleet_api_service.dart';
 import '../../services/reservation_video_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
@@ -25,9 +27,11 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
   final _formKey = GlobalKey<FormState>();
   final _descriptionController = TextEditingController();
   final _videoService = ReservationVideoService();
+  final _fleetApiService = FleetApiService();
 
   ReservationVideoDraft? _issueVideo;
   bool _isPreparingVideo = false;
+  bool _isSubmitting = false;
   String _issueType = 'Problème véhicule';
 
   bool get _hasVideo => _issueVideo != null;
@@ -38,15 +42,51 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
     super.dispose();
   }
 
-  void _sendAlert() {
+  Future<void> _sendAlert() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Signalement envoyé à l’administrateur')),
-    );
-    Navigator.of(context).pop();
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    try {
+      final message = _descriptionController.text.trim();
+      await _fleetApiService.createSignalement(
+        reservation: widget.reservation,
+        type: _issueType,
+        message: _hasVideo ? '$message\n\nVidéo ajoutée côté mobile.' : message,
+      );
+
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Signalement envoyé à l’administrateur')),
+      );
+      Navigator.of(context).pop();
+    } on ApiException catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isSubmitting = false;
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isSubmitting = false;
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Envoi impossible : $e')));
+    }
   }
 
   Future<void> _recordIssueVideo() async {
@@ -113,9 +153,9 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
         children: [
           Expanded(
             child: BottomActionButton(
-              label: 'Envoyer le signalement',
+              label: _isSubmitting ? 'Envoi...' : 'Envoyer le signalement',
               icon: Icons.report_problem_outlined,
-              onPressed: _sendAlert,
+              onPressed: _isSubmitting ? null : _sendAlert,
             ),
           ),
         ],
@@ -243,7 +283,7 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
                     Expanded(
                       child: Text(
                         _hasVideo
-                            ? 'Le signalement partira avec la vidéo et déclenchera une alerte administrateur.'
+                            ? 'La vidéo est enregistrée avec ce signalement et pourra être transmise à l’administrateur.'
                             : 'Le signalement déclenchera une alerte administrateur. La vidéo reste optionnelle.',
                         style: const TextStyle(
                           color: AppColors.onSurfaceVariant,

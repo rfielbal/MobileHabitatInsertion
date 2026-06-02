@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../models/vehicle.dart';
+import '../../services/api_exception.dart';
+import '../../services/fleet_api_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/bottom_action_bar.dart';
@@ -17,14 +19,23 @@ class VehicleDetailScreen extends StatefulWidget {
 }
 
 class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
+  final _fleetApiService = FleetApiService();
+  final DateTime _calendarMonth = DateTime(
+    DateTime.now().year,
+    DateTime.now().month,
+  );
   int? _startDay;
   int? _endDay;
   TimeOfDay _startTime = const TimeOfDay(hour: 8, minute: 30);
   TimeOfDay _endTime = const TimeOfDay(hour: 18, minute: 0);
   String? _calendarError;
+  bool _isSubmitting = false;
 
   bool get _canBook =>
-      _startDay != null && _endDay != null && _calendarError == null;
+      _startDay != null &&
+      _endDay != null &&
+      _calendarError == null &&
+      !_isSubmitting;
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +45,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
         children: [
           Expanded(
             child: BottomActionButton(
-              label: 'Réserver ce véhicule',
+              label: _isSubmitting ? 'Réservation...' : 'Réserver ce véhicule',
               icon: Icons.event_available,
               onPressed: _canBook ? _bookVehicle : null,
             ),
@@ -69,6 +80,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
           ),
           const SizedBox(height: 12),
           _CalendarCard(
+            month: _calendarMonth,
             availabilityByDay: widget.vehicle.availabilityByDay,
             startDay: _startDay,
             endDay: _endDay,
@@ -105,6 +117,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
           ],
           const SizedBox(height: 18),
           _BookingSummary(
+            month: _calendarMonth,
             startDay: _startDay,
             endDay: _endDay,
             startTime: _startTime,
@@ -187,15 +200,67 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     });
   }
 
-  void _bookVehicle() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '${widget.vehicle.name} réservé du ${_dayLabel(_startDay)} au ${_dayLabel(_endDay)}',
-        ),
-      ),
+  Future<void> _bookVehicle() async {
+    final startAt = _selectedDateTime(_startDay, _startTime);
+    final endAt = _selectedDateTime(_endDay, _endTime);
+
+    if (startAt == null || endAt == null || !startAt.isBefore(endAt)) {
+      setState(() {
+        _calendarError = 'La date de début doit être avant la date de retour';
+      });
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    try {
+      await _fleetApiService.createReservation(
+        vehicle: widget.vehicle,
+        startAt: startAt,
+        endAt: endAt,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('${widget.vehicle.name} réservé')));
+      Navigator.of(context).pop(true);
+    } on ApiException catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isSubmitting = false;
+        _calendarError = e.message;
+      });
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isSubmitting = false;
+        _calendarError = 'Réservation impossible : $e';
+      });
+    }
+  }
+
+  DateTime? _selectedDateTime(int? day, TimeOfDay time) {
+    if (day == null) {
+      return null;
+    }
+
+    return DateTime(
+      _calendarMonth.year,
+      _calendarMonth.month,
+      day,
+      time.hour,
+      time.minute,
     );
-    Navigator.of(context).pop();
   }
 }
 
@@ -448,12 +513,14 @@ class _AvailabilityLegend extends StatelessWidget {
 
 class _CalendarCard extends StatelessWidget {
   const _CalendarCard({
+    required this.month,
     required this.availabilityByDay,
     required this.startDay,
     required this.endDay,
     required this.onDaySelected,
   });
 
+  final DateTime month;
   final Map<int, AvailabilityStatus> availabilityByDay;
   final int? startDay;
   final int? endDay;
@@ -461,8 +528,9 @@ class _CalendarCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const previousMonthDays = [25, 26, 27, 28, 29, 30];
-    const currentMonthDays = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
+    final firstDay = DateTime(month.year, month.month);
+    final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
+    final leadingEmptyDays = firstDay.weekday - 1;
 
     return AppCard(
       child: Column(
@@ -475,8 +543,8 @@ class _CalendarCard extends StatelessWidget {
                 onPressed: null,
                 icon: const Icon(Icons.chevron_left),
               ),
-              const Text(
-                'Octobre 2023',
+              Text(
+                '${_monthLabel(month.month)} ${month.year}',
                 style: TextStyle(fontWeight: FontWeight.w700),
               ),
               IconButton(
@@ -508,16 +576,16 @@ class _CalendarCard extends StatelessWidget {
             crossAxisSpacing: 4,
             childAspectRatio: 1.08,
             children: [
-              for (final day in previousMonthDays)
+              for (var index = 0; index < leadingEmptyDays; index++)
                 _CalendarDay(
-                  label: '$day',
+                  label: '',
                   disabled: true,
                   isSelected: false,
                   isInRange: false,
                   status: AvailabilityStatus.free,
                   onTap: null,
                 ),
-              for (final day in currentMonthDays)
+              for (var day = 1; day <= daysInMonth; day++)
                 _CalendarDay(
                   label: '$day',
                   disabled: false,
@@ -636,6 +704,7 @@ class _CalendarDay extends StatelessWidget {
 
 class _BookingSummary extends StatelessWidget {
   const _BookingSummary({
+    required this.month,
     required this.startDay,
     required this.endDay,
     required this.startTime,
@@ -644,6 +713,7 @@ class _BookingSummary extends StatelessWidget {
     required this.onPickEndTime,
   });
 
+  final DateTime month;
   final int? startDay;
   final int? endDay;
   final TimeOfDay startTime;
@@ -661,7 +731,7 @@ class _BookingSummary extends StatelessWidget {
               Expanded(
                 child: _DateSummary(
                   label: 'Départ',
-                  value: _dayLabel(startDay),
+                  value: _dayLabel(month, startDay),
                 ),
               ),
               Container(
@@ -680,7 +750,7 @@ class _BookingSummary extends StatelessWidget {
               Expanded(
                 child: _DateSummary(
                   label: 'Retour',
-                  value: _dayLabel(endDay),
+                  value: _dayLabel(month, endDay),
                   alignRight: true,
                 ),
               ),
@@ -773,25 +843,29 @@ class _TimeButton extends StatelessWidget {
   }
 }
 
-String _dayLabel(int? day) {
+String _dayLabel(DateTime month, int? day) {
   if (day == null) {
     return '-';
   }
-  const labels = {
-    1: 'Dim 1 Oct',
-    2: 'Lun 2 Oct',
-    3: 'Mar 3 Oct',
-    4: 'Mer 4 Oct',
-    5: 'Jeu 5 Oct',
-    6: 'Ven 6 Oct',
-    7: 'Sam 7 Oct',
-    8: 'Dim 8 Oct',
-    9: 'Lun 9 Oct',
-    10: 'Mar 10 Oct',
-    11: 'Mer 11 Oct',
-    12: 'Jeu 12 Oct',
-    13: 'Ven 13 Oct',
-    14: 'Sam 14 Oct',
-  };
-  return labels[day] ?? '$day Oct';
+  final date = DateTime(month.year, month.month, day);
+  const weekDays = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+  return '${weekDays[date.weekday - 1]} $day ${_monthLabel(month.month)}';
+}
+
+String _monthLabel(int month) {
+  const months = [
+    'Janvier',
+    'Février',
+    'Mars',
+    'Avril',
+    'Mai',
+    'Juin',
+    'Juillet',
+    'Août',
+    'Septembre',
+    'Octobre',
+    'Novembre',
+    'Décembre',
+  ];
+  return months[month - 1];
 }

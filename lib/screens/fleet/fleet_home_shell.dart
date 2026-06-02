@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../data/notification_store.dart';
 import '../../navigation/app_routes.dart';
 import '../../services/auth_session_service.dart';
 import '../../widgets/fleet_bottom_navigation.dart';
@@ -17,6 +18,12 @@ class FleetHomeShell extends StatefulWidget {
 class _FleetHomeShellState extends State<FleetHomeShell> {
   final _authSessionService = const AuthSessionService();
   int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    NotificationStore.refresh();
+  }
 
   @override
   Widget build(BuildContext context) {

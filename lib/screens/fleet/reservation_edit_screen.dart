@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../models/reservation.dart';
+import '../../services/api_exception.dart';
+import '../../services/fleet_api_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/bottom_action_bar.dart';
@@ -15,18 +17,20 @@ class ReservationEditScreen extends StatefulWidget {
 }
 
 class _ReservationEditScreenState extends State<ReservationEditScreen> {
+  final _fleetApiService = FleetApiService();
   late DateTime _startDate;
   late DateTime _endDate;
   late TimeOfDay _startTime;
   late TimeOfDay _endTime;
+  bool _isSubmitting = false;
 
   @override
   void initState() {
     super.initState();
-    _startDate = DateTime(2026, 5, 27);
-    _endDate = DateTime(2026, 5, 27);
-    _startTime = const TimeOfDay(hour: 9, minute: 0);
-    _endTime = const TimeOfDay(hour: 17, minute: 0);
+    _startDate = _dateOnly(widget.reservation.startAt);
+    _endDate = _dateOnly(widget.reservation.endAt);
+    _startTime = TimeOfDay.fromDateTime(widget.reservation.startAt);
+    _endTime = TimeOfDay.fromDateTime(widget.reservation.endAt);
   }
 
   @override
@@ -38,13 +42,18 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
           Expanded(
             child: BottomActionButton(
               label: 'Annuler',
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: _isSubmitting
+                  ? null
+                  : () => Navigator.of(context).pop(),
               outlined: true,
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: BottomActionButton(label: 'Enregistrer', onPressed: _save),
+            child: BottomActionButton(
+              label: _isSubmitting ? 'Enregistrement...' : 'Enregistrer',
+              onPressed: _isSubmitting ? null : _save,
+            ),
           ),
         ],
       ),
@@ -197,17 +206,72 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
     });
   }
 
-  void _save() {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Réservation modifiée')));
-    Navigator.of(context).pop();
+  Future<void> _save() async {
+    final startAt = _mergeDateAndTime(_startDate, _startTime);
+    final endAt = _mergeDateAndTime(_endDate, _endTime);
+
+    if (!startAt.isBefore(endAt)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('La date de départ doit être avant la date de retour'),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    try {
+      await _fleetApiService.updateReservation(
+        reservation: widget.reservation,
+        startAt: startAt,
+        endAt: endAt,
+      );
+
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Réservation modifiée')));
+      Navigator.of(context).pop(true);
+    } on ApiException catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isSubmitting = false;
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isSubmitting = false;
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Modification impossible : $e')));
+    }
   }
 
   String _formatDate(DateTime date) {
     final day = date.day.toString().padLeft(2, '0');
     final month = date.month.toString().padLeft(2, '0');
     return '$day/$month/${date.year}';
+  }
+
+  DateTime _dateOnly(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
+  }
+
+  DateTime _mergeDateAndTime(DateTime date, TimeOfDay time) {
+    return DateTime(date.year, date.month, date.day, time.hour, time.minute);
   }
 }
 

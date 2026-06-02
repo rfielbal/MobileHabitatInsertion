@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../../data/mock_fleet_data.dart';
 import '../../models/vehicle.dart';
+import '../../services/fleet_api_service.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/app_card.dart';
 import '../../widgets/brand_top_bar.dart';
 import '../../widgets/vehicle_card.dart';
 import 'notifications_screen.dart';
@@ -19,10 +20,18 @@ class VehiclesScreen extends StatefulWidget {
 
 class _VehiclesScreenState extends State<VehiclesScreen> {
   final _searchController = TextEditingController();
+  final _fleetApiService = FleetApiService();
+  late Future<List<Vehicle>> _vehiclesFuture;
   VehicleSortMode _sortMode = VehicleSortMode.priority;
   String? _selectedSite;
   String? _selectedBrand;
   VehicleStatus? _selectedStatus;
+
+  @override
+  void initState() {
+    super.initState();
+    _vehiclesFuture = _fleetApiService.fetchVehicles();
+  }
 
   @override
   void dispose() {
@@ -30,9 +39,9 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
     super.dispose();
   }
 
-  List<Vehicle> get _filteredVehicles {
+  List<Vehicle> _filteredVehicles(List<Vehicle> allVehicles) {
     final query = _searchController.text.trim().toLowerCase();
-    final vehicles = MockFleetData.vehicles.where((vehicle) {
+    final vehicles = allVehicles.where((vehicle) {
       final matchesQuery =
           query.isEmpty ||
           vehicle.internalNumber.toLowerCase().contains(query) ||
@@ -64,17 +73,13 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
     return vehicles;
   }
 
-  List<String> get _sites {
-    final values = MockFleetData.vehicles
-        .map((vehicle) => vehicle.site)
-        .toSet();
+  List<String> _sites(List<Vehicle> vehicles) {
+    final values = vehicles.map((vehicle) => vehicle.site).toSet();
     return values.toList()..sort();
   }
 
-  List<String> get _brands {
-    final values = MockFleetData.vehicles
-        .map((vehicle) => vehicle.brand)
-        .toSet();
+  List<String> _brands(List<Vehicle> vehicles) {
+    final values = vehicles.map((vehicle) => vehicle.brand).toSet();
     return values.toList()..sort();
   }
 
@@ -106,98 +111,230 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Trier par',
-              style: TextStyle(
-                color: AppColors.onSurfaceVariant,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: SegmentedButton<VehicleSortMode>(
-                segments: const [
-                  ButtonSegment(
-                    value: VehicleSortMode.priority,
-                    label: Text('Priorité'),
+            FutureBuilder<List<Vehicle>>(
+              future: _vehiclesFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 48),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+
+                if (snapshot.hasError) {
+                  return _VehiclesError(
+                    message:
+                        'Impossible de charger les véhicules depuis l’API.',
+                    onRetry: _reloadVehicles,
+                  );
+                }
+
+                return _VehiclesContent(
+                  vehicles: snapshot.data ?? const [],
+                  filteredVehicles: _filteredVehicles(
+                    snapshot.data ?? const [],
                   ),
-                  ButtonSegment(
-                    value: VehicleSortMode.status,
-                    label: Text('Statut'),
-                  ),
-                  ButtonSegment(
-                    value: VehicleSortMode.date,
-                    label: Text('Date'),
-                  ),
-                ],
-                selected: {_sortMode},
-                showSelectedIcon: false,
-                onSelectionChanged: (selection) {
-                  setState(() {
-                    _sortMode = selection.first;
-                  });
-                },
-              ),
-            ),
-            const SizedBox(height: 14),
-            _VehicleFilters(
-              sites: _sites,
-              brands: _brands,
-              selectedSite: _selectedSite,
-              selectedBrand: _selectedBrand,
-              selectedStatus: _selectedStatus,
-              onSiteChanged: (value) => setState(() => _selectedSite = value),
-              onBrandChanged: (value) => setState(() => _selectedBrand = value),
-              onStatusChanged: (value) =>
-                  setState(() => _selectedStatus = value),
-              onReset: () {
-                setState(() {
-                  _selectedSite = null;
-                  _selectedBrand = null;
-                  _selectedStatus = null;
-                });
+                  sites: _sites(snapshot.data ?? const []),
+                  brands: _brands(snapshot.data ?? const []),
+                  sortMode: _sortMode,
+                  selectedSite: _selectedSite,
+                  selectedBrand: _selectedBrand,
+                  selectedStatus: _selectedStatus,
+                  onSortModeChanged: (value) =>
+                      setState(() => _sortMode = value),
+                  onSiteChanged: (value) =>
+                      setState(() => _selectedSite = value),
+                  onBrandChanged: (value) =>
+                      setState(() => _selectedBrand = value),
+                  onStatusChanged: (value) =>
+                      setState(() => _selectedStatus = value),
+                  onReset: _resetFilters,
+                  onVehicleTap: _openVehicle,
+                  onRefresh: _reloadVehicles,
+                );
               },
             ),
-            const SizedBox(height: 18),
-            if (_filteredVehicles.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 32),
-                child: Center(
-                  child: Text(
-                    'Aucun véhicule ne correspond aux filtres',
-                    style: TextStyle(color: AppColors.onSurfaceVariant),
-                  ),
-                ),
-              )
-            else
-              for (final vehicle in _filteredVehicles) ...[
-                VehicleCard(
-                  vehicle: vehicle,
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (context) => VehicleDetailScreen(
-                          vehicle: vehicle.id == 'peugeot-3008'
-                              ? MockFleetData.detailVehicle
-                              : vehicle,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 14),
-              ],
           ],
         ),
       ),
     );
   }
 
+  void _reloadVehicles() {
+    setState(() {
+      _vehiclesFuture = _fleetApiService.fetchVehicles();
+    });
+  }
+
+  void _resetFilters() {
+    setState(() {
+      _selectedSite = null;
+      _selectedBrand = null;
+      _selectedStatus = null;
+    });
+  }
+
+  void _openVehicle(Vehicle vehicle) {
+    Navigator.of(context)
+        .push<bool>(
+          MaterialPageRoute<bool>(
+            builder: (context) => VehicleDetailScreen(vehicle: vehicle),
+          ),
+        )
+        .then((updated) {
+          if (updated ?? false) {
+            _reloadVehicles();
+          }
+        });
+  }
+
   void _openNotifications(BuildContext context) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (context) => const NotificationsScreen(),
+      ),
+    );
+  }
+}
+
+class _VehiclesContent extends StatelessWidget {
+  const _VehiclesContent({
+    required this.vehicles,
+    required this.filteredVehicles,
+    required this.sites,
+    required this.brands,
+    required this.sortMode,
+    required this.selectedSite,
+    required this.selectedBrand,
+    required this.selectedStatus,
+    required this.onSortModeChanged,
+    required this.onSiteChanged,
+    required this.onBrandChanged,
+    required this.onStatusChanged,
+    required this.onReset,
+    required this.onVehicleTap,
+    required this.onRefresh,
+  });
+
+  final List<Vehicle> vehicles;
+  final List<Vehicle> filteredVehicles;
+  final List<String> sites;
+  final List<String> brands;
+  final VehicleSortMode sortMode;
+  final String? selectedSite;
+  final String? selectedBrand;
+  final VehicleStatus? selectedStatus;
+  final ValueChanged<VehicleSortMode> onSortModeChanged;
+  final ValueChanged<String?> onSiteChanged;
+  final ValueChanged<String?> onBrandChanged;
+  final ValueChanged<VehicleStatus?> onStatusChanged;
+  final VoidCallback onReset;
+  final ValueChanged<Vehicle> onVehicleTap;
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    if (vehicles.isEmpty) {
+      return _VehiclesError(
+        message:
+            'Aucun véhicule n’est disponible pour ce compte. Vérifiez les affectations côté administration.',
+        onRetry: onRefresh,
+      );
+    }
+
+    return Column(
+      children: [
+        const Text(
+          'Trier par',
+          style: TextStyle(
+            color: AppColors.onSurfaceVariant,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: SegmentedButton<VehicleSortMode>(
+            segments: const [
+              ButtonSegment(
+                value: VehicleSortMode.priority,
+                label: Text('Priorité'),
+              ),
+              ButtonSegment(
+                value: VehicleSortMode.status,
+                label: Text('Statut'),
+              ),
+              ButtonSegment(value: VehicleSortMode.date, label: Text('Date')),
+            ],
+            selected: {sortMode},
+            showSelectedIcon: false,
+            onSelectionChanged: (selection) {
+              onSortModeChanged(selection.first);
+            },
+          ),
+        ),
+        const SizedBox(height: 14),
+        _VehicleFilters(
+          sites: sites,
+          brands: brands,
+          selectedSite: selectedSite,
+          selectedBrand: selectedBrand,
+          selectedStatus: selectedStatus,
+          onSiteChanged: onSiteChanged,
+          onBrandChanged: onBrandChanged,
+          onStatusChanged: onStatusChanged,
+          onReset: onReset,
+        ),
+        const SizedBox(height: 18),
+        if (filteredVehicles.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 32),
+            child: Center(
+              child: Text(
+                'Aucun véhicule ne correspond aux filtres',
+                style: TextStyle(color: AppColors.onSurfaceVariant),
+              ),
+            ),
+          )
+        else
+          for (final vehicle in filteredVehicles) ...[
+            VehicleCard(vehicle: vehicle, onTap: () => onVehicleTap(vehicle)),
+            const SizedBox(height: 14),
+          ],
+      ],
+    );
+  }
+}
+
+class _VehiclesError extends StatelessWidget {
+  const _VehiclesError({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      child: Column(
+        children: [
+          const Icon(
+            Icons.cloud_off_outlined,
+            color: AppColors.onSurfaceVariant,
+            size: 34,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: AppColors.onSurfaceVariant),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Réessayer'),
+          ),
+        ],
       ),
     );
   }

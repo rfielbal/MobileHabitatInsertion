@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../services/api_exception.dart';
+import '../../services/auth_api_service.dart';
 import '../../services/auth_session_service.dart';
 import '../../theme/app_colors.dart';
 import 'fleet_home_shell.dart';
@@ -14,11 +16,33 @@ class AuthGate extends StatefulWidget {
 
 class _AuthGateState extends State<AuthGate> {
   final _authSessionService = const AuthSessionService();
+  final _authApiService = AuthApiService();
   late final Future<bool> _hasValidSession = _loadSession();
 
   Future<bool> _loadSession() async {
     final session = await _authSessionService.readSession();
-    return session != null;
+    if (session == null) {
+      return false;
+    }
+
+    if (session.isMockSession) {
+      await _authSessionService.clearSession();
+      return false;
+    }
+
+    try {
+      await _authApiService.refreshStoredSession(session);
+      return true;
+    } on ApiException catch (e) {
+      if (e.statusCode == 401 || e.statusCode == 403) {
+        await _authSessionService.clearSession();
+        return false;
+      }
+
+      return true;
+    } catch (_) {
+      return true;
+    }
   }
 
   @override

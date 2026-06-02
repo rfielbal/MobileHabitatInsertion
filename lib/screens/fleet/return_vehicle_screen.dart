@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../models/reservation.dart';
 import '../../models/vehicle.dart';
+import '../../services/api_exception.dart';
+import '../../services/fleet_api_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/bottom_action_bar.dart';
@@ -21,9 +23,11 @@ class _ReturnVehicleScreenState extends State<ReturnVehicleScreen> {
   final _formKey = GlobalKey<FormState>();
   final _mileageController = TextEditingController();
   final _fuelController = TextEditingController();
+  final _fleetApiService = FleetApiService();
 
   bool _keysReturned = false;
   bool _vehicleClean = false;
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -33,16 +37,51 @@ class _ReturnVehicleScreenState extends State<ReturnVehicleScreen> {
     super.dispose();
   }
 
-  void _finishTrip() {
+  Future<void> _finishTrip() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Trajet terminé')));
+    setState(() {
+      _isSubmitting = true;
+    });
 
-    Navigator.of(context).pop();
+    try {
+      await _fleetApiService.finishConstat(
+        reservation: widget.reservation,
+        mileage: int.parse(_mileageController.text.trim()),
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Trajet terminé')));
+
+      Navigator.of(context).pop(true);
+    } on ApiException catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isSubmitting = false;
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isSubmitting = false;
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Retour impossible : $e')));
+    }
   }
 
   String? _validateReturnMileage(String? value) {
@@ -74,8 +113,8 @@ class _ReturnVehicleScreenState extends State<ReturnVehicleScreen> {
         children: [
           Expanded(
             child: BottomActionButton(
-              label: 'Terminer le trajet',
-              onPressed: _finishTrip,
+              label: _isSubmitting ? 'Finalisation...' : 'Terminer le trajet',
+              onPressed: _isSubmitting ? null : _finishTrip,
             ),
           ),
         ],

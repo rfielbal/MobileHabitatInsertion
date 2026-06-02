@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../data/mock_account_data.dart';
 import '../../navigation/app_routes.dart';
-import '../../services/auth_session_service.dart';
+import '../../services/api_exception.dart';
+import '../../services/auth_api_service.dart';
 import '../../theme/app_assets.dart';
 import '../../theme/app_colors.dart';
 
@@ -16,7 +16,7 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _identifierController = TextEditingController();
-  final _authSessionService = const AuthSessionService();
+  final _authApiService = AuthApiService();
 
   bool _isLoading = false;
 
@@ -38,24 +38,16 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final identifier = _identifierController.text.trim();
 
-      final account = MockAccountData.authenticate(identifier);
-
-      if (account == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Identifiant inconnu ou compte désactivé'),
-              backgroundColor: Colors.redAccent,
-            ),
-          );
-        }
-        return;
-      }
-
-      await _authSessionService.saveMockAccountSession(account);
+      await _authApiService.signInWithIdentifier(identifier);
 
       if (mounted) {
         Navigator.of(context).pushReplacementNamed(AppRoutes.home);
+      }
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message), backgroundColor: Colors.redAccent),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -155,7 +147,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         SizedBox(width: 6),
                         Text(
-                          'Connexion sécurisée SSL',
+                          'Session protégée par jeton',
                           style: TextStyle(
                             color: AppColors.onSurfaceVariant,
                             fontSize: 12,

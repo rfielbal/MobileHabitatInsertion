@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../data/mock_fleet_data.dart';
 import '../../models/reservation.dart';
+import '../../services/fleet_api_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/brand_top_bar.dart';
@@ -20,16 +20,18 @@ class BookingsScreen extends StatefulWidget {
 }
 
 class _BookingsScreenState extends State<BookingsScreen> {
+  final _fleetApiService = FleetApiService();
+  late Future<List<FleetReservation>> _reservationsFuture;
   bool _showHistory = false;
 
   @override
-  Widget build(BuildContext context) {
-    final reservations = MockFleetData.reservations.where((reservation) {
-      return _showHistory
-          ? reservation.status == ReservationStatus.completed
-          : reservation.status != ReservationStatus.completed;
-    }).toList();
+  void initState() {
+    super.initState();
+    _reservationsFuture = _fleetApiService.fetchReservations();
+  }
 
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: BrandTopBar(
         onNotificationsPressed: () => _openNotifications(context),
@@ -47,44 +49,91 @@ class _BookingsScreenState extends State<BookingsScreen> {
               ),
             ),
             const SizedBox(height: 14),
-            Row(
-              children: [
-                ChoiceChip(
-                  selected: !_showHistory,
-                  label: const Text('À venir (3)'),
-                  onSelected: (_) => setState(() => _showHistory = false),
-                  selectedColor: AppColors.primary,
-                  labelStyle: TextStyle(
-                    color: !_showHistory
-                        ? Colors.white
-                        : AppColors.onSurfaceVariant,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                ChoiceChip(
-                  selected: _showHistory,
-                  label: const Text('Historique'),
-                  onSelected: (_) => setState(() => _showHistory = true),
-                  selectedColor: AppColors.primary,
-                  labelStyle: TextStyle(
-                    color: _showHistory
-                        ? Colors.white
-                        : AppColors.onSurfaceVariant,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+            FutureBuilder<List<FleetReservation>>(
+              future: _reservationsFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 48),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+
+                if (snapshot.hasError) {
+                  return _BookingsError(onRetry: _reloadReservations);
+                }
+
+                final allReservations = snapshot.data ?? const [];
+                final upcomingCount = allReservations
+                    .where(
+                      (reservation) =>
+                          reservation.status != ReservationStatus.completed,
+                    )
+                    .length;
+                final reservations = allReservations.where((reservation) {
+                  return _showHistory
+                      ? reservation.status == ReservationStatus.completed
+                      : reservation.status != ReservationStatus.completed;
+                }).toList();
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        ChoiceChip(
+                          selected: !_showHistory,
+                          label: Text('À venir ($upcomingCount)'),
+                          onSelected: (_) =>
+                              setState(() => _showHistory = false),
+                          selectedColor: AppColors.primary,
+                          labelStyle: TextStyle(
+                            color: !_showHistory
+                                ? Colors.white
+                                : AppColors.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ChoiceChip(
+                          selected: _showHistory,
+                          label: const Text('Historique'),
+                          onSelected: (_) =>
+                              setState(() => _showHistory = true),
+                          selectedColor: AppColors.primary,
+                          labelStyle: TextStyle(
+                            color: _showHistory
+                                ? Colors.white
+                                : AppColors.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    if (reservations.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 32),
+                        child: Center(
+                          child: Text(
+                            'Aucune réservation à afficher',
+                            style: TextStyle(color: AppColors.onSurfaceVariant),
+                          ),
+                        ),
+                      )
+                    else
+                      for (final reservation in reservations) ...[
+                        _ReservationCard(
+                          reservation: reservation,
+                          onPrimaryAction: () => _openReservation(reservation),
+                          onEdit: () => _editReservation(reservation),
+                        ),
+                        const SizedBox(height: 14),
+                      ],
+                  ],
+                );
+              },
             ),
-            const SizedBox(height: 18),
-            for (final reservation in reservations) ...[
-              _ReservationCard(
-                reservation: reservation,
-                onPrimaryAction: () => _openReservation(reservation),
-                onEdit: () => _editReservation(reservation),
-              ),
-              const SizedBox(height: 14),
-            ],
           ],
         ),
       ),
@@ -94,35 +143,67 @@ class _BookingsScreenState extends State<BookingsScreen> {
   void _openReservation(FleetReservation reservation) {
     switch (reservation.status.action) {
       case ReservationAction.pickup:
-        Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (context) => PickupScreen(reservation: reservation),
-          ),
-        );
+        Navigator.of(context)
+            .push<bool>(
+              MaterialPageRoute<bool>(
+                builder: (context) => PickupScreen(reservation: reservation),
+              ),
+            )
+            .then((updated) {
+              if (updated ?? false) {
+                _reloadReservations();
+              }
+            });
       case ReservationAction.returnVehicle:
-        Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (context) => ReturnVehicleScreen(reservation: reservation),
-          ),
-        );
+        Navigator.of(context)
+            .push<bool>(
+              MaterialPageRoute<bool>(
+                builder: (context) =>
+                    ReturnVehicleScreen(reservation: reservation),
+              ),
+            )
+            .then((updated) {
+              if (updated ?? false) {
+                _reloadReservations();
+              }
+            });
       case ReservationAction.details:
-        Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (context) =>
-                VehicleDetailScreen(vehicle: reservation.vehicle),
-          ),
-        );
+        Navigator.of(context)
+            .push<bool>(
+              MaterialPageRoute<bool>(
+                builder: (context) =>
+                    VehicleDetailScreen(vehicle: reservation.vehicle),
+              ),
+            )
+            .then((updated) {
+              if (updated ?? false) {
+                _reloadReservations();
+              }
+            });
       case ReservationAction.none:
         break;
     }
   }
 
   void _editReservation(FleetReservation reservation) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (context) => ReservationEditScreen(reservation: reservation),
-      ),
-    );
+    Navigator.of(context)
+        .push<bool>(
+          MaterialPageRoute<bool>(
+            builder: (context) =>
+                ReservationEditScreen(reservation: reservation),
+          ),
+        )
+        .then((updated) {
+          if (updated ?? false) {
+            _reloadReservations();
+          }
+        });
+  }
+
+  void _reloadReservations() {
+    setState(() {
+      _reservationsFuture = _fleetApiService.fetchReservations();
+    });
   }
 
   void _openNotifications(BuildContext context) {
@@ -260,6 +341,39 @@ class _ReservationCard extends StatelessWidget {
       ReservationStatus.upcoming => AppColors.primary,
       ReservationStatus.completed => AppColors.secondary,
     };
+  }
+}
+
+class _BookingsError extends StatelessWidget {
+  const _BookingsError({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      child: Column(
+        children: [
+          const Icon(
+            Icons.cloud_off_outlined,
+            color: AppColors.onSurfaceVariant,
+            size: 34,
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Impossible de charger les réservations depuis l’API.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.onSurfaceVariant),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Réessayer'),
+          ),
+        ],
+      ),
+    );
   }
 }
 
