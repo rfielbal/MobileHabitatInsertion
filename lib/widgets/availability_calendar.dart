@@ -41,7 +41,7 @@ class AvailabilityLegend extends StatelessWidget {
           items: [
             _LegendItem(
               color: AppColors.userUnavailable,
-              label: 'Déjà réservé',
+              label: 'Indisponible',
             ),
           ],
         ),
