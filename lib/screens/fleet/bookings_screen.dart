@@ -2,12 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../data/notification_store.dart';
 import '../../models/reservation.dart';
-import '../../models/vehicle.dart';
 import '../../services/fleet_api_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
-import '../../widgets/availability_calendar.dart';
 import '../../widgets/brand_top_bar.dart';
+import '../../widgets/reservation_band_calendar.dart';
 import '../../widgets/status_chip.dart';
 import 'notifications_screen.dart';
 import 'pickup_screen.dart';
@@ -235,7 +234,10 @@ class _BookingsScreenState extends State<BookingsScreen> {
 
   Future<List<FleetReservation>> _fetchReservations() async {
     final reservations = await _fleetApiService.fetchReservations();
-    NotificationStore.upsertDepartureReminders(reservations, DateTime.now());
+    await NotificationStore.upsertDepartureReminders(
+      reservations,
+      DateTime.now(),
+    );
     return reservations;
   }
 
@@ -526,47 +528,15 @@ class _ReservationCalendarSection extends StatelessWidget {
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 10),
-        const AvailabilityLegend(statuses: [AvailabilityStatus.reserved]),
-        const SizedBox(height: 10),
-        AvailabilityCalendar(
+        ReservationBandCalendar(
           month: month,
-          availabilityByDay: _reservationDaysByMonth(),
+          reservations: reservations,
           canGoToPreviousMonth: canGoToPreviousMonth,
           onPreviousMonth: onPreviousMonth,
           onNextMonth: onNextMonth,
         ),
       ],
     );
-  }
-
-  Map<int, AvailabilityStatus> _reservationDaysByMonth() {
-    final availabilityByDay = <int, AvailabilityStatus>{};
-
-    for (final reservation in reservations) {
-      if (reservation.status == ReservationStatus.completed) {
-        continue;
-      }
-
-      var current = DateTime(
-        reservation.startAt.year,
-        reservation.startAt.month,
-        reservation.startAt.day,
-      );
-      final end = DateTime(
-        reservation.endAt.year,
-        reservation.endAt.month,
-        reservation.endAt.day,
-      );
-
-      while (!current.isAfter(end)) {
-        if (current.year == month.year && current.month == month.month) {
-          availabilityByDay[current.day] = AvailabilityStatus.reserved;
-        }
-        current = current.add(const Duration(days: 1));
-      }
-    }
-
-    return availabilityByDay;
   }
 }
 
