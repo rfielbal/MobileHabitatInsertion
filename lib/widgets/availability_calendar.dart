@@ -14,39 +14,76 @@ class AvailabilityLegend extends StatelessWidget {
   const AvailabilityLegend({
     super.key,
     this.statuses = visibleAvailabilityStatuses,
+    this.includeUserUnavailable = false,
   });
 
   final List<AvailabilityStatus> statuses;
+  final bool includeUserUnavailable;
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 14,
-      runSpacing: 10,
-      children: statuses.map((status) {
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              height: 10,
-              width: 10,
-              decoration: BoxDecoration(
-                color: status.color,
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              status.label,
-              style: const TextStyle(
-                color: AppColors.onSurfaceVariant,
-                fontSize: 11,
-              ),
+    final vehicleItems = [
+      for (final status in statuses)
+        _LegendItem(color: status.color, label: status.label),
+    ];
+
+    if (!includeUserUnavailable) {
+      return _LegendItemsWrap(items: vehicleItems);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _LegendSection(title: 'Voiture', items: vehicleItems),
+        const SizedBox(height: 10),
+        const _LegendSection(
+          title: 'Mes disponibilités',
+          items: [
+            _LegendItem(
+              color: AppColors.userUnavailable,
+              label: 'Déjà réservé',
             ),
           ],
-        );
-      }).toList(),
+        ),
+      ],
     );
+  }
+}
+
+class _LegendSection extends StatelessWidget {
+  const _LegendSection({required this.title, required this.items});
+
+  final String title;
+  final List<Widget> items;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            color: AppColors.onSurfaceVariant,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 6),
+        _LegendItemsWrap(items: items),
+      ],
+    );
+  }
+}
+
+class _LegendItemsWrap extends StatelessWidget {
+  const _LegendItemsWrap({required this.items});
+
+  final List<Widget> items;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(spacing: 14, runSpacing: 10, children: items);
   }
 }
 
@@ -55,27 +92,33 @@ class AvailabilityCalendar extends StatelessWidget {
     super.key,
     required this.month,
     required this.availabilityByDay,
+    this.userUnavailableDays = const {},
     this.startDay,
     this.endDay,
     this.rangeStartDate,
     this.rangeEndDate,
     this.canGoToPreviousMonth = false,
     this.canGoToNextMonth = true,
+    this.canGoToCurrentMonth = false,
     this.onPreviousMonth,
     this.onNextMonth,
+    this.onCurrentMonth,
     this.onDaySelected,
   });
 
   final DateTime month;
   final Map<int, AvailabilityStatus> availabilityByDay;
+  final Set<int> userUnavailableDays;
   final int? startDay;
   final int? endDay;
   final DateTime? rangeStartDate;
   final DateTime? rangeEndDate;
   final bool canGoToPreviousMonth;
   final bool canGoToNextMonth;
+  final bool canGoToCurrentMonth;
   final VoidCallback? onPreviousMonth;
   final VoidCallback? onNextMonth;
+  final VoidCallback? onCurrentMonth;
   final ValueChanged<int>? onDaySelected;
 
   @override
@@ -95,9 +138,26 @@ class AvailabilityCalendar extends StatelessWidget {
                 onPressed: canGoToPreviousMonth ? onPreviousMonth : null,
                 icon: const Icon(Icons.chevron_left),
               ),
-              Text(
-                '${monthLabel(month.month)} ${month.year}',
-                style: const TextStyle(fontWeight: FontWeight.w700),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${monthLabel(month.month)} ${month.year}',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    tooltip: 'Mois actuel',
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints(
+                      minHeight: 32,
+                      minWidth: 32,
+                    ),
+                    iconSize: 18,
+                    onPressed: canGoToCurrentMonth ? onCurrentMonth : null,
+                    icon: const Icon(Icons.today_outlined),
+                  ),
+                ],
               ),
               IconButton(
                 tooltip: 'Mois suivant',
@@ -135,6 +195,7 @@ class AvailabilityCalendar extends StatelessWidget {
                   isSelected: false,
                   isInRange: false,
                   status: AvailabilityStatus.free,
+                  isUserUnavailable: false,
                   onTap: null,
                 ),
               for (var day = 1; day <= daysInMonth; day++)
@@ -144,6 +205,7 @@ class AvailabilityCalendar extends StatelessWidget {
                   isSelected: _isSelected(day),
                   isInRange: _isInRange(day),
                   status: availabilityByDay[day] ?? AvailabilityStatus.free,
+                  isUserUnavailable: userUnavailableDays.contains(day),
                   onTap: onDaySelected == null
                       ? null
                       : () => onDaySelected?.call(day),
@@ -193,6 +255,35 @@ class AvailabilityCalendar extends StatelessWidget {
   }
 }
 
+class _LegendItem extends StatelessWidget {
+  const _LegendItem({required this.color, required this.label});
+
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          height: 10,
+          width: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppColors.onSurfaceVariant,
+            fontSize: 11,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _WeekDayLabel extends StatelessWidget {
   const _WeekDayLabel(this.label);
 
@@ -218,6 +309,7 @@ class _CalendarDay extends StatelessWidget {
     required this.isSelected,
     required this.isInRange,
     required this.status,
+    required this.isUserUnavailable,
     required this.onTap,
   });
 
@@ -226,23 +318,35 @@ class _CalendarDay extends StatelessWidget {
   final bool isSelected;
   final bool isInRange;
   final AvailabilityStatus status;
+  final bool isUserUnavailable;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final isHighlighted = isSelected || isInRange;
+    final isRangeSelectable =
+        isInRange &&
+        !isSelected &&
+        !isUserUnavailable &&
+        status.canStartReservation;
+    final isHighlighted = isSelected || isRangeSelectable;
     final backgroundColor = disabled
         ? Colors.transparent
         : isHighlighted
         ? AppColors.primary
+        : isUserUnavailable
+        ? AppColors.userUnavailable.withValues(alpha: 0.18)
         : status.color.withValues(alpha: 0.18);
     final borderColor = disabled || isHighlighted
         ? Colors.transparent
+        : isUserUnavailable
+        ? AppColors.userUnavailable.withValues(alpha: 0.6)
         : status.color.withValues(alpha: 0.52);
     final textColor = disabled
         ? AppColors.outlineVariant
         : isHighlighted
         ? Colors.white
+        : isUserUnavailable
+        ? AppColors.userUnavailable
         : AppColors.onSurface;
 
     return InkWell(

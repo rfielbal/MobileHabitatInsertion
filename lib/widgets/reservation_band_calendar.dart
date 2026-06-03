@@ -12,16 +12,20 @@ class ReservationBandCalendar extends StatelessWidget {
     required this.reservations,
     required this.canGoToPreviousMonth,
     this.canGoToNextMonth = true,
+    this.canGoToCurrentMonth = false,
     required this.onPreviousMonth,
     required this.onNextMonth,
+    this.onCurrentMonth,
   });
 
   final DateTime month;
   final List<FleetReservation> reservations;
   final bool canGoToPreviousMonth;
   final bool canGoToNextMonth;
+  final bool canGoToCurrentMonth;
   final VoidCallback onPreviousMonth;
   final VoidCallback onNextMonth;
+  final VoidCallback? onCurrentMonth;
 
   @override
   Widget build(BuildContext context) {
@@ -40,9 +44,26 @@ class ReservationBandCalendar extends StatelessWidget {
                 onPressed: canGoToPreviousMonth ? onPreviousMonth : null,
                 icon: const Icon(Icons.chevron_left),
               ),
-              Text(
-                '${monthLabel(month.month)} ${month.year}',
-                style: const TextStyle(fontWeight: FontWeight.w700),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${monthLabel(month.month)} ${month.year}',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    tooltip: 'Mois actuel',
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints(
+                      minHeight: 32,
+                      minWidth: 32,
+                    ),
+                    iconSize: 18,
+                    onPressed: canGoToCurrentMonth ? onCurrentMonth : null,
+                    icon: const Icon(Icons.today_outlined),
+                  ),
+                ],
               ),
               IconButton(
                 tooltip: 'Mois suivant',

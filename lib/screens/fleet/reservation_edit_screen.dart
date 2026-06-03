@@ -5,6 +5,7 @@ import '../../models/vehicle.dart';
 import '../../services/api_exception.dart';
 import '../../services/fleet_api_service.dart';
 import '../../theme/app_colors.dart';
+import '../../utils/reservation_calendar_days.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/availability_calendar.dart';
 import '../../widgets/bottom_action_bar.dart';
@@ -23,6 +24,7 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
   late final DateTime _minimumCalendarMonth;
   late DateTime _calendarMonth;
   late Map<int, AvailabilityStatus> _availabilityByDay;
+  Set<int> _userUnavailableDays = const {};
   DateTime? _startDate;
   DateTime? _endDate;
   late TimeOfDay _startTime;
@@ -143,7 +145,7 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 12),
-            const AvailabilityLegend(),
+            const AvailabilityLegend(includeUserUnavailable: true),
             if (_availabilityLoading) ...[
               const SizedBox(height: 12),
               const LinearProgressIndicator(),
@@ -162,11 +164,14 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
             AvailabilityCalendar(
               month: _calendarMonth,
               availabilityByDay: _availabilityByDay,
+              userUnavailableDays: _userUnavailableDays,
               rangeStartDate: _startDate,
               rangeEndDate: _endDate,
               canGoToPreviousMonth: _canGoToPreviousMonth,
+              canGoToCurrentMonth: _canGoToCurrentMonth,
               onPreviousMonth: () => _changeMonth(-1),
               onNextMonth: () => _changeMonth(1),
+              onCurrentMonth: _goToCurrentMonth,
               onDaySelected: _selectDay,
             ),
             if (_calendarError != null) ...[
@@ -231,6 +236,13 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
     );
     final isOriginalReservationDay = _isOriginalReservationDay(day);
 
+    if (!isOriginalReservationDay && _userUnavailableDays.contains(day)) {
+      setState(() {
+        _calendarError = 'Vous avez déjà une réservation sur cette date';
+      });
+      return;
+    }
+
     if (!isOriginalReservationDay && !status.canStartReservation) {
       setState(() {
         _calendarError = 'Cette date n’est pas disponible';
@@ -250,7 +262,7 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
       }
 
       _calendarError = _visibleRangeContainsUnavailableDay()
-          ? 'La période contient une date réservée ou en maintenance'
+          ? 'La période contient une date réservée, en maintenance ou déjà occupée'
           : null;
     });
   }
@@ -304,7 +316,7 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
         setState(() {
           _isSubmitting = false;
           _calendarError =
-              'La période contient une date réservée ou en maintenance';
+              'La période contient une date réservée, en maintenance ou déjà occupée';
         });
         return;
       }
@@ -360,6 +372,12 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
             vehicle: widget.reservation.vehicle,
             month: requestedMonth,
           );
+      final reservations = await _fleetApiService.fetchReservations();
+      final userUnavailableDays = userUnavailableReservationDaysForMonth(
+        reservations: reservations,
+        month: requestedMonth,
+        excludedReservationId: widget.reservation.id,
+      );
 
       if (!mounted || requestVersion != _availabilityRequestVersion) {
         return;
@@ -370,6 +388,7 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
           availabilityByDay,
           requestedMonth,
         );
+        _userUnavailableDays = userUnavailableDays;
         _availabilityLoading = false;
       });
     } catch (_) {
@@ -435,7 +454,7 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
         continue;
       }
       final status = _availabilityByDay[day] ?? AvailabilityStatus.free;
-      if (!status.canStartReservation) {
+      if (_userUnavailableDays.contains(day) || !status.canStartReservation) {
         return true;
       }
     }
@@ -447,6 +466,11 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
     return _calendarMonth.year > _minimumCalendarMonth.year ||
         (_calendarMonth.year == _minimumCalendarMonth.year &&
             _calendarMonth.month > _minimumCalendarMonth.month);
+  }
+
+  bool get _canGoToCurrentMonth {
+    return _calendarMonth.year != _minimumCalendarMonth.year ||
+        _calendarMonth.month != _minimumCalendarMonth.month;
   }
 
   void _changeMonth(int offset) {
@@ -462,6 +486,23 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
     setState(() {
       _calendarMonth = nextMonth;
       _availabilityByDay = const {};
+      _userUnavailableDays = const {};
+      _calendarError = null;
+      _availabilityError = null;
+    });
+
+    _loadAvailability();
+  }
+
+  void _goToCurrentMonth() {
+    if (!_canGoToCurrentMonth) {
+      return;
+    }
+
+    setState(() {
+      _calendarMonth = _minimumCalendarMonth;
+      _availabilityByDay = const {};
+      _userUnavailableDays = const {};
       _calendarError = null;
       _availabilityError = null;
     });
@@ -475,6 +516,7 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
   }) async {
     var month = DateTime(startAt.year, startAt.month);
     final lastMonth = DateTime(endAt.year, endAt.month);
+    final reservations = await _fleetApiService.fetchReservations();
 
     while (!month.isAfter(lastMonth)) {
       final availabilityByDay = _withOriginalReservationAvailable(
@@ -483,6 +525,11 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
           month: month,
         ),
         month,
+      );
+      final userUnavailableDays = userUnavailableReservationDaysForMonth(
+        reservations: reservations,
+        month: month,
+        excludedReservationId: widget.reservation.id,
       );
       final firstDay =
           month.year == startAt.year && month.month == startAt.month
@@ -494,7 +541,7 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
 
       for (var day = firstDay; day <= lastDay; day++) {
         final status = availabilityByDay[day] ?? AvailabilityStatus.free;
-        if (!status.canStartReservation) {
+        if (userUnavailableDays.contains(day) || !status.canStartReservation) {
           return true;
         }
       }

@@ -101,8 +101,10 @@ class _BookingsScreenState extends State<BookingsScreen> {
                       month: _calendarMonth,
                       reservations: allReservations,
                       canGoToPreviousMonth: _canGoToPreviousCalendarMonth,
+                      canGoToCurrentMonth: _canGoToCurrentCalendarMonth,
                       onPreviousMonth: () => _changeCalendarMonth(-1),
                       onNextMonth: () => _changeCalendarMonth(1),
+                      onCurrentMonth: _goToCurrentCalendarMonth,
                     ),
                     const SizedBox(height: 18),
                     Row(
@@ -322,6 +324,11 @@ class _BookingsScreenState extends State<BookingsScreen> {
             _calendarMonth.month > _minimumCalendarMonth.month);
   }
 
+  bool get _canGoToCurrentCalendarMonth {
+    return _calendarMonth.year != _minimumCalendarMonth.year ||
+        _calendarMonth.month != _minimumCalendarMonth.month;
+  }
+
   void _changeCalendarMonth(int offset) {
     final nextMonth = DateTime(
       _calendarMonth.year,
@@ -336,6 +343,16 @@ class _BookingsScreenState extends State<BookingsScreen> {
 
     setState(() {
       _calendarMonth = nextMonth;
+    });
+  }
+
+  void _goToCurrentCalendarMonth() {
+    if (!_canGoToCurrentCalendarMonth) {
+      return;
+    }
+
+    setState(() {
+      _calendarMonth = _minimumCalendarMonth;
     });
   }
 
@@ -508,15 +525,19 @@ class _ReservationCalendarSection extends StatelessWidget {
     required this.month,
     required this.reservations,
     required this.canGoToPreviousMonth,
+    required this.canGoToCurrentMonth,
     required this.onPreviousMonth,
     required this.onNextMonth,
+    required this.onCurrentMonth,
   });
 
   final DateTime month;
   final List<FleetReservation> reservations;
   final bool canGoToPreviousMonth;
+  final bool canGoToCurrentMonth;
   final VoidCallback onPreviousMonth;
   final VoidCallback onNextMonth;
+  final VoidCallback onCurrentMonth;
 
   @override
   Widget build(BuildContext context) {
@@ -532,8 +553,10 @@ class _ReservationCalendarSection extends StatelessWidget {
           month: month,
           reservations: reservations,
           canGoToPreviousMonth: canGoToPreviousMonth,
+          canGoToCurrentMonth: canGoToCurrentMonth,
           onPreviousMonth: onPreviousMonth,
           onNextMonth: onNextMonth,
+          onCurrentMonth: onCurrentMonth,
         ),
       ],
     );
