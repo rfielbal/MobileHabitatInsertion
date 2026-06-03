@@ -100,7 +100,10 @@ class NotificationStore {
     final reminders = [
       for (final reservation in reservations)
         if (reservation.shouldCreateDepartureReminderAt(now) &&
-            _shouldEmitDepartureReminder(reservation, existingLocalIds))
+            _shouldEmitLocalNotification(
+              _departureReminderId(reservation),
+              existingLocalIds,
+            ))
           AppNotification(
             id: _departureReminderId(reservation),
             title: 'Départ à confirmer',
@@ -108,6 +111,21 @@ class NotificationStore {
                 'Le formulaire de départ de ${reservation.vehicle.name} devait être envoyé à ${_timeLabel(reservation.startAt)}.',
             timeLabel: 'Maintenant',
             icon: Icons.assignment_late_outlined,
+            color: AppColors.maintenance,
+          ),
+      for (final reservation in reservations)
+        if (reservation.shouldCreateReturnReminderAt(now) &&
+            _shouldEmitLocalNotification(
+              _returnReminderId(reservation),
+              existingLocalIds,
+            ))
+          AppNotification(
+            id: _returnReminderId(reservation),
+            title: 'Retour à confirmer',
+            body:
+                'Le formulaire de retour de ${reservation.vehicle.name} devait être envoyé à ${_timeLabel(reservation.endAt)}. Pensez à remettre le véhicule en place.',
+            timeLabel: 'Maintenant',
+            icon: Icons.assignment_return_outlined,
             color: AppColors.maintenance,
           ),
     ];
@@ -137,12 +155,11 @@ class NotificationStore {
     return -1000000 - reservation.id.hashCode.abs();
   }
 
-  static bool _shouldEmitDepartureReminder(
-    FleetReservation reservation,
-    Set<int> existingLocalIds,
-  ) {
-    final id = _departureReminderId(reservation);
+  static int _returnReminderId(FleetReservation reservation) {
+    return -2000000 - reservation.id.hashCode.abs();
+  }
 
+  static bool _shouldEmitLocalNotification(int id, Set<int> existingLocalIds) {
     if (_dismissedLocalNotificationIds.contains(id)) {
       return false;
     }

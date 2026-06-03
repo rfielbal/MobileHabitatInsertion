@@ -175,8 +175,12 @@ class _BookingsScreenState extends State<BookingsScreen> {
   void _openReservation(FleetReservation reservation) {
     final now = DateTime.now();
 
-    if (reservation.shouldShowDepartureActionAt(now) ||
-        reservation.status == ReservationStatus.pickupToday) {
+    if (reservation.shouldShowReturnActionAt(now)) {
+      _openReturnForm(reservation);
+      return;
+    }
+
+    if (reservation.shouldShowDepartureActionAt(now)) {
       _openPickupForm(reservation);
       return;
     }
@@ -266,6 +270,36 @@ class _BookingsScreenState extends State<BookingsScreen> {
         .push<bool>(
           MaterialPageRoute<bool>(
             builder: (context) => PickupScreen(reservation: reservation),
+          ),
+        )
+        .then((updated) {
+          if (updated ?? false) {
+            _reloadReservations();
+          }
+        });
+  }
+
+  void _openReturnForm(FleetReservation reservation) {
+    final now = DateTime.now();
+
+    if (!reservation.canOpenReturnFormAt(now)) {
+      final availableAt = reservation.endAt.subtract(
+        FleetReservation.returnFormLeadTime,
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Le formulaire de retour sera disponible à ${_timeLabel(availableAt)}.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    Navigator.of(context)
+        .push<bool>(
+          MaterialPageRoute<bool>(
+            builder: (context) => ReturnVehicleScreen(reservation: reservation),
           ),
         )
         .then((updated) {
@@ -457,7 +491,7 @@ class _ReservationCard extends StatelessWidget {
                 ),
               ),
               StatusChip(
-                label: reservation.status.label,
+                label: _statusLabel(reservation),
                 color: _statusColor(reservation.status),
               ),
             ],
@@ -519,17 +553,28 @@ class _ReservationCard extends StatelessWidget {
   }
 
   String _primaryActionLabel(ReservationStatus status) {
-    if (reservation.shouldShowDepartureActionAt(now) ||
-        status == ReservationStatus.pickupToday) {
+    if (reservation.shouldShowReturnActionAt(now)) {
+      return 'Retour';
+    }
+
+    if (reservation.shouldShowDepartureActionAt(now)) {
       return 'Départ';
     }
 
     return switch (status) {
-      ReservationStatus.pickupToday => 'Départ',
-      ReservationStatus.returnToday => 'Retour véhicule',
+      ReservationStatus.pickupToday => 'Détails',
+      ReservationStatus.returnToday => 'Détails',
       ReservationStatus.upcoming => 'Détails',
       ReservationStatus.completed => '',
     };
+  }
+
+  String _statusLabel(FleetReservation reservation) {
+    if (reservation.hasOpenConstat) {
+      return 'Trajet en cours';
+    }
+
+    return reservation.status.label;
   }
 
   Color _statusColor(ReservationStatus status) {

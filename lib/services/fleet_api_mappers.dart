@@ -105,7 +105,33 @@ class FleetApiMappers {
       status: _reservationStatus(startAt, endAt, json['statut']),
       expectedStartMileage: vehicle.currentMileage,
       createdAt: createdAt,
+      hasOpenConstat: reservationHasOpenConstat(json),
     );
+  }
+
+  static bool reservationHasOpenConstat(Map<String, dynamic> json) {
+    final directValue =
+        json['constatOuvert'] ??
+        json['hasOpenConstat'] ??
+        json['estOuvert'] ??
+        json['openConstat'];
+
+    if (directValue is bool) {
+      return directValue;
+    }
+
+    final constat = json['constat'];
+    if (constat is Map<String, dynamic> && constat['estOuvert'] == true) {
+      return true;
+    }
+
+    for (final constat in _listOfMaps(json['constats'])) {
+      if (constat['estOuvert'] == true) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   static ApiNotificationPayload notificationFromJson(
@@ -153,7 +179,7 @@ class FleetApiMappers {
     );
   }
 
-  static String iso(DateTime date) => date.toIso8601String();
+  static String iso(DateTime date) => date.toUtc().toIso8601String();
 
   static String _internalNumber(Object? value, String id) {
     final parsed = int.tryParse(_text(value));

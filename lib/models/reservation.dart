@@ -16,8 +16,8 @@ extension ReservationStatusX on ReservationStatus {
 
   ReservationAction get action {
     return switch (this) {
-      ReservationStatus.pickupToday => ReservationAction.pickup,
-      ReservationStatus.returnToday => ReservationAction.returnVehicle,
+      ReservationStatus.pickupToday => ReservationAction.details,
+      ReservationStatus.returnToday => ReservationAction.details,
       ReservationStatus.upcoming => ReservationAction.details,
       ReservationStatus.completed => ReservationAction.none,
     };
@@ -36,12 +36,15 @@ class FleetReservation {
     required this.status,
     required this.expectedStartMileage,
     this.createdAt,
+    this.hasOpenConstat = false,
   });
 
   static const editLockDelay = Duration(hours: 24);
   static const pickupFormLeadTime = Duration(hours: 1);
+  static const returnFormLeadTime = Duration(hours: 1);
   static const shortNoticeCancelDelay = Duration(hours: 1);
   static const departureReminderDelay = Duration(minutes: 30);
+  static const returnReminderDelay = Duration(minutes: 30);
 
   final String id;
   final Vehicle vehicle;
@@ -53,6 +56,23 @@ class FleetReservation {
   final ReservationStatus status;
   final int expectedStartMileage;
   final DateTime? createdAt;
+  final bool hasOpenConstat;
+
+  FleetReservation copyWith({bool? hasOpenConstat}) {
+    return FleetReservation(
+      id: id,
+      vehicle: vehicle,
+      location: location,
+      startAt: startAt,
+      endAt: endAt,
+      startLabel: startLabel,
+      endLabel: endLabel,
+      status: status,
+      expectedStartMileage: expectedStartMileage,
+      createdAt: createdAt,
+      hasOpenConstat: hasOpenConstat ?? this.hasOpenConstat,
+    );
+  }
 
   bool canBeEditedAt(DateTime now) {
     return now.isBefore(startAt.subtract(editLockDelay));
@@ -83,8 +103,9 @@ class FleetReservation {
 
   bool shouldShowDepartureActionAt(DateTime now) {
     return status != ReservationStatus.completed &&
-        !now.isBefore(startAt.subtract(editLockDelay)) &&
-        now.isBefore(startAt);
+        !hasOpenConstat &&
+        !now.isBefore(startAt.subtract(pickupFormLeadTime)) &&
+        now.isBefore(endAt);
   }
 
   bool canOpenPickupFormAt(DateTime now) {
@@ -94,7 +115,22 @@ class FleetReservation {
 
   bool shouldCreateDepartureReminderAt(DateTime now) {
     return status != ReservationStatus.completed &&
+        !hasOpenConstat &&
         !now.isBefore(startAt.add(departureReminderDelay)) &&
         now.isBefore(endAt);
+  }
+
+  bool shouldShowReturnActionAt(DateTime now) {
+    return status != ReservationStatus.completed && hasOpenConstat;
+  }
+
+  bool canOpenReturnFormAt(DateTime now) {
+    return shouldShowReturnActionAt(now) &&
+        !now.isBefore(endAt.subtract(returnFormLeadTime));
+  }
+
+  bool shouldCreateReturnReminderAt(DateTime now) {
+    return shouldShowReturnActionAt(now) &&
+        !now.isBefore(endAt.add(returnReminderDelay));
   }
 }

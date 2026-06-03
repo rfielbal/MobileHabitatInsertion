@@ -83,9 +83,20 @@ class FleetApiService {
     final reservations = FleetApiMappers.itemsFromResponse(
       response,
     ).map(FleetApiMappers.reservationFromJson).toList();
+    final openConstats = await _fetchOpenConstatIndex();
+    final reservationsWithConstats = [
+      for (final reservation in reservations)
+        reservation.copyWith(
+          hasOpenConstat:
+              reservation.hasOpenConstat ||
+              openConstats.reservationIds.contains(reservation.id) ||
+              (openConstats.vehicleIds.contains(reservation.vehicle.id) &&
+                  _reservationMayHaveOpenConstat(reservation)),
+        ),
+    ];
 
-    reservations.sort((a, b) => a.startAt.compareTo(b.startAt));
-    return reservations;
+    reservationsWithConstats.sort((a, b) => a.startAt.compareTo(b.startAt));
+    return reservationsWithConstats;
   }
 
   Future<Map<int, AvailabilityStatus>> fetchVehicleAvailabilityForMonth({
@@ -257,6 +268,69 @@ class FleetApiService {
     throw const FormatException(
       'Aucun constat ouvert trouvé pour ce véhicule.',
     );
+  }
+
+  Future<_OpenConstatIndex> _fetchOpenConstatIndex() async {
+    try {
+      final response = await _apiClient.getJson('/metier/mes-constats');
+      final constats = FleetApiMappers.itemsFromResponse(response);
+      final reservationIds = <String>{};
+      final vehicleIds = <String>{};
+
+      for (final constat in constats) {
+        if (constat['estOuvert'] != true) {
+          continue;
+        }
+
+        final reservationId = _idFromNestedValue(
+          constat['reservation'] ??
+              constat['reservationId'] ??
+              constat['reservation_id'],
+        );
+        if (reservationId != null) {
+          reservationIds.add(reservationId);
+        }
+
+        final vehicleId = _idFromNestedValue(
+          constat['vehicule'] ?? constat['vehiculeId'] ?? constat['vehicleId'],
+        );
+        if (vehicleId != null) {
+          vehicleIds.add(vehicleId);
+        }
+      }
+
+      return _OpenConstatIndex(
+        reservationIds: reservationIds,
+        vehicleIds: vehicleIds,
+      );
+    } catch (_) {
+      return const _OpenConstatIndex();
+    }
+  }
+
+  bool _reservationMayHaveOpenConstat(FleetReservation reservation) {
+    final now = DateTime.now();
+
+    return reservation.status != ReservationStatus.completed &&
+        !now.isBefore(
+          reservation.startAt.subtract(FleetReservation.pickupFormLeadTime),
+        ) &&
+        now.isBefore(
+          reservation.endAt.add(FleetReservation.returnReminderDelay),
+        );
+  }
+
+  String? _idFromNestedValue(Object? value) {
+    if (value is Map<String, dynamic>) {
+      return value['id']?.toString();
+    }
+
+    final text = value?.toString().trim();
+    if (text == null || text.isEmpty) {
+      return null;
+    }
+
+    return text;
   }
 
   Future<MapEntry<int, AvailabilityStatus>> _fetchVehicleAvailabilityForDay({
@@ -584,4 +658,14 @@ class FleetApiService {
 
     return null;
   }
+}
+
+class _OpenConstatIndex {
+  const _OpenConstatIndex({
+    this.reservationIds = const {},
+    this.vehicleIds = const {},
+  });
+
+  final Set<String> reservationIds;
+  final Set<String> vehicleIds;
 }
