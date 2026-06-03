@@ -29,6 +29,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
   late final DateTime _minimumCalendarMonth;
   late DateTime _calendarMonth;
   bool _showHistory = false;
+  String? _deletingReservationId;
 
   @override
   void initState() {
@@ -154,9 +155,10 @@ class _BookingsScreenState extends State<BookingsScreen> {
                         _ReservationCard(
                           reservation: reservation,
                           now: DateTime.now(),
+                          isDeleting: _deletingReservationId == reservation.id,
                           onPrimaryAction: () => _openReservation(reservation),
                           onEdit: () => _editReservation(reservation),
-                          onCancel: () => _cancelReservation(reservation),
+                          onDelete: () => _deleteReservation(reservation),
                         ),
                         const SizedBox(height: 14),
                       ],
@@ -273,13 +275,17 @@ class _BookingsScreenState extends State<BookingsScreen> {
         });
   }
 
-  Future<void> _cancelReservation(FleetReservation reservation) async {
+  Future<void> _deleteReservation(FleetReservation reservation) async {
+    if (_deletingReservationId != null) {
+      return;
+    }
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Annuler la réservation'),
+        title: const Text('Supprimer la réservation'),
         content: Text(
-          'Confirmer l’annulation de la réservation du ${reservation.startLabel} ?',
+          'Confirmer la suppression de la réservation du ${reservation.startLabel} ?',
         ),
         actions: [
           TextButton(
@@ -289,7 +295,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('Annuler'),
+            child: const Text('Supprimer'),
           ),
         ],
       ),
@@ -299,6 +305,14 @@ class _BookingsScreenState extends State<BookingsScreen> {
       return;
     }
 
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _deletingReservationId = reservation.id;
+    });
+
     try {
       await _fleetApiService.deleteReservation(reservation);
       if (!mounted) {
@@ -306,7 +320,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
       }
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Réservation annulée')));
+      ).showSnackBar(const SnackBar(content: Text('Réservation supprimée')));
       _reloadReservations();
     } catch (e) {
       if (!mounted) {
@@ -314,7 +328,13 @@ class _BookingsScreenState extends State<BookingsScreen> {
       }
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Annulation impossible : $e')));
+      ).showSnackBar(SnackBar(content: Text('Suppression impossible : $e')));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _deletingReservationId = null;
+        });
+      }
     }
   }
 
@@ -375,16 +395,18 @@ class _ReservationCard extends StatelessWidget {
   const _ReservationCard({
     required this.reservation,
     required this.now,
+    required this.isDeleting,
     required this.onPrimaryAction,
     required this.onEdit,
-    required this.onCancel,
+    required this.onDelete,
   });
 
   final FleetReservation reservation;
   final DateTime now;
+  final bool isDeleting;
   final VoidCallback onPrimaryAction;
   final VoidCallback onEdit;
-  final VoidCallback onCancel;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -466,22 +488,22 @@ class _ReservationCard extends StatelessWidget {
               children: [
                 if (reservation.canBeEditedAt(now)) ...[
                   OutlinedButton(
-                    onPressed: onEdit,
+                    onPressed: isDeleting ? null : onEdit,
                     child: const Text('Modifier'),
                   ),
                 ],
                 if (reservation.canBeCancelledAt(now)) ...[
                   OutlinedButton(
-                    onPressed: onCancel,
+                    onPressed: isDeleting ? null : onDelete,
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.error,
                       side: const BorderSide(color: AppColors.error),
                     ),
-                    child: const Text('Annuler'),
+                    child: Text(isDeleting ? 'Suppression...' : 'Supprimer'),
                   ),
                 ],
                 FilledButton(
-                  onPressed: onPrimaryAction,
+                  onPressed: isDeleting ? null : onPrimaryAction,
                   style: FilledButton.styleFrom(
                     minimumSize: const Size(0, 42),
                     padding: const EdgeInsets.symmetric(horizontal: 18),

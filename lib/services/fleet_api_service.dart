@@ -189,7 +189,7 @@ class FleetApiService {
   }
 
   Future<void> deleteReservation(FleetReservation reservation) async {
-    await _apiClient.delete('/reservations/${reservation.id}');
+    await _apiClient.delete('/metier/reservations/${reservation.id}');
   }
 
   Future<void> startConstat(FleetReservation reservation) async {
