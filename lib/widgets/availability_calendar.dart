@@ -6,6 +6,7 @@ import 'app_card.dart';
 
 const visibleAvailabilityStatuses = [
   AvailabilityStatus.free,
+  AvailabilityStatus.partial,
   AvailabilityStatus.reserved,
   AvailabilityStatus.maintenance,
 ];
@@ -97,6 +98,7 @@ class AvailabilityCalendar extends StatelessWidget {
     this.endDay,
     this.rangeStartDate,
     this.rangeEndDate,
+    this.minimumSelectableDate,
     this.canGoToPreviousMonth = false,
     this.canGoToNextMonth = true,
     this.canGoToCurrentMonth = false,
@@ -113,6 +115,7 @@ class AvailabilityCalendar extends StatelessWidget {
   final int? endDay;
   final DateTime? rangeStartDate;
   final DateTime? rangeEndDate;
+  final DateTime? minimumSelectableDate;
   final bool canGoToPreviousMonth;
   final bool canGoToNextMonth;
   final bool canGoToCurrentMonth;
@@ -201,12 +204,14 @@ class AvailabilityCalendar extends StatelessWidget {
               for (var day = 1; day <= daysInMonth; day++)
                 _CalendarDay(
                   label: '$day',
-                  disabled: false,
+                  disabled: _isBeforeMinimumSelectableDate(day),
                   isSelected: _isSelected(day),
                   isInRange: _isInRange(day),
                   status: availabilityByDay[day] ?? AvailabilityStatus.free,
                   isUserUnavailable: userUnavailableDays.contains(day),
-                  onTap: onDaySelected == null
+                  onTap:
+                      onDaySelected == null ||
+                          _isBeforeMinimumSelectableDate(day)
                       ? null
                       : () => onDaySelected?.call(day),
                 ),
@@ -241,6 +246,15 @@ class AvailabilityCalendar extends StatelessWidget {
     }
 
     return day == startDay || day == endDay;
+  }
+
+  bool _isBeforeMinimumSelectableDate(int day) {
+    final minimum = minimumSelectableDate;
+    if (minimum == null) {
+      return false;
+    }
+
+    return DateTime(month.year, month.month, day).isBefore(_dateOnly(minimum));
   }
 
   DateTime _dateOnly(DateTime date) {

@@ -69,6 +69,19 @@ class ApiClient {
     throw const ApiException(message: 'Réponse API inattendue.');
   }
 
+  Future<void> post(
+    String path, {
+    Map<String, dynamic>? body,
+    bool authenticated = true,
+  }) async {
+    await _sendJson(
+      method: 'POST',
+      path: path,
+      body: body,
+      authenticated: authenticated,
+    );
+  }
+
   Future<Map<String, dynamic>> patchMap(
     String path, {
     required Map<String, dynamic> body,
@@ -86,6 +99,19 @@ class ApiClient {
     }
 
     throw const ApiException(message: 'Réponse API inattendue.');
+  }
+
+  Future<void> patch(
+    String path, {
+    required Map<String, dynamic> body,
+    bool authenticated = true,
+  }) async {
+    await _sendJson(
+      method: 'PATCH',
+      path: path,
+      body: body,
+      authenticated: authenticated,
+    );
   }
 
   Future<void> delete(String path, {bool authenticated = true}) async {

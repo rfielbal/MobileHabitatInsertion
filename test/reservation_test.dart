@@ -3,6 +3,65 @@ import 'package:mobile_habitat_insertion/models/reservation.dart';
 import 'package:mobile_habitat_insertion/models/vehicle.dart';
 
 void main() {
+  test('reservations can be edited only before the 24 hour lock window', () {
+    final reservation = _reservation(
+      startAt: DateTime(2026, 6, 18, 9),
+      endAt: DateTime(2026, 6, 18, 17),
+    );
+
+    expect(reservation.canBeEditedAt(DateTime(2026, 6, 17, 8, 59)), isTrue);
+    expect(reservation.canBeEditedAt(DateTime(2026, 6, 17, 9)), isFalse);
+    expect(reservation.canBeEditedAt(DateTime(2026, 6, 18, 8)), isFalse);
+  });
+
+  test(
+    'short notice reservations can be cancelled during grace period only',
+    () {
+      final reservation = _reservation(
+        startAt: DateTime(2026, 6, 18, 9),
+        endAt: DateTime(2026, 6, 18, 17),
+        createdAt: DateTime(2026, 6, 18, 7, 30),
+      );
+
+      expect(
+        reservation.canBeCancelledAt(DateTime(2026, 6, 18, 7, 59)),
+        isTrue,
+      );
+      expect(
+        reservation.canBeCancelledAt(DateTime(2026, 6, 18, 8, 30)),
+        isTrue,
+      );
+      expect(
+        reservation.canBeCancelledAt(DateTime(2026, 6, 18, 8, 30, 1)),
+        isFalse,
+      );
+      expect(reservation.canBeCancelledAt(DateTime(2026, 6, 18, 9)), isFalse);
+    },
+  );
+
+  test(
+    'short notice reservations without creation date cannot be cancelled',
+    () {
+      final reservation = _reservation(
+        startAt: DateTime(2026, 6, 18, 9),
+        endAt: DateTime(2026, 6, 18, 17),
+      );
+
+      expect(reservation.canBeCancelledAt(DateTime(2026, 6, 18, 8)), isFalse);
+    },
+  );
+
+  test('advance reservations can be cancelled before the edit lock window', () {
+    final reservation = _reservation(
+      startAt: DateTime(2026, 6, 18, 9),
+      endAt: DateTime(2026, 6, 18, 17),
+      createdAt: DateTime(2026, 6, 10, 9),
+    );
+
+    expect(reservation.canBeCancelledAt(DateTime(2026, 6, 17, 8, 59)), isTrue);
+    expect(reservation.canBeCancelledAt(DateTime(2026, 6, 17, 9)), isFalse);
+  });
+
   test('departure action is shown only from one hour before start', () {
     final reservation = _reservation(
       startAt: DateTime(2026, 6, 18, 9),
@@ -19,6 +78,41 @@ void main() {
     );
   });
 
+  test(
+    'departure action stays available after expected return if not started',
+    () {
+      final reservation = _reservation(
+        startAt: DateTime(2026, 6, 18, 8, 30),
+        endAt: DateTime(2026, 6, 18, 8, 40),
+      );
+
+      expect(
+        reservation.shouldShowDepartureActionAt(DateTime(2026, 6, 18, 8, 47)),
+        isTrue,
+      );
+      expect(
+        reservation.canOpenPickupFormAt(DateTime(2026, 6, 18, 8, 47)),
+        isTrue,
+      );
+    },
+  );
+
+  test('departure reminder is created even after expected return', () {
+    final reservation = _reservation(
+      startAt: DateTime(2026, 6, 18, 8, 30),
+      endAt: DateTime(2026, 6, 18, 8, 40),
+    );
+
+    expect(
+      reservation.shouldCreateDepartureReminderAt(DateTime(2026, 6, 18, 8, 59)),
+      isFalse,
+    );
+    expect(
+      reservation.shouldCreateDepartureReminderAt(DateTime(2026, 6, 18, 9)),
+      isTrue,
+    );
+  });
+
   test('return form opens only from one hour before expected return', () {
     final reservation = _reservation(
       startAt: DateTime(2026, 6, 18, 9),
@@ -28,11 +122,15 @@ void main() {
 
     expect(
       reservation.shouldShowReturnActionAt(DateTime(2026, 6, 18, 10)),
-      isTrue,
+      isFalse,
     );
     expect(
       reservation.canOpenReturnFormAt(DateTime(2026, 6, 18, 15, 59)),
       isFalse,
+    );
+    expect(
+      reservation.shouldShowReturnActionAt(DateTime(2026, 6, 18, 16)),
+      isTrue,
     );
     expect(reservation.canOpenReturnFormAt(DateTime(2026, 6, 18, 16)), isTrue);
     expect(
@@ -44,12 +142,121 @@ void main() {
       isTrue,
     );
   });
+
+  test('return action is never shown before departure confirmation', () {
+    final reservation = _reservation(
+      startAt: DateTime(2026, 6, 18, 9),
+      endAt: DateTime(2026, 6, 18, 17),
+    );
+
+    expect(
+      reservation.shouldShowReturnActionAt(DateTime(2026, 6, 18, 16)),
+      isFalse,
+    );
+    expect(reservation.canOpenReturnFormAt(DateTime(2026, 6, 18, 16)), isFalse);
+  });
+
+  test('return action is hidden when a closed constat already exists', () {
+    final reservation = _reservation(
+      startAt: DateTime(2026, 6, 18, 9),
+      endAt: DateTime(2026, 6, 18, 17),
+      hasOpenConstat: true,
+      hasClosedConstat: true,
+    );
+
+    expect(
+      reservation.shouldShowReturnActionAt(DateTime(2026, 6, 18, 16)),
+      isFalse,
+    );
+    expect(reservation.canOpenReturnFormAt(DateTime(2026, 6, 18, 16)), isFalse);
+  });
+
+  test('open constats stay out of history while status is not completed', () {
+    final reservation = _reservation(
+      startAt: DateTime(2026, 6, 18, 9),
+      endAt: DateTime(2026, 6, 18, 17),
+      hasOpenConstat: true,
+    );
+
+    expect(reservation.isInHistory, isFalse);
+    expect(
+      reservation.shouldCreateReturnReminderAt(DateTime(2026, 6, 18, 17, 30)),
+      isTrue,
+    );
+  });
+
+  test('completed reservations enter history after return confirmation', () {
+    final reservation = _reservation(
+      startAt: DateTime(2026, 6, 18, 9),
+      endAt: DateTime(2026, 6, 18, 17),
+      status: ReservationStatus.completed,
+    );
+
+    expect(reservation.isInHistory, isTrue);
+    expect(
+      reservation.shouldCreateReturnReminderAt(DateTime(2026, 6, 18, 17, 30)),
+      isFalse,
+    );
+  });
+
+  test('completed status wins over stale open constat state', () {
+    final reservation = _reservation(
+      startAt: DateTime(2026, 6, 18, 9),
+      endAt: DateTime(2026, 6, 18, 17),
+      hasOpenConstat: true,
+      status: ReservationStatus.completed,
+    );
+
+    expect(reservation.isInHistory, isTrue);
+    expect(
+      reservation.shouldShowDepartureActionAt(DateTime(2026, 6, 18, 10)),
+      isFalse,
+    );
+    expect(
+      reservation.shouldShowReturnActionAt(DateTime(2026, 6, 18, 16)),
+      isFalse,
+    );
+  });
+
+  test('closed constats alone do not move reservations to history', () {
+    final reservation = _reservation(
+      startAt: DateTime(2026, 6, 18, 9),
+      endAt: DateTime(2026, 6, 18, 17),
+      hasClosedConstat: true,
+    );
+
+    expect(reservation.isInHistory, isFalse);
+  });
+
+  test('closed constats prevent starting the same reservation again', () {
+    final reservation = _reservation(
+      startAt: DateTime(2026, 6, 18, 9),
+      endAt: DateTime(2026, 6, 18, 17),
+      hasClosedConstat: true,
+    );
+
+    expect(
+      reservation.shouldShowDepartureActionAt(DateTime(2026, 6, 18, 10)),
+      isFalse,
+    );
+    expect(
+      reservation.shouldCreateDepartureReminderAt(DateTime(2026, 6, 18, 9, 30)),
+      isFalse,
+    );
+    expect(
+      reservation.shouldCreateReturnReminderAt(DateTime(2026, 6, 18, 17, 30)),
+      isFalse,
+    );
+  });
 }
 
 FleetReservation _reservation({
   required DateTime startAt,
   required DateTime endAt,
   bool hasOpenConstat = false,
+  bool hasClosedConstat = false,
+  ReservationStatus status = ReservationStatus.upcoming,
+  DateTime? createdAt,
 }) {
   return FleetReservation(
     id: '1',
@@ -59,9 +266,11 @@ FleetReservation _reservation({
     endAt: endAt,
     startLabel: 'Départ',
     endLabel: 'Retour',
-    status: ReservationStatus.upcoming,
+    status: status,
     expectedStartMileage: 100,
+    createdAt: createdAt,
     hasOpenConstat: hasOpenConstat,
+    hasClosedConstat: hasClosedConstat,
   );
 }
 

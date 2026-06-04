@@ -25,6 +25,7 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
   late DateTime _calendarMonth;
   late Map<int, AvailabilityStatus> _availabilityByDay;
   Set<int> _userUnavailableDays = const {};
+  List<FleetReservation> _userReservations = const [];
   DateTime? _startDate;
   DateTime? _endDate;
   late TimeOfDay _startTime;
@@ -167,6 +168,7 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
               userUnavailableDays: _userUnavailableDays,
               rangeStartDate: _startDate,
               rangeEndDate: _endDate,
+              minimumSelectableDate: DateTime.now(),
               canGoToPreviousMonth: _canGoToPreviousMonth,
               canGoToCurrentMonth: _canGoToCurrentMonth,
               onPreviousMonth: () => _changeMonth(-1),
@@ -236,9 +238,9 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
     );
     final isOriginalReservationDay = _isOriginalReservationDay(day);
 
-    if (!isOriginalReservationDay && _userUnavailableDays.contains(day)) {
+    if (_isBeforeToday(selectedDate)) {
       setState(() {
-        _calendarError = 'Vous avez déjà une réservation sur cette date';
+        _calendarError = 'Les dates passées ne sont pas sélectionnables';
       });
       return;
     }
@@ -261,9 +263,7 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
         _endDate = selectedDate;
       }
 
-      _calendarError = _visibleRangeContainsUnavailableDay()
-          ? 'La période contient une date réservée, en maintenance ou déjà occupée'
-          : null;
+      _calendarError = _selectedPeriodError();
     });
   }
 
@@ -278,11 +278,23 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
       return;
     }
 
+    if (_timeWouldBeInPast(isStart: isStart, time: picked)) {
+      setState(() {
+        _calendarError = isStart
+            ? 'L’heure de départ est déjà passée'
+            : 'L’heure de retour est déjà passée';
+      });
+      return;
+    }
+
     setState(() {
       if (isStart) {
         _startTime = picked;
       } else {
         _endTime = picked;
+      }
+      if (_startDate != null && _endDate != null) {
+        _calendarError = _selectedPeriodError();
       }
     });
   }
@@ -297,6 +309,14 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
           content: Text('La date de départ doit être avant la date de retour'),
         ),
       );
+      return;
+    }
+
+    final periodError = _reservationPeriodError(startAt: startAt, endAt: endAt);
+    if (periodError != null) {
+      setState(() {
+        _calendarError = periodError;
+      });
       return;
     }
 
@@ -389,6 +409,7 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
           requestedMonth,
         );
         _userUnavailableDays = userUnavailableDays;
+        _userReservations = reservations;
         _availabilityLoading = false;
       });
     } catch (_) {
@@ -409,57 +430,71 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
     DateTime month,
   ) {
     final result = Map<int, AvailabilityStatus>.of(availabilityByDay);
-    var current = DateTime(
-      widget.reservation.startAt.year,
-      widget.reservation.startAt.month,
-      widget.reservation.startAt.day,
-    );
-    final last = DateTime(
-      widget.reservation.endAt.year,
-      widget.reservation.endAt.month,
-      widget.reservation.endAt.day,
-    );
 
-    while (!current.isAfter(last)) {
-      if (current.year == month.year && current.month == month.month) {
-        result[current.day] = AvailabilityStatus.free;
-      }
-      current = current.add(const Duration(days: 1));
+    for (final day in occupiedReservationDaysForMonth(
+      startAt: widget.reservation.startAt,
+      endAt: widget.reservation.endAt,
+      month: month,
+    )) {
+      result[day] = AvailabilityStatus.free;
     }
 
     return result;
   }
 
-  bool _visibleRangeContainsUnavailableDay() {
-    if (_startDate == null || _endDate == null) {
-      return false;
+  String? _selectedPeriodError() {
+    final startAt = _selectedDateTime(_startDate, _startTime);
+    final endAt = _selectedDateTime(_endDate, _endTime);
+
+    if (startAt == null || endAt == null) {
+      return null;
     }
 
-    final monthStart = DateTime(_calendarMonth.year, _calendarMonth.month);
-    final endOfMonth = DateTime(
-      _calendarMonth.year,
-      _calendarMonth.month + 1,
-      0,
+    return _reservationPeriodError(startAt: startAt, endAt: endAt);
+  }
+
+  String? _reservationPeriodError({
+    required DateTime startAt,
+    required DateTime endAt,
+  }) {
+    if (!startAt.isBefore(endAt)) {
+      return 'La date de départ doit être avant la date de retour';
+    }
+
+    if (startAt.isBefore(DateTime.now())) {
+      return 'L’heure de départ est déjà passée';
+    }
+
+    if (_visibleRangeContainsUnavailableDay(startAt: startAt, endAt: endAt)) {
+      return 'La période contient une date réservée, en maintenance ou déjà occupée';
+    }
+
+    return null;
+  }
+
+  bool _visibleRangeContainsUnavailableDay({
+    required DateTime startAt,
+    required DateTime endAt,
+  }) {
+    final ignoredDays = occupiedReservationDaysForMonth(
+      startAt: widget.reservation.startAt,
+      endAt: widget.reservation.endAt,
+      month: _calendarMonth,
     );
 
-    if (_endDate!.isBefore(monthStart) || _startDate!.isAfter(endOfMonth)) {
-      return false;
-    }
-
-    final start = _startDate!.isAfter(monthStart) ? _startDate!.day : 1;
-    final end = _endDate!.isBefore(endOfMonth) ? _endDate!.day : endOfMonth.day;
-
-    for (var day = start; day <= end; day++) {
-      if (_isOriginalReservationDay(day)) {
-        continue;
-      }
-      final status = _availabilityByDay[day] ?? AvailabilityStatus.free;
-      if (_userUnavailableDays.contains(day) || !status.canStartReservation) {
-        return true;
-      }
-    }
-
-    return false;
+    return reservationPeriodContainsUnavailableDayForMonth(
+          startAt: startAt,
+          endAt: endAt,
+          month: _calendarMonth,
+          availabilityByDay: _availabilityByDay,
+          ignoredDays: ignoredDays,
+        ) ||
+        userHasOverlappingReservation(
+          reservations: _userReservations,
+          startAt: startAt,
+          endAt: endAt,
+          excludedReservationId: widget.reservation.id,
+        );
   }
 
   bool get _canGoToPreviousMonth {
@@ -514,42 +549,132 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
     required DateTime startAt,
     required DateTime endAt,
   }) async {
-    var month = DateTime(startAt.year, startAt.month);
-    final lastMonth = DateTime(endAt.year, endAt.month);
-    final reservations = await _fleetApiService.fetchReservations();
-
-    while (!month.isAfter(lastMonth)) {
-      final availabilityByDay = _withOriginalReservationAvailable(
-        await _fleetApiService.fetchVehicleAvailabilityForMonth(
-          vehicle: widget.reservation.vehicle,
-          month: month,
-        ),
-        month,
-      );
-      final userUnavailableDays = userUnavailableReservationDaysForMonth(
+    try {
+      final reservations = await _fleetApiService.fetchReservations();
+      if (userHasOverlappingReservation(
         reservations: reservations,
-        month: month,
+        startAt: startAt,
+        endAt: endAt,
         excludedReservationId: widget.reservation.id,
-      );
-      final firstDay =
-          month.year == startAt.year && month.month == startAt.month
-          ? startAt.day
-          : 1;
-      final lastDay = month.year == endAt.year && month.month == endAt.month
-          ? endAt.day
-          : DateTime(month.year, month.month + 1, 0).day;
+      )) {
+        return true;
+      }
 
-      for (var day = firstDay; day <= lastDay; day++) {
-        final status = availabilityByDay[day] ?? AvailabilityStatus.free;
-        if (userUnavailableDays.contains(day) || !status.canStartReservation) {
+      for (final period in _availabilityCheckPeriodsOutsideOriginalReservation(
+        startAt: startAt,
+        endAt: endAt,
+      )) {
+        final isAvailable = await _fleetApiService.isVehicleAvailableForPeriod(
+          vehicle: widget.reservation.vehicle,
+          startAt: period.startAt,
+          endAt: period.endAt,
+        );
+        if (!isAvailable) {
           return true;
         }
       }
 
-      month = DateTime(month.year, month.month + 1);
+      return false;
+    } catch (_) {
+      return _rangeContainsUnavailableDayByMonth(
+        startAt: startAt,
+        endAt: endAt,
+      );
+    }
+  }
+
+  Future<bool> _rangeContainsUnavailableDayByMonth({
+    required DateTime startAt,
+    required DateTime endAt,
+  }) async {
+    final reservations = await _fleetApiService.fetchReservations();
+
+    if (userHasOverlappingReservation(
+      reservations: reservations,
+      startAt: startAt,
+      endAt: endAt,
+      excludedReservationId: widget.reservation.id,
+    )) {
+      return true;
+    }
+
+    for (final period in _availabilityCheckPeriodsOutsideOriginalReservation(
+      startAt: startAt,
+      endAt: endAt,
+    )) {
+      var month = DateTime(period.startAt.year, period.startAt.month);
+      final lastMonth = DateTime(period.endAt.year, period.endAt.month);
+
+      while (!month.isAfter(lastMonth)) {
+        final availabilityByDay = _withOriginalReservationAvailable(
+          await _fleetApiService.fetchVehicleAvailabilityForMonth(
+            vehicle: widget.reservation.vehicle,
+            month: month,
+          ),
+          month,
+        );
+
+        if (reservationPeriodContainsUnavailableDayForMonth(
+          startAt: period.startAt,
+          endAt: period.endAt,
+          month: month,
+          availabilityByDay: availabilityByDay,
+          ignoredDays: occupiedReservationDaysForMonth(
+            startAt: widget.reservation.startAt,
+            endAt: widget.reservation.endAt,
+            month: month,
+          ),
+        )) {
+          return true;
+        }
+
+        month = DateTime(month.year, month.month + 1);
+      }
     }
 
     return false;
+  }
+
+  List<({DateTime startAt, DateTime endAt})>
+  _availabilityCheckPeriodsOutsideOriginalReservation({
+    required DateTime startAt,
+    required DateTime endAt,
+  }) {
+    final originalStartAt = widget.reservation.startAt;
+    final originalEndAt = widget.reservation.endAt;
+    final periods = <({DateTime startAt, DateTime endAt})>[];
+
+    if (startAt.isBefore(originalStartAt)) {
+      final requestedEndAt = endAt.isBefore(originalStartAt)
+          ? endAt
+          : originalStartAt;
+      final checkStartAt = startAt.subtract(reservationTurnaroundDuration);
+      final bufferedEndAt = requestedEndAt.add(reservationTurnaroundDuration);
+      final checkEndAt = bufferedEndAt.isBefore(originalStartAt)
+          ? bufferedEndAt
+          : originalStartAt;
+      if (checkStartAt.isBefore(checkEndAt)) {
+        periods.add((startAt: checkStartAt, endAt: checkEndAt));
+      }
+    }
+
+    if (endAt.isAfter(originalEndAt)) {
+      final requestedStartAt = startAt.isAfter(originalEndAt)
+          ? startAt
+          : originalEndAt;
+      final bufferedStartAt = requestedStartAt.subtract(
+        reservationTurnaroundDuration,
+      );
+      final checkStartAt = bufferedStartAt.isAfter(originalEndAt)
+          ? bufferedStartAt
+          : originalEndAt;
+      final checkEndAt = endAt.add(reservationTurnaroundDuration);
+      if (checkStartAt.isBefore(checkEndAt)) {
+        periods.add((startAt: checkStartAt, endAt: checkEndAt));
+      }
+    }
+
+    return periods;
   }
 
   DateTime? _selectedDateTime(DateTime? date, TimeOfDay time) {
@@ -560,30 +685,42 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
     return DateTime(date.year, date.month, date.day, time.hour, time.minute);
   }
 
-  bool _isOriginalReservationDay(int day) {
-    final selectedDate = DateTime(
-      _calendarMonth.year,
-      _calendarMonth.month,
-      day,
-    );
-    final start = DateTime(
-      widget.reservation.startAt.year,
-      widget.reservation.startAt.month,
-      widget.reservation.startAt.day,
-    );
-    final end = DateTime(
-      widget.reservation.endAt.year,
-      widget.reservation.endAt.month,
-      widget.reservation.endAt.day,
-    );
+  bool _timeWouldBeInPast({required bool isStart, required TimeOfDay time}) {
+    final date = isStart ? _startDate : _endDate;
+    if (date == null) {
+      return false;
+    }
 
-    return !selectedDate.isBefore(start) && !selectedDate.isAfter(end);
+    return DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+    ).isBefore(DateTime.now());
+  }
+
+  bool _isOriginalReservationDay(int day) {
+    return occupiedReservationDaysForMonth(
+      startAt: widget.reservation.startAt,
+      endAt: widget.reservation.endAt,
+      month: _calendarMonth,
+    ).contains(day);
   }
 
   bool _isBeforeCurrentMonth(DateTime month) {
     return month.year < _minimumCalendarMonth.year ||
         (month.year == _minimumCalendarMonth.year &&
             month.month < _minimumCalendarMonth.month);
+  }
+
+  bool _isBeforeToday(DateTime date) {
+    final now = DateTime.now();
+    return DateTime(
+      date.year,
+      date.month,
+      date.day,
+    ).isBefore(DateTime(now.year, now.month, now.day));
   }
 }
 

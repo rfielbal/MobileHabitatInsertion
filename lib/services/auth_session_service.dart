@@ -79,7 +79,7 @@ class AuthSessionService {
 
   Future<String?> readToken() async {
     try {
-      return _storage.read(key: tokenKey);
+      return await _storage.read(key: tokenKey);
     } on MissingPluginException {
       return null;
     }

@@ -5,6 +5,7 @@ import 'navigation/app_routes.dart';
 import 'screens/fleet/auth_gate.dart';
 import 'screens/fleet/fleet_home_shell.dart';
 import 'screens/fleet/login_screen.dart';
+import 'theme/app_brand.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -21,7 +22,7 @@ class WheelloApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Wheello',
+      title: AppBrand.name,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       home: forceLogin ? const LoginScreen() : const AuthGate(),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/notification_store.dart';
 import '../theme/app_assets.dart';
+import '../theme/app_brand.dart';
 import '../theme/app_colors.dart';
 
 class BrandTopBar extends StatelessWidget implements PreferredSizeWidget {
@@ -46,7 +47,7 @@ class BrandTopBar extends StatelessWidget implements PreferredSizeWidget {
           const SizedBox(width: 12),
           const Expanded(
             child: Text(
-              'Wheello',
+              AppBrand.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(

@@ -113,7 +113,7 @@ class ReservationBandCalendar extends StatelessWidget {
     final bands = <_ReservationBand>[];
 
     for (final reservation in reservations) {
-      if (reservation.status == ReservationStatus.completed) {
+      if (reservation.isInHistory) {
         continue;
       }
 

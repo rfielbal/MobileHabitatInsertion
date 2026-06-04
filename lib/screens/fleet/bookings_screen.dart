@@ -30,6 +30,8 @@ class _BookingsScreenState extends State<BookingsScreen> {
   late DateTime _calendarMonth;
   bool _showHistory = false;
   String? _deletingReservationId;
+  final _locallyStartedReservationIds = <String>{};
+  final _locallyCompletedReservationIds = <String>{};
 
   @override
   void initState() {
@@ -83,17 +85,16 @@ class _BookingsScreenState extends State<BookingsScreen> {
                 }
 
                 final allReservations = snapshot.data ?? const [];
-                final upcomingCount = allReservations
-                    .where(
-                      (reservation) =>
-                          reservation.status != ReservationStatus.completed,
-                    )
-                    .length;
-                final reservations = allReservations.where((reservation) {
-                  return _showHistory
-                      ? reservation.status == ReservationStatus.completed
-                      : reservation.status != ReservationStatus.completed;
-                }).toList();
+                final upcomingReservations = allReservations
+                    .where((reservation) => !reservation.isInHistory)
+                    .toList();
+                final historyReservations = allReservations
+                    .where((reservation) => reservation.isInHistory)
+                    .toList();
+                final upcomingCount = upcomingReservations.length;
+                final reservations = _showHistory
+                    ? historyReservations
+                    : upcomingReservations;
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -242,11 +243,47 @@ class _BookingsScreenState extends State<BookingsScreen> {
 
   Future<List<FleetReservation>> _fetchReservations() async {
     final reservations = await _fleetApiService.fetchReservations();
+    final reservationIds = reservations
+        .map((reservation) => reservation.id)
+        .toSet();
+    final apiCompletedReservationIds = reservations
+        .where(
+          (reservation) => reservation.status == ReservationStatus.completed,
+        )
+        .map((reservation) => reservation.id)
+        .toSet();
+
+    _locallyStartedReservationIds.removeWhere(
+      (reservationId) =>
+          !reservationIds.contains(reservationId) ||
+          apiCompletedReservationIds.contains(reservationId),
+    );
+    _locallyStartedReservationIds.removeAll(_locallyCompletedReservationIds);
+    _locallyCompletedReservationIds.removeWhere(
+      (reservationId) =>
+          !reservationIds.contains(reservationId) ||
+          apiCompletedReservationIds.contains(reservationId),
+    );
+
+    final reservationsWithLocalState = [
+      for (final reservation in reservations)
+        if (_locallyCompletedReservationIds.contains(reservation.id))
+          reservation.copyWith(
+            status: ReservationStatus.completed,
+            hasOpenConstat: false,
+            hasClosedConstat: true,
+          )
+        else if (_locallyStartedReservationIds.contains(reservation.id) &&
+            reservation.status != ReservationStatus.completed)
+          reservation.copyWith(hasOpenConstat: true)
+        else
+          reservation,
+    ];
     await NotificationStore.upsertDepartureReminders(
-      reservations,
+      reservationsWithLocalState,
       DateTime.now(),
     );
-    return reservations;
+    return reservationsWithLocalState;
   }
 
   void _openPickupForm(FleetReservation reservation) {
@@ -274,6 +311,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
         )
         .then((updated) {
           if (updated ?? false) {
+            _locallyStartedReservationIds.add(reservation.id);
             _reloadReservations();
           }
         });
@@ -304,6 +342,8 @@ class _BookingsScreenState extends State<BookingsScreen> {
         )
         .then((updated) {
           if (updated ?? false) {
+            _locallyStartedReservationIds.remove(reservation.id);
+            _locallyCompletedReservationIds.add(reservation.id);
             _reloadReservations();
           }
         });
@@ -444,7 +484,7 @@ class _ReservationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isCompleted = reservation.status == ReservationStatus.completed;
+    final isCompleted = reservation.isInHistory;
 
     return AppCard(
       opacity: isCompleted ? 0.78 : 1,
@@ -492,7 +532,7 @@ class _ReservationCard extends StatelessWidget {
               ),
               StatusChip(
                 label: _statusLabel(reservation),
-                color: _statusColor(reservation.status),
+                color: _statusColor(reservation),
               ),
             ],
           ),
@@ -574,11 +614,27 @@ class _ReservationCard extends StatelessWidget {
       return 'Trajet en cours';
     }
 
+    if (reservation.hasClosedConstat) {
+      return 'Retour confirmé';
+    }
+
+    if (reservation.status == ReservationStatus.returnToday) {
+      return 'Départ à confirmer';
+    }
+
     return reservation.status.label;
   }
 
-  Color _statusColor(ReservationStatus status) {
-    return switch (status) {
+  Color _statusColor(FleetReservation reservation) {
+    if (reservation.hasOpenConstat) {
+      return AppColors.primary;
+    }
+
+    if (reservation.hasClosedConstat) {
+      return AppColors.secondary;
+    }
+
+    return switch (reservation.status) {
       ReservationStatus.pickupToday => AppColors.maintenance,
       ReservationStatus.returnToday => AppColors.primary,
       ReservationStatus.upcoming => AppColors.primary,

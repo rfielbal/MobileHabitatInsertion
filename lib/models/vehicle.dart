@@ -45,12 +45,13 @@ extension VehicleStatusX on VehicleStatus {
   }
 }
 
-enum AvailabilityStatus { free, reserved, maintenance }
+enum AvailabilityStatus { free, partial, reserved, maintenance }
 
 extension AvailabilityStatusX on AvailabilityStatus {
   String get label {
     return switch (this) {
       AvailabilityStatus.free => 'Libre',
+      AvailabilityStatus.partial => 'Partiel',
       AvailabilityStatus.reserved => 'Réservé',
       AvailabilityStatus.maintenance => 'Maintenance',
     };
@@ -59,6 +60,7 @@ extension AvailabilityStatusX on AvailabilityStatus {
   Color get color {
     return switch (this) {
       AvailabilityStatus.free => AppColors.available,
+      AvailabilityStatus.partial => AppColors.partial,
       AvailabilityStatus.reserved => AppColors.error,
       AvailabilityStatus.maintenance => AppColors.maintenance,
     };
@@ -66,7 +68,7 @@ extension AvailabilityStatusX on AvailabilityStatus {
 
   bool get canStartReservation {
     return switch (this) {
-      AvailabilityStatus.free => true,
+      AvailabilityStatus.free || AvailabilityStatus.partial => true,
       AvailabilityStatus.reserved || AvailabilityStatus.maintenance => false,
     };
   }

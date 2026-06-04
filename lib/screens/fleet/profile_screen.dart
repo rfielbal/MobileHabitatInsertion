@@ -86,14 +86,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             fontWeight: FontWeight.w700,
                           ),
                         ),
-                        SizedBox(height: 4),
-                        Text(
-                          _session?.roleLabel ?? 'Utilisateur mobile',
-                          style: const TextStyle(
-                            color: AppColors.onSurfaceVariant,
-                            fontSize: 13,
-                          ),
-                        ),
                       ],
                     ),
                   ),
@@ -111,12 +103,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const Divider(height: 24),
                   _ProfileRow(
-                    icon: Icons.badge_outlined,
-                    label: 'Rôle',
-                    value: _session?.roleLabel ?? 'Utilisateur mobile',
-                  ),
-                  const Divider(height: 24),
-                  _ProfileRow(
                     icon: Icons.groups_outlined,
                     label: 'Pôle',
                     value: _session?.pole ?? 'Non défini',
@@ -126,12 +112,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     icon: Icons.location_city_outlined,
                     label: 'Site(s)',
                     value: _sitesLabel,
-                  ),
-                  const Divider(height: 24),
-                  _ProfileRow(
-                    icon: Icons.lock_outline,
-                    label: 'Sécurité',
-                    value: 'Session conservée sur ce téléphone',
                   ),
                 ],
               ),

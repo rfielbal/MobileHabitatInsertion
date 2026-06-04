@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../models/reservation.dart';
 import '../../models/vehicle.dart';
 import '../../services/api_exception.dart';
 import '../../services/fleet_api_service.dart';
@@ -26,6 +27,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   late DateTime _calendarMonth;
   late Map<int, AvailabilityStatus> _availabilityByDay;
   Set<int> _userUnavailableDays = const {};
+  List<FleetReservation> _userReservations = const [];
   DateTime? _startDate;
   DateTime? _endDate;
   TimeOfDay _startTime = const TimeOfDay(hour: 8, minute: 30);
@@ -117,6 +119,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
             userUnavailableDays: _userUnavailableDays,
             rangeStartDate: _startDate,
             rangeEndDate: _endDate,
+            minimumSelectableDate: DateTime.now(),
             canGoToPreviousMonth: _canGoToPreviousMonth,
             canGoToCurrentMonth: _canGoToCurrentMonth,
             onPreviousMonth: () => _changeMonth(-1),
@@ -184,9 +187,9 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
       day,
     );
 
-    if (_userUnavailableDays.contains(day)) {
+    if (_isBeforeToday(selectedDate)) {
       setState(() {
-        _calendarError = 'Vous avez déjà une réservation sur cette date';
+        _calendarError = 'Les dates passées ne sont pas sélectionnables';
       });
       return;
     }
@@ -209,39 +212,55 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
         _endDate = selectedDate;
       }
 
-      _calendarError = _visibleRangeContainsUnavailableDay()
-          ? 'La période contient une date réservée, en maintenance ou déjà occupée'
-          : null;
+      _calendarError = _selectedPeriodError();
     });
   }
 
-  bool _visibleRangeContainsUnavailableDay() {
-    if (_startDate == null || _endDate == null) {
-      return false;
+  String? _selectedPeriodError() {
+    final startAt = _selectedDateTime(_startDate, _startTime);
+    final endAt = _selectedDateTime(_endDate, _endTime);
+
+    if (startAt == null || endAt == null) {
+      return null;
     }
 
-    final monthStart = DateTime(_calendarMonth.year, _calendarMonth.month);
-    final endOfMonth = DateTime(
-      _calendarMonth.year,
-      _calendarMonth.month + 1,
-      0,
-    );
+    return _reservationPeriodError(startAt: startAt, endAt: endAt);
+  }
 
-    if (_endDate!.isBefore(monthStart) || _startDate!.isAfter(endOfMonth)) {
-      return false;
+  String? _reservationPeriodError({
+    required DateTime startAt,
+    required DateTime endAt,
+  }) {
+    if (!startAt.isBefore(endAt)) {
+      return 'La date de début doit être avant la date de retour';
     }
 
-    final start = _startDate!.isAfter(monthStart) ? _startDate!.day : 1;
-    final end = _endDate!.isBefore(endOfMonth) ? _endDate!.day : endOfMonth.day;
-
-    for (var day = start; day <= end; day++) {
-      final status = _availabilityByDay[day] ?? AvailabilityStatus.free;
-      if (_userUnavailableDays.contains(day) || !status.canStartReservation) {
-        return true;
-      }
+    if (startAt.isBefore(DateTime.now())) {
+      return 'L’heure de départ est déjà passée';
     }
 
-    return false;
+    if (_visibleRangeContainsUnavailableDay(startAt: startAt, endAt: endAt)) {
+      return 'La période contient une date réservée, en maintenance ou déjà occupée';
+    }
+
+    return null;
+  }
+
+  bool _visibleRangeContainsUnavailableDay({
+    required DateTime startAt,
+    required DateTime endAt,
+  }) {
+    return reservationPeriodContainsUnavailableDayForMonth(
+          startAt: startAt,
+          endAt: endAt,
+          month: _calendarMonth,
+          availabilityByDay: _availabilityByDay,
+        ) ||
+        userHasOverlappingReservation(
+          reservations: _userReservations,
+          startAt: startAt,
+          endAt: endAt,
+        );
   }
 
   Future<void> _pickTime({required bool isStart}) async {
@@ -252,11 +271,23 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
       return;
     }
 
+    if (_timeWouldBeInPast(isStart: isStart, time: picked)) {
+      setState(() {
+        _calendarError = isStart
+            ? 'L’heure de départ est déjà passée'
+            : 'L’heure de retour est déjà passée';
+      });
+      return;
+    }
+
     setState(() {
       if (isStart) {
         _startTime = picked;
       } else {
         _endTime = picked;
+      }
+      if (_startDate != null && _endDate != null) {
+        _calendarError = _selectedPeriodError();
       }
     });
   }
@@ -268,6 +299,14 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     if (startAt == null || endAt == null || !startAt.isBefore(endAt)) {
       setState(() {
         _calendarError = 'La date de début doit être avant la date de retour';
+      });
+      return;
+    }
+
+    final periodError = _reservationPeriodError(startAt: startAt, endAt: endAt);
+    if (periodError != null) {
+      setState(() {
+        _calendarError = periodError;
       });
       return;
     }
@@ -354,6 +393,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
       setState(() {
         _availabilityByDay = availabilityByDay;
         _userUnavailableDays = userUnavailableDays;
+        _userReservations = reservations;
         _availabilityLoading = false;
       });
     } catch (_) {
@@ -427,9 +467,51 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     required DateTime startAt,
     required DateTime endAt,
   }) async {
-    var month = DateTime(startAt.year, startAt.month);
-    final lastMonth = DateTime(endAt.year, endAt.month);
+    try {
+      final reservations = await _fleetApiService.fetchReservations();
+      if (userHasOverlappingReservation(
+        reservations: reservations,
+        startAt: startAt,
+        endAt: endAt,
+      )) {
+        return true;
+      }
+
+      final availabilityStartAt = startAt.subtract(
+        reservationTurnaroundDuration,
+      );
+      final availabilityEndAt = endAt.add(reservationTurnaroundDuration);
+
+      return !(await _fleetApiService.isVehicleAvailableForPeriod(
+        vehicle: widget.vehicle,
+        startAt: availabilityStartAt,
+        endAt: availabilityEndAt,
+      ));
+    } catch (_) {
+      return _rangeContainsUnavailableDayByMonth(
+        startAt: startAt,
+        endAt: endAt,
+      );
+    }
+  }
+
+  Future<bool> _rangeContainsUnavailableDayByMonth({
+    required DateTime startAt,
+    required DateTime endAt,
+  }) async {
+    final availabilityStartAt = startAt.subtract(reservationTurnaroundDuration);
+    final availabilityEndAt = endAt.add(reservationTurnaroundDuration);
+    var month = DateTime(availabilityStartAt.year, availabilityStartAt.month);
+    final lastMonth = DateTime(availabilityEndAt.year, availabilityEndAt.month);
     final reservations = await _fleetApiService.fetchReservations();
+
+    if (userHasOverlappingReservation(
+      reservations: reservations,
+      startAt: startAt,
+      endAt: endAt,
+    )) {
+      return true;
+    }
 
     while (!month.isAfter(lastMonth)) {
       final availabilityByDay = await _fleetApiService
@@ -441,19 +523,15 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
         reservations: reservations,
         month: month,
       );
-      final firstDay =
-          month.year == startAt.year && month.month == startAt.month
-          ? startAt.day
-          : 1;
-      final lastDay = month.year == endAt.year && month.month == endAt.month
-          ? endAt.day
-          : DateTime(month.year, month.month + 1, 0).day;
 
-      for (var day = firstDay; day <= lastDay; day++) {
-        final status = availabilityByDay[day] ?? AvailabilityStatus.free;
-        if (userUnavailableDays.contains(day) || !status.canStartReservation) {
-          return true;
-        }
+      if (reservationPeriodContainsUnavailableDayForMonth(
+        startAt: availabilityStartAt,
+        endAt: availabilityEndAt,
+        month: month,
+        availabilityByDay: availabilityByDay,
+        userUnavailableDays: userUnavailableDays,
+      )) {
+        return true;
       }
 
       month = DateTime(month.year, month.month + 1);
@@ -468,6 +546,30 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     }
 
     return DateTime(date.year, date.month, date.day, time.hour, time.minute);
+  }
+
+  bool _timeWouldBeInPast({required bool isStart, required TimeOfDay time}) {
+    final date = isStart ? _startDate : _endDate;
+    if (date == null) {
+      return false;
+    }
+
+    return DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+    ).isBefore(DateTime.now());
+  }
+
+  bool _isBeforeToday(DateTime date) {
+    final now = DateTime.now();
+    return DateTime(
+      date.year,
+      date.month,
+      date.day,
+    ).isBefore(DateTime(now.year, now.month, now.day));
   }
 }
 

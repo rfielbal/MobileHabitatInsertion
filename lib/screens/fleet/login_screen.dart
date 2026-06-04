@@ -4,6 +4,7 @@ import '../../navigation/app_routes.dart';
 import '../../services/api_exception.dart';
 import '../../services/auth_api_service.dart';
 import '../../theme/app_assets.dart';
+import '../../theme/app_brand.dart';
 import '../../theme/app_colors.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -93,7 +94,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 18),
                     const Text(
-                      'Wheello',
+                      AppBrand.name,
                       style: TextStyle(
                         fontSize: 32,
                         fontWeight: FontWeight.w800,

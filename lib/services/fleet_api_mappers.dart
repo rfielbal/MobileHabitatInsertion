@@ -102,10 +102,11 @@ class FleetApiMappers {
       endAt: endAt,
       startLabel: _reservationDateLabel(startAt),
       endLabel: _reservationDateLabel(endAt),
-      status: _reservationStatus(startAt, endAt, json['statut']),
+      status: _reservationStatus(startAt, endAt, _reservationStatusValue(json)),
       expectedStartMileage: vehicle.currentMileage,
       createdAt: createdAt,
       hasOpenConstat: reservationHasOpenConstat(json),
+      hasClosedConstat: reservationHasClosedConstat(json),
     );
   }
 
@@ -121,12 +122,38 @@ class FleetApiMappers {
     }
 
     final constat = json['constat'];
-    if (constat is Map<String, dynamic> && constat['estOuvert'] == true) {
+    if (constat is Map<String, dynamic> && _constatIsOpen(constat)) {
       return true;
     }
 
     for (final constat in _listOfMaps(json['constats'])) {
-      if (constat['estOuvert'] == true) {
+      if (_constatIsOpen(constat)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  static bool reservationHasClosedConstat(Map<String, dynamic> json) {
+    final directValue =
+        json['constatFerme'] ??
+        json['hasClosedConstat'] ??
+        json['retourConfirme'] ??
+        json['returnConfirmed'] ??
+        json['constatTermine'];
+
+    if (directValue is bool) {
+      return directValue;
+    }
+
+    final constat = json['constat'];
+    if (constat is Map<String, dynamic> && _constatIsClosed(constat)) {
+      return true;
+    }
+
+    for (final constat in _listOfMaps(json['constats'])) {
+      if (_constatIsClosed(constat)) {
         return true;
       }
     }
@@ -221,16 +248,31 @@ class FleetApiMappers {
     final status = _text(apiStatus).toLowerCase();
     final now = DateTime.now();
 
-    if (status.contains('term') || endAt.isBefore(now)) {
+    if (status.contains('term') ||
+        status.contains('fini') ||
+        status.contains('clos') ||
+        status.contains('completed') ||
+        status.contains('done')) {
       return ReservationStatus.completed;
     }
     if (_sameDay(startAt, now)) {
       return ReservationStatus.pickupToday;
     }
-    if (_sameDay(endAt, now) || (startAt.isBefore(now) && endAt.isAfter(now))) {
+    if (_sameDay(endAt, now) ||
+        endAt.isBefore(now) ||
+        (startAt.isBefore(now) && endAt.isAfter(now))) {
       return ReservationStatus.returnToday;
     }
     return ReservationStatus.upcoming;
+  }
+
+  static Object? _reservationStatusValue(Map<String, dynamic> json) {
+    return json['statue'] ??
+        json['statut'] ??
+        json['statu'] ??
+        json['status'] ??
+        json['state'] ??
+        json['etat'];
   }
 
   static String _reservationDateLabel(DateTime date) {
@@ -330,6 +372,84 @@ class FleetApiMappers {
 
   static bool _sameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  static bool _constatIsClosed(Map<String, dynamic> constat) {
+    if (constat['estOuvert'] == false) {
+      return true;
+    }
+    if (_hasFinalMileage(constat)) {
+      return true;
+    }
+
+    return _date(
+          constat['dateRendu'] ??
+              constat['dateRetour'] ??
+              constat['returnedAt'] ??
+              constat['closedAt'] ??
+              constat['termineLe'],
+        ) !=
+        null;
+  }
+
+  static bool _constatIsOpen(Map<String, dynamic> constat) {
+    final explicitOpen =
+        constat['estOuvert'] ??
+        constat['constatOuvert'] ??
+        constat['open'] ??
+        constat['isOpen'];
+
+    if (explicitOpen is bool) {
+      return explicitOpen;
+    }
+
+    final status = _text(
+      constat['statut'] ??
+          constat['statue'] ??
+          constat['statu'] ??
+          constat['status'] ??
+          constat['state'] ??
+          constat['etat'],
+    ).toLowerCase();
+
+    if (status.contains('term') ||
+        status.contains('fini') ||
+        status.contains('clos') ||
+        status.contains('completed') ||
+        status.contains('done')) {
+      return false;
+    }
+
+    if (status.contains('ouvert') ||
+        status.contains('open') ||
+        status.contains('cours') ||
+        status.contains('progress') ||
+        status.contains('demarr') ||
+        status.contains('démarr') ||
+        status.contains('active')) {
+      return true;
+    }
+
+    final pickedUpAt =
+        _date(
+          constat['datePrise'] ??
+              constat['dateDepart'] ??
+              constat['pickedUpAt'] ??
+              constat['startedAt'] ??
+              constat['demarreLe'],
+        ) !=
+        null;
+
+    return pickedUpAt && !_constatIsClosed(constat);
+  }
+
+  static bool _hasFinalMileage(Map<String, dynamic> constat) {
+    return _text(
+      constat['kmFin'] ??
+          constat['kilometrageFin'] ??
+          constat['kilometrageRetour'] ??
+          constat['mileageEnd'],
+    ).isNotEmpty;
   }
 
   static const _weekDays = [
