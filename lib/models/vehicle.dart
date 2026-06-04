@@ -74,6 +74,48 @@ extension AvailabilityStatusX on AvailabilityStatus {
   }
 }
 
+class VehicleAvailabilityMonth {
+  const VehicleAvailabilityMonth({
+    required this.availabilityByDay,
+    this.suggestionsByDay = const {},
+  });
+
+  final Map<int, AvailabilityStatus> availabilityByDay;
+  final Map<int, VehicleAvailabilitySuggestion> suggestionsByDay;
+}
+
+class VehicleAvailabilitySuggestion {
+  const VehicleAvailabilitySuggestion({this.earliestStartAt, this.latestEndAt});
+
+  final DateTime? earliestStartAt;
+  final DateTime? latestEndAt;
+
+  VehicleAvailabilitySuggestion merge({
+    DateTime? earliestStartAt,
+    DateTime? latestEndAt,
+  }) {
+    final currentEarliestStartAt = this.earliestStartAt;
+    final nextEarliestStartAt =
+        currentEarliestStartAt == null ||
+            (earliestStartAt != null &&
+                earliestStartAt.isAfter(currentEarliestStartAt))
+        ? earliestStartAt
+        : currentEarliestStartAt;
+
+    final currentLatestEndAt = this.latestEndAt;
+    final nextLatestEndAt =
+        currentLatestEndAt == null ||
+            (latestEndAt != null && latestEndAt.isBefore(currentLatestEndAt))
+        ? latestEndAt
+        : currentLatestEndAt;
+
+    return VehicleAvailabilitySuggestion(
+      earliestStartAt: nextEarliestStartAt,
+      latestEndAt: nextLatestEndAt,
+    );
+  }
+}
+
 enum VehicleEnergyType { electric, hybrid, thermal }
 
 extension VehicleEnergyTypeX on VehicleEnergyType {

@@ -168,26 +168,21 @@ class _ReservationCalendarDay extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    final primaryBand = bands.isEmpty ? null : bands.first;
-    final secondaryBands = primaryBand == null
-        ? <_ReservationBand>[]
-        : bands.skip(1).take(1).toList();
-    final hiddenCount = primaryBand == null
-        ? 0
-        : bands.length - 1 - secondaryBands.length;
+    final visibleBands = bands.take(3).toList();
+    final hiddenCount = bands.length - visibleBands.length;
 
     return Semantics(
       label: _semanticLabel,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          if (primaryBand != null)
+          for (final band in visibleBands)
             Positioned(
               left: 0,
               right: 0,
               top: 0,
               height: 32,
-              child: _ReservationBandHighlight(band: primaryBand),
+              child: _ReservationBandHighlight(band: band),
             ),
           Positioned(
             left: 0,
@@ -198,12 +193,10 @@ class _ReservationCalendarDay extends StatelessWidget {
               child: Text(
                 '$day',
                 style: TextStyle(
-                  color: primaryBand == null
+                  color: bands.isEmpty
                       ? AppColors.onSurface
                       : AppColors.primary,
-                  fontWeight: primaryBand == null
-                      ? FontWeight.w600
-                      : FontWeight.w800,
+                  fontWeight: bands.isEmpty ? FontWeight.w600 : FontWeight.w800,
                 ),
               ),
             ),
@@ -212,22 +205,17 @@ class _ReservationCalendarDay extends StatelessWidget {
             left: 0,
             right: 0,
             bottom: 5,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final band in secondaryBands)
-                  _ReservationBandSegment(band: band),
-                if (hiddenCount > 0)
-                  Text(
+            child: hiddenCount > 0
+                ? Text(
                     '+$hiddenCount',
+                    textAlign: TextAlign.center,
                     style: const TextStyle(
                       color: AppColors.onSurfaceVariant,
                       fontSize: 9,
                       fontWeight: FontWeight.w700,
                     ),
-                  ),
-              ],
-            ),
+                  )
+                : const SizedBox.shrink(),
           ),
         ],
       ),
@@ -257,31 +245,6 @@ class _ReservationBandHighlight extends StatelessWidget {
       ),
       decoration: BoxDecoration(
         color: AppColors.primary.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.horizontal(
-          left: Radius.circular(band.startsToday ? 999 : 0),
-          right: Radius.circular(band.endsToday ? 999 : 0),
-        ),
-      ),
-    );
-  }
-}
-
-class _ReservationBandSegment extends StatelessWidget {
-  const _ReservationBandSegment({required this.band});
-
-  final _ReservationBand band;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 8,
-      margin: EdgeInsets.only(
-        left: band.startsToday ? 5 : 0,
-        right: band.endsToday ? 5 : 0,
-        bottom: 3,
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.primary,
         borderRadius: BorderRadius.horizontal(
           left: Radius.circular(band.startsToday ? 999 : 0),
           right: Radius.circular(band.endsToday ? 999 : 0),

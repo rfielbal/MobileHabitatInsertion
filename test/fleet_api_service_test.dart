@@ -1,13 +1,16 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:mobile_habitat_insertion/models/reservation.dart';
 import 'package:mobile_habitat_insertion/models/vehicle.dart';
 import 'package:mobile_habitat_insertion/services/api_client.dart';
 import 'package:mobile_habitat_insertion/services/fleet_api_mappers.dart';
 import 'package:mobile_habitat_insertion/services/fleet_api_service.dart';
+import 'package:mobile_habitat_insertion/services/reservation_video_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -303,6 +306,50 @@ void main() {
       expect(statusRequests, 6);
     },
   );
+
+  test('uploadReservationVideo sends a multipart video request', () async {
+    final tempDir = await Directory.systemTemp.createTemp(
+      'wheello_video_upload_test_',
+    );
+    addTearDown(() async {
+      if (await tempDir.exists()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    final videoFile = File('${tempDir.path}/depart.mp4');
+    await videoFile.writeAsBytes([0, 1, 2, 3, 4]);
+
+    String? sentBody;
+    final service = _serviceWithMockClient((request) async {
+      expect(request.method, 'POST');
+      expect(request.url.path, '/api/metier/videos');
+      expect(
+        request.headers['content-type'],
+        startsWith('multipart/form-data'),
+      );
+      sentBody = request.body;
+      return http.Response('{}', 201);
+    });
+    final capturedAt = DateTime(2026, 6, 18, 8, 35);
+
+    await service.uploadReservationVideo(
+      ReservationVideoDraft(
+        reservationId: '10',
+        kind: ReservationVideoKind.departure,
+        file: XFile(videoFile.path),
+        capturedAt: capturedAt,
+      ),
+    );
+
+    expect(sentBody, contains('name="reservationId"'));
+    expect(sentBody, contains('10'));
+    expect(sentBody, contains('name="type"'));
+    expect(sentBody, contains('depart'));
+    expect(sentBody, contains('name="capturedAt"'));
+    expect(sentBody, contains(capturedAt.toIso8601String()));
+    expect(sentBody, contains('name="video"; filename="depart.mp4"'));
+  });
 
   test(
     'fetchReservations detects closed constat without moving reservation to history',
@@ -981,15 +1028,24 @@ void main() {
         return http.Response('{}', 404);
       });
 
-      final availability = await service.fetchVehicleAvailabilityForMonth(
-        vehicle: _vehicle,
-        month: DateTime(2026, 6),
-      );
+      final availability = await service
+          .fetchVehicleAvailabilityDetailsForMonth(
+            vehicle: _vehicle,
+            month: DateTime(2026, 6),
+          );
 
-      expect(availability[4], AvailabilityStatus.partial);
-      expect(availability[5], AvailabilityStatus.reserved);
-      expect(availability[6], AvailabilityStatus.reserved);
-      expect(availability[7], AvailabilityStatus.partial);
+      expect(availability.availabilityByDay[4], AvailabilityStatus.partial);
+      expect(availability.availabilityByDay[5], AvailabilityStatus.reserved);
+      expect(availability.availabilityByDay[6], AvailabilityStatus.reserved);
+      expect(availability.availabilityByDay[7], AvailabilityStatus.partial);
+      expect(
+        availability.suggestionsByDay[4]?.latestEndAt,
+        DateTime(2026, 6, 4, 17),
+      );
+      expect(
+        availability.suggestionsByDay[7]?.earliestStartAt,
+        DateTime(2026, 6, 7, 11),
+      );
     },
   );
 

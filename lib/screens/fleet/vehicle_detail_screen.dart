@@ -26,11 +26,13 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   late final DateTime _minimumCalendarMonth;
   late DateTime _calendarMonth;
   late Map<int, AvailabilityStatus> _availabilityByDay;
+  Map<int, VehicleAvailabilitySuggestion> _availabilitySuggestionsByDay =
+      const {};
   Set<int> _userUnavailableDays = const {};
   List<FleetReservation> _userReservations = const [];
   DateTime? _startDate;
   DateTime? _endDate;
-  TimeOfDay _startTime = const TimeOfDay(hour: 8, minute: 30);
+  late TimeOfDay _startTime;
   TimeOfDay _endTime = const TimeOfDay(hour: 18, minute: 0);
   String? _calendarError;
   bool _availabilityLoading = true;
@@ -54,6 +56,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     _availabilityByDay = Map<int, AvailabilityStatus>.of(
       widget.vehicle.availabilityByDay,
     );
+    _startTime = _defaultStartTime();
     _loadAvailability();
   }
 
@@ -205,11 +208,16 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
       if (_startDate == null || _endDate != null) {
         _startDate = selectedDate;
         _endDate = null;
+        _startTime = _suggestedStartTimeForDate(selectedDate);
       } else if (selectedDate.isBefore(_startDate!)) {
+        final previousStartDate = _startDate!;
         _endDate = _startDate;
         _startDate = selectedDate;
+        _startTime = _suggestedStartTimeForDate(selectedDate);
+        _endTime = _suggestedEndTimeForDate(previousStartDate);
       } else {
         _endDate = selectedDate;
+        _endTime = _suggestedEndTimeForDate(selectedDate);
       }
 
       _calendarError = _selectedPeriodError();
@@ -375,8 +383,8 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     });
 
     try {
-      final availabilityByDay = await _fleetApiService
-          .fetchVehicleAvailabilityForMonth(
+      final availability = await _fleetApiService
+          .fetchVehicleAvailabilityDetailsForMonth(
             vehicle: widget.vehicle,
             month: requestedMonth,
           );
@@ -391,7 +399,8 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
       }
 
       setState(() {
-        _availabilityByDay = availabilityByDay;
+        _availabilityByDay = availability.availabilityByDay;
+        _availabilitySuggestionsByDay = availability.suggestionsByDay;
         _userUnavailableDays = userUnavailableDays;
         _userReservations = reservations;
         _availabilityLoading = false;
@@ -433,6 +442,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     setState(() {
       _calendarMonth = nextMonth;
       _availabilityByDay = const {};
+      _availabilitySuggestionsByDay = const {};
       _userUnavailableDays = const {};
       _calendarError = null;
       _availabilityError = null;
@@ -449,6 +459,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     setState(() {
       _calendarMonth = _minimumCalendarMonth;
       _availabilityByDay = const {};
+      _availabilitySuggestionsByDay = const {};
       _userUnavailableDays = const {};
       _calendarError = null;
       _availabilityError = null;
@@ -546,6 +557,44 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     }
 
     return DateTime(date.year, date.month, date.day, time.hour, time.minute);
+  }
+
+  TimeOfDay _defaultStartTime() {
+    return TimeOfDay.fromDateTime(
+      DateTime.now().add(reservationTurnaroundDuration),
+    );
+  }
+
+  TimeOfDay _suggestedStartTimeForDate(DateTime date) {
+    final suggestion = _availabilitySuggestionsByDay[date.day]?.earliestStartAt;
+    final nowPlusTurnaround = DateTime.now().add(reservationTurnaroundDuration);
+    var selected = suggestion ?? _dateTimeWithTime(date, _defaultStartTime());
+
+    if (_sameDay(date, DateTime.now()) &&
+        selected.isBefore(nowPlusTurnaround)) {
+      selected = nowPlusTurnaround;
+    }
+
+    return TimeOfDay.fromDateTime(selected);
+  }
+
+  TimeOfDay _suggestedEndTimeForDate(DateTime date) {
+    final suggestion = _availabilitySuggestionsByDay[date.day]?.latestEndAt;
+    if (suggestion == null) {
+      return _endTime;
+    }
+
+    return TimeOfDay.fromDateTime(suggestion);
+  }
+
+  DateTime _dateTimeWithTime(DateTime date, TimeOfDay time) {
+    return DateTime(date.year, date.month, date.day, time.hour, time.minute);
+  }
+
+  bool _sameDay(DateTime first, DateTime second) {
+    return first.year == second.year &&
+        first.month == second.month &&
+        first.day == second.day;
   }
 
   bool _timeWouldBeInPast({required bool isStart, required TimeOfDay time}) {

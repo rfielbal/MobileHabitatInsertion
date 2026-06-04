@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:path/path.dart' as p;
 
 import 'api_config.dart';
 import 'api_exception.dart';
@@ -118,6 +119,35 @@ class ApiClient {
     await _sendJson(method: 'DELETE', path: path, authenticated: authenticated);
   }
 
+  Future<Object?> postMultipart(
+    String path, {
+    required String fileField,
+    required String filePath,
+    Map<String, String> fields = const {},
+    bool authenticated = true,
+  }) async {
+    final request = http.MultipartRequest('POST', _uri(path, null));
+    final headers = await _headers(authenticated: authenticated);
+    headers.remove('Content-Type');
+
+    request.headers.addAll(headers);
+    request.fields.addAll(fields);
+    request.files.add(
+      await http.MultipartFile.fromPath(
+        fileField,
+        filePath,
+        filename: p.basename(filePath),
+      ),
+    );
+
+    final streamedResponse = await _httpClient
+        .send(request)
+        .timeout(const Duration(minutes: 2));
+    final response = await http.Response.fromStream(streamedResponse);
+
+    return _decodeResponse(response);
+  }
+
   Future<Object?> _sendJson({
     required String method,
     required String path,
@@ -137,6 +167,10 @@ class ApiClient {
         .timeout(const Duration(seconds: 20));
     final response = await http.Response.fromStream(streamedResponse);
 
+    return _decodeResponse(response);
+  }
+
+  Object? _decodeResponse(http.Response response) {
     if (response.statusCode == 204) {
       return null;
     }

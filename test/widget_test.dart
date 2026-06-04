@@ -1,9 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_habitat_insertion/main.dart';
+import 'package:mobile_habitat_insertion/models/reservation.dart';
 import 'package:mobile_habitat_insertion/models/vehicle.dart';
 import 'package:mobile_habitat_insertion/screens/fleet/vehicles_screen.dart';
 import 'package:mobile_habitat_insertion/theme/app_theme.dart';
 import 'package:mobile_habitat_insertion/widgets/availability_calendar.dart';
+import 'package:mobile_habitat_insertion/widgets/reservation_band_calendar.dart';
 import 'package:flutter/material.dart';
 
 void main() {
@@ -106,4 +108,83 @@ void main() {
     await tester.pump();
     expect(selectedDay, 23);
   });
+
+  testWidgets('Reservation band calendar overlays touching reservations', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: ReservationBandCalendar(
+              month: DateTime(2026, 6),
+              reservations: [
+                _calendarReservation(
+                  id: 'return',
+                  startAt: DateTime(2026, 6, 4, 18),
+                  endAt: DateTime(2026, 6, 6, 10),
+                ),
+                _calendarReservation(
+                  id: 'departure',
+                  startAt: DateTime(2026, 6, 6, 16),
+                  endAt: DateTime(2026, 6, 10, 10),
+                ),
+              ],
+              canGoToPreviousMonth: false,
+              onPreviousMonth: () {},
+              onNextMonth: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Juin 2026'), findsOneWidget);
+    expect(find.text('6'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
+
+FleetReservation _calendarReservation({
+  required String id,
+  required DateTime startAt,
+  required DateTime endAt,
+}) {
+  return FleetReservation(
+    id: id,
+    vehicle: _calendarVehicle,
+    location: 'Site',
+    startAt: startAt,
+    endAt: endAt,
+    startLabel: 'Départ',
+    endLabel: 'Retour',
+    status: ReservationStatus.upcoming,
+    expectedStartMileage: 100,
+  );
+}
+
+final _calendarVehicle = Vehicle(
+  id: '1',
+  internalNumber: 'V-001',
+  name: 'Citroen C3',
+  brand: 'Citroen',
+  model: 'C3',
+  plateNumber: 'AA-123-AA',
+  category: 'Flotte',
+  status: VehicleStatus.available,
+  subtitle: 'Libre',
+  imageUrl: '',
+  location: 'Site',
+  site: 'Site',
+  parkingDescription: 'Parking',
+  seats: '5',
+  transmission: 'Manuelle',
+  energyType: VehicleEnergyType.thermal,
+  energyInfo: 'Thermique',
+  currentMileage: 100,
+  fuelLevelLabel: '50%',
+  priorityRank: 1,
+  nextAvailableAt: DateTime(2026, 6, 1),
+  availabilityByDay: const {},
+);

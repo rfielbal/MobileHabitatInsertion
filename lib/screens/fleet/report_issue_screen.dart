@@ -31,6 +31,7 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
 
   ReservationVideoDraft? _issueVideo;
   bool _isPreparingVideo = false;
+  bool _isUploadingVideo = false;
   bool _isSubmitting = false;
   String _issueType = 'Problème véhicule';
 
@@ -47,16 +48,31 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
       return;
     }
 
+    final video = _issueVideo;
+
     setState(() {
       _isSubmitting = true;
+      _isUploadingVideo = video != null;
     });
 
     try {
       final message = _descriptionController.text.trim();
+
+      if (video != null) {
+        await _fleetApiService.uploadReservationVideo(video);
+        if (mounted) {
+          setState(() {
+            _isUploadingVideo = false;
+          });
+        }
+      }
+
       await _fleetApiService.createSignalement(
         reservation: widget.reservation,
         type: _issueType,
-        message: _hasVideo ? '$message\n\nVidéo ajoutée côté mobile.' : message,
+        message: video != null
+            ? '$message\n\nVidéo transmise depuis l’application mobile.'
+            : message,
       );
 
       if (!mounted) {
@@ -72,6 +88,7 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
       }
       setState(() {
         _isSubmitting = false;
+        _isUploadingVideo = false;
       });
       ScaffoldMessenger.of(
         context,
@@ -82,6 +99,7 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
       }
       setState(() {
         _isSubmitting = false;
+        _isUploadingVideo = false;
       });
       ScaffoldMessenger.of(
         context,
@@ -121,10 +139,6 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Vidéo ajoutée au signalement')),
-      );
-
-      debugPrint(
-        'Vidéo de signalement prête pour upload API : ${video.file.path}',
       );
     } catch (e) {
       if (!mounted) {
@@ -241,9 +255,11 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
               UploadTile(
                 label: 'Ajouter une vidéo si nécessaire',
                 selected: _hasVideo,
-                processing: _isPreparingVideo,
-                statusText: 'Préparation de la vidéo',
-                onTap: _recordIssueVideo,
+                processing: _isPreparingVideo || _isUploadingVideo,
+                statusText: _isUploadingVideo
+                    ? 'Envoi de la vidéo'
+                    : 'Préparation de la vidéo',
+                onTap: _isSubmitting ? null : _recordIssueVideo,
               ),
               const SizedBox(height: 8),
               const Text(

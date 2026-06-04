@@ -15,7 +15,7 @@ class UploadTile extends StatelessWidget {
   });
 
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final bool selected;
   final bool large;
   final bool processing;
@@ -25,7 +25,7 @@ class UploadTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return OutlinedButton(
-      onPressed: processing ? null : onTap,
+      onPressed: processing || onTap == null ? null : onTap,
       style: OutlinedButton.styleFrom(
         minimumSize: Size.fromHeight(large ? 128 : 88),
         backgroundColor: selected

@@ -1,12 +1,17 @@
 import '../models/reservation.dart';
 import '../models/vehicle.dart';
+import '../utils/reservation_calendar_days.dart';
 import 'api_client.dart';
 import 'api_exception.dart';
 import 'fleet_api_mappers.dart';
+import 'reservation_video_service.dart';
 
 class FleetApiService {
   FleetApiService({ApiClient? apiClient})
     : _apiClient = apiClient ?? ApiClient();
+
+  static const _reservationVideoUploadPath = '/metier/videos';
+  static const _reservationVideoFileField = 'video';
 
   final ApiClient _apiClient;
 
@@ -106,6 +111,18 @@ class FleetApiService {
     required Vehicle vehicle,
     required DateTime month,
   }) async {
+    final availability = await fetchVehicleAvailabilityDetailsForMonth(
+      vehicle: vehicle,
+      month: month,
+    );
+
+    return availability.availabilityByDay;
+  }
+
+  Future<VehicleAvailabilityMonth> fetchVehicleAvailabilityDetailsForMonth({
+    required Vehicle vehicle,
+    required DateTime month,
+  }) async {
     final availabilityByDay = Map<int, AvailabilityStatus>.of(
       vehicle.availabilityByDay,
     );
@@ -119,19 +136,19 @@ class FleetApiService {
         },
       );
 
-      final apiAvailabilityByDay = _availabilityByDayFromResponse(
-        response,
-        month,
+      final apiAvailability = _availabilityFromResponse(response, month);
+      availabilityByDay.addAll(apiAvailability.availabilityByDay);
+      return VehicleAvailabilityMonth(
+        availabilityByDay: availabilityByDay,
+        suggestionsByDay: apiAvailability.suggestionsByDay,
       );
-      availabilityByDay.addAll(apiAvailabilityByDay);
-      return availabilityByDay;
     } on ApiException catch (error) {
       if (error.statusCode != 404) {
         rethrow;
       }
     }
 
-    return availabilityByDay;
+    return VehicleAvailabilityMonth(availabilityByDay: availabilityByDay);
   }
 
   Future<FleetReservation> createReservation({
@@ -286,6 +303,15 @@ class FleetApiService {
         'type': type,
         'message': message,
       },
+    );
+  }
+
+  Future<void> uploadReservationVideo(ReservationVideoDraft video) async {
+    await _apiClient.postMultipart(
+      _reservationVideoUploadPath,
+      fileField: _reservationVideoFileField,
+      filePath: video.file.path,
+      fields: video.multipartFields,
     );
   }
 
@@ -673,15 +699,37 @@ class FleetApiService {
     return value?.toString().trim() ?? '';
   }
 
-  Map<int, AvailabilityStatus> _availabilityByDayFromResponse(
+  VehicleAvailabilityMonth _availabilityFromResponse(
     Object? response,
     DateTime month,
   ) {
     final availabilityByDay = <int, AvailabilityStatus>{};
+    final suggestionsByDay = <int, VehicleAvailabilitySuggestion>{};
 
     void setStatus(int day, AvailabilityStatus status) {
       final existing = availabilityByDay[day];
       availabilityByDay[day] = _dominantAvailabilityStatus(existing, status);
+    }
+
+    void setSuggestion({
+      required DateTime dateTime,
+      DateTime? earliestStartAt,
+      DateTime? latestEndAt,
+    }) {
+      if (dateTime.year != month.year || dateTime.month != month.month) {
+        return;
+      }
+
+      final existing = suggestionsByDay[dateTime.day];
+      suggestionsByDay[dateTime.day] =
+          existing?.merge(
+            earliestStartAt: earliestStartAt,
+            latestEndAt: latestEndAt,
+          ) ??
+          VehicleAvailabilitySuggestion(
+            earliestStartAt: earliestStartAt,
+            latestEndAt: latestEndAt,
+          );
     }
 
     void addStatus(Object? dayValue, Object? statusValue) {
@@ -730,6 +778,17 @@ class FleetApiService {
           );
         }
         current = current.add(const Duration(days: 1));
+      }
+
+      if (status == AvailabilityStatus.reserved) {
+        setSuggestion(
+          dateTime: start.subtract(reservationTurnaroundDuration),
+          latestEndAt: start.subtract(reservationTurnaroundDuration),
+        );
+        setSuggestion(
+          dateTime: end.add(reservationTurnaroundDuration),
+          earliestStartAt: end.add(reservationTurnaroundDuration),
+        );
       }
 
       return true;
@@ -850,11 +909,17 @@ class FleetApiService {
       for (final entry in response) {
         parseEntry(entry);
       }
-      return availabilityByDay;
+      return VehicleAvailabilityMonth(
+        availabilityByDay: availabilityByDay,
+        suggestionsByDay: suggestionsByDay,
+      );
     }
 
     if (response is! Map<String, dynamic>) {
-      return availabilityByDay;
+      return VehicleAvailabilityMonth(
+        availabilityByDay: availabilityByDay,
+        suggestionsByDay: suggestionsByDay,
+      );
     }
 
     for (final key in [
@@ -882,7 +947,10 @@ class FleetApiService {
 
     parseStatusMap(response);
 
-    return availabilityByDay;
+    return VehicleAvailabilityMonth(
+      availabilityByDay: availabilityByDay,
+      suggestionsByDay: suggestionsByDay,
+    );
   }
 
   String _monthParameter(DateTime month) {
