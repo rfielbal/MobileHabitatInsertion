@@ -15,9 +15,14 @@ import 'return_vehicle_screen.dart';
 import 'vehicle_detail_screen.dart';
 
 class BookingsScreen extends StatefulWidget {
-  const BookingsScreen({super.key, this.refreshVersion = 0});
+  const BookingsScreen({
+    super.key,
+    this.refreshVersion = 0,
+    this.onReservationChanged,
+  });
 
   final int refreshVersion;
+  final VoidCallback? onReservationChanged;
 
   @override
   State<BookingsScreen> createState() => _BookingsScreenState();
@@ -199,7 +204,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
             )
             .then((updated) {
               if (updated ?? false) {
-                _reloadReservations();
+                _handleReservationChanged();
               }
             });
       case ReservationAction.details:
@@ -212,7 +217,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
             )
             .then((updated) {
               if (updated ?? false) {
-                _reloadReservations();
+                _handleReservationChanged();
               }
             });
       case ReservationAction.none:
@@ -230,7 +235,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
         )
         .then((updated) {
           if (updated ?? false) {
-            _reloadReservations();
+            _handleReservationChanged();
           }
         });
   }
@@ -239,6 +244,11 @@ class _BookingsScreenState extends State<BookingsScreen> {
     setState(() {
       _reservationsFuture = _fetchReservations();
     });
+  }
+
+  void _handleReservationChanged() {
+    _reloadReservations();
+    widget.onReservationChanged?.call();
   }
 
   Future<List<FleetReservation>> _fetchReservations() async {
@@ -312,7 +322,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
         .then((updated) {
           if (updated ?? false) {
             _locallyStartedReservationIds.add(reservation.id);
-            _reloadReservations();
+            _handleReservationChanged();
           }
         });
   }
@@ -344,7 +354,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
           if (updated ?? false) {
             _locallyStartedReservationIds.remove(reservation.id);
             _locallyCompletedReservationIds.add(reservation.id);
-            _reloadReservations();
+            _handleReservationChanged();
           }
         });
   }
@@ -395,7 +405,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Réservation supprimée')));
-      _reloadReservations();
+      _handleReservationChanged();
     } catch (e) {
       if (!mounted) {
         return;

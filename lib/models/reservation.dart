@@ -90,6 +90,10 @@ class FleetReservation {
   }
 
   bool canBeCancelledAt(DateTime now) {
+    if (isInHistory || hasOpenConstat || hasClosedConstat) {
+      return false;
+    }
+
     if (!now.isBefore(startAt)) {
       return false;
     }
@@ -130,11 +134,8 @@ class FleetReservation {
         !now.isBefore(startAt.add(departureReminderDelay));
   }
 
-  bool shouldShowReturnActionAt(DateTime now) {
-    return !isInHistory &&
-        hasOpenConstat &&
-        !hasClosedConstat &&
-        !now.isBefore(endAt.subtract(returnFormLeadTime));
+  bool shouldShowReturnActionAt(DateTime _) {
+    return !isInHistory && hasOpenConstat && !hasClosedConstat;
   }
 
   bool canOpenReturnFormAt(DateTime now) {

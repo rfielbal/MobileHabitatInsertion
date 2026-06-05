@@ -411,8 +411,9 @@ Règles :
 - une réservation est annulable :
   - avant la fenêtre de verrouillage de 24 h ;
   - ou pendant 1 h après création si elle a été créée à court délai ;
+- une réservation démarrée ou déjà retournée n'est plus annulable ;
 - le formulaire de départ s'ouvre à partir de 1 h avant le départ ;
-- le formulaire de retour s'ouvre à partir de 1 h avant le retour, mais seulement si un constat est ouvert et pas fermé ;
+- le formulaire de retour s'ouvre dès qu'un constat est ouvert et pas fermé, sans attendre l'heure prévue de retour ;
 - une réservation avec constat fermé ne peut pas redémarrer ;
 - une réservation terminée gagne toujours contre un éventuel état de constat ouvert obsolète.
 
@@ -1624,6 +1625,8 @@ Ils sont nettoyés au rechargement :
 2. départ si `shouldShowDepartureActionAt(now)` ;
 3. sinon action de statut, actuellement détail.
 
+Après un départ ou un retour confirmé, `BookingsScreen` recharge ses réservations et signale aussi au shell qu'il faut recharger la liste des véhicules. Cela permet d'afficher immédiatement le véhicule en `En usage` après le départ, sans relancer l'application.
+
 ### Suppression
 
 Avant suppression :
@@ -2184,7 +2187,7 @@ Commande :
 À la dernière exécution locale :
 
 ```text
-77 tests passed
+78 tests passed
 ```
 
 Analyse statique :
@@ -2226,7 +2229,7 @@ Couvre :
 - départ disponible à partir de 1 h avant ;
 - départ encore disponible après retour attendu si jamais démarré ;
 - rappel départ ;
-- retour disponible à partir de 1 h avant retour ;
+- retour disponible immédiatement après départ confirmé ;
 - retour impossible sans départ confirmé ;
 - retour masqué si constat fermé ;
 - constat ouvert hors historique ;
@@ -2926,7 +2929,7 @@ Derniers contrôles effectués avant rédaction :
 
 ```text
 flutter test
-77 tests passed
+78 tests passed
 ```
 
 ```text

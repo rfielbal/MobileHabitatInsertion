@@ -21,6 +21,7 @@ L'application permet de consulter les véhicules disponibles, créer et modifier
 - Espace "Mes Réservations" avec calendrier visuel.
 - Prise en charge du véhicule via constat de départ.
 - Retour du véhicule via constat de fin.
+- Bouton retour disponible immédiatement après le départ confirmé.
 - Statut "En usage" calculé depuis les constats ouverts/non fermés.
 - Signalement d'anomalie avec vidéo optionnelle.
 - Notifications API et rappels locaux de départ/retour.
@@ -271,6 +272,12 @@ Un véhicule est considéré "En usage" uniquement s'il existe une réservation 
 
 Un véhicule avec constat ouvert puis constat fermé est considéré libre.
 
+### Retour véhicule
+
+Dès qu'un constat de départ est ouvert, le bouton `Retour` devient disponible.
+
+Il n'y a plus de contrainte d'heure minimum pour rendre le véhicule.
+
 ### Historique
 
 Une réservation entre dans l'historique lorsque son statut API est terminé.
@@ -288,6 +295,7 @@ La suite actuelle couvre les règles critiques :
 - jours partiels ;
 - conflits de réservation ;
 - tampon d'une heure ;
+- retour disponible immédiatement après départ ;
 - absence de fallback jour par jour sur 404 ;
 - création, modification, suppression de réservation ;
 - rendu des calendriers ;
@@ -302,7 +310,7 @@ flutter test
 À la dernière validation locale :
 
 ```text
-77 tests passed
+78 tests passed
 ```
 
 Analyse statique :
@@ -321,7 +329,7 @@ No issues found
 
 Une documentation détaillée du projet est disponible ici :
 
-[docs/DOCUMENTATION_TECHNIQUE.md](docs/DOCUMENTATION_TECHNIQUE.md)
+[docs/DOCUMENTATION_APP.md](docs/DOCUMENTATION_APP.md)
 
 Elle couvre l'architecture, les modèles, les services, les écrans, les widgets, les flux métier, les règles de réservation, les endpoints API et les points de vigilance.
 

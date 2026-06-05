@@ -12,8 +12,13 @@ import 'vehicle_detail_screen.dart';
 enum VehicleSortMode { priority, status, date }
 
 class VehiclesScreen extends StatefulWidget {
-  const VehiclesScreen({super.key, this.onReservationChanged});
+  const VehiclesScreen({
+    super.key,
+    this.refreshVersion = 0,
+    this.onReservationChanged,
+  });
 
+  final int refreshVersion;
   final VoidCallback? onReservationChanged;
 
   @override
@@ -33,6 +38,15 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
   void initState() {
     super.initState();
     _vehiclesFuture = _fleetApiService.fetchVehicles();
+  }
+
+  @override
+  void didUpdateWidget(covariant VehiclesScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.refreshVersion != widget.refreshVersion) {
+      _vehiclesFuture = _fleetApiService.fetchVehicles();
+    }
   }
 
   @override

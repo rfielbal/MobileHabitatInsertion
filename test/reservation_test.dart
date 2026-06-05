@@ -51,6 +51,17 @@ void main() {
     },
   );
 
+  test('started reservations cannot be cancelled during grace period', () {
+    final reservation = _reservation(
+      startAt: DateTime(2026, 6, 18, 9),
+      endAt: DateTime(2026, 6, 18, 17),
+      createdAt: DateTime(2026, 6, 18, 7, 30),
+      hasOpenConstat: true,
+    );
+
+    expect(reservation.canBeCancelledAt(DateTime(2026, 6, 18, 8)), isFalse);
+  });
+
   test('advance reservations can be cancelled before the edit lock window', () {
     final reservation = _reservation(
       startAt: DateTime(2026, 6, 18, 9),
@@ -113,7 +124,7 @@ void main() {
     );
   });
 
-  test('return form opens only from one hour before expected return', () {
+  test('return form opens immediately after departure confirmation', () {
     final reservation = _reservation(
       startAt: DateTime(2026, 6, 18, 9),
       endAt: DateTime(2026, 6, 18, 17),
@@ -122,12 +133,9 @@ void main() {
 
     expect(
       reservation.shouldShowReturnActionAt(DateTime(2026, 6, 18, 10)),
-      isFalse,
+      isTrue,
     );
-    expect(
-      reservation.canOpenReturnFormAt(DateTime(2026, 6, 18, 15, 59)),
-      isFalse,
-    );
+    expect(reservation.canOpenReturnFormAt(DateTime(2026, 6, 18, 10)), isTrue);
     expect(
       reservation.shouldShowReturnActionAt(DateTime(2026, 6, 18, 16)),
       isTrue,
@@ -233,8 +241,10 @@ void main() {
       startAt: DateTime(2026, 6, 18, 9),
       endAt: DateTime(2026, 6, 18, 17),
       hasClosedConstat: true,
+      createdAt: DateTime(2026, 6, 10, 9),
     );
 
+    expect(reservation.canBeCancelledAt(DateTime(2026, 6, 17, 8, 59)), isFalse);
     expect(
       reservation.shouldShowDepartureActionAt(DateTime(2026, 6, 18, 10)),
       isFalse,
