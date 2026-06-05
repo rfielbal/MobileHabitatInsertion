@@ -87,6 +87,7 @@ class FleetApiMappers {
     final startAt = _date(json['dateDebut']) ?? DateTime.now();
     final endAt =
         _date(json['dateFin']) ?? startAt.add(const Duration(hours: 1));
+    final returnedAt = reservationReturnedAt(json);
     final createdAt =
         _date(json['createdAt']) ??
         _date(json['created_at']) ??
@@ -107,7 +108,36 @@ class FleetApiMappers {
       createdAt: createdAt,
       hasOpenConstat: reservationHasOpenConstat(json),
       hasClosedConstat: reservationHasClosedConstat(json),
+      returnedAt: returnedAt,
     );
+  }
+
+  static DateTime? reservationReturnedAt(Map<String, dynamic> json) {
+    final directReturn =
+        _date(json['dateRendu']) ??
+        _date(json['dateRetour']) ??
+        _date(json['returnedAt']) ??
+        _date(json['closedAt']) ??
+        _date(json['termineLe']);
+    if (directReturn != null) {
+      return directReturn;
+    }
+
+    final constat = json['constat'];
+    if (constat is Map<String, dynamic> && _constatIsClosed(constat)) {
+      return _constatReturnedAt(constat);
+    }
+
+    for (final constat in _listOfMaps(json['constats'])) {
+      if (_constatIsClosed(constat)) {
+        final returnedAt = _constatReturnedAt(constat);
+        if (returnedAt != null) {
+          return returnedAt;
+        }
+      }
+    }
+
+    return null;
   }
 
   static bool reservationHasOpenConstat(Map<String, dynamic> json) {
@@ -450,6 +480,16 @@ class FleetApiMappers {
           constat['kilometrageRetour'] ??
           constat['mileageEnd'],
     ).isNotEmpty;
+  }
+
+  static DateTime? _constatReturnedAt(Map<String, dynamic> constat) {
+    return _date(
+      constat['dateRendu'] ??
+          constat['dateRetour'] ??
+          constat['returnedAt'] ??
+          constat['closedAt'] ??
+          constat['termineLe'],
+    );
   }
 
   static const _weekDays = [

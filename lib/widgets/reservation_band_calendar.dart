@@ -118,7 +118,7 @@ class ReservationBandCalendar extends StatelessWidget {
       }
 
       final start = _dateOnly(reservation.startAt);
-      final end = _dateOnly(reservation.endAt);
+      final end = _dateOnly(reservation.effectiveEndAt);
 
       if (date.isBefore(start) || date.isAfter(end)) {
         continue;

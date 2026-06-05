@@ -258,6 +258,20 @@ void main() {
       isFalse,
     );
   });
+
+  test(
+    'effective end uses the actual return when vehicle is returned early',
+    () {
+      final reservation = _reservation(
+        startAt: DateTime(2026, 6, 5, 10),
+        endAt: DateTime(2026, 6, 7, 10),
+        hasClosedConstat: true,
+        returnedAt: DateTime(2026, 6, 5, 10, 30),
+      );
+
+      expect(reservation.effectiveEndAt, DateTime(2026, 6, 5, 10, 30));
+    },
+  );
 }
 
 FleetReservation _reservation({
@@ -267,6 +281,7 @@ FleetReservation _reservation({
   bool hasClosedConstat = false,
   ReservationStatus status = ReservationStatus.upcoming,
   DateTime? createdAt,
+  DateTime? returnedAt,
 }) {
   return FleetReservation(
     id: '1',
@@ -281,6 +296,7 @@ FleetReservation _reservation({
     createdAt: createdAt,
     hasOpenConstat: hasOpenConstat,
     hasClosedConstat: hasClosedConstat,
+    returnedAt: returnedAt,
   );
 }
 

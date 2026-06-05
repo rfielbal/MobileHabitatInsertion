@@ -38,6 +38,7 @@ class FleetReservation {
     this.createdAt,
     this.hasOpenConstat = false,
     this.hasClosedConstat = false,
+    this.returnedAt,
   });
 
   static const editLockDelay = Duration(hours: 24);
@@ -59,15 +60,26 @@ class FleetReservation {
   final DateTime? createdAt;
   final bool hasOpenConstat;
   final bool hasClosedConstat;
+  final DateTime? returnedAt;
 
   bool get isInHistory {
     return status == ReservationStatus.completed;
+  }
+
+  DateTime get effectiveEndAt {
+    final actualReturn = returnedAt;
+    if (!hasClosedConstat || actualReturn == null) {
+      return endAt;
+    }
+
+    return actualReturn.isBefore(endAt) ? actualReturn : endAt;
   }
 
   FleetReservation copyWith({
     ReservationStatus? status,
     bool? hasOpenConstat,
     bool? hasClosedConstat,
+    DateTime? returnedAt,
   }) {
     return FleetReservation(
       id: id,
@@ -82,6 +94,7 @@ class FleetReservation {
       createdAt: createdAt,
       hasOpenConstat: hasOpenConstat ?? this.hasOpenConstat,
       hasClosedConstat: hasClosedConstat ?? this.hasClosedConstat,
+      returnedAt: returnedAt ?? this.returnedAt,
     );
   }
 

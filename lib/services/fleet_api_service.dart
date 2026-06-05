@@ -91,20 +91,32 @@ class FleetApiService {
     final constats = await _fetchConstatIndex();
     final reservationsWithConstats = [
       for (final reservation in reservations)
-        reservation.copyWith(
-          hasOpenConstat:
-              reservation.hasOpenConstat ||
-              constats.openReservationIds.contains(reservation.id) ||
-              _reservationHasOpenConstatForVehicle(reservation, constats),
-          hasClosedConstat:
-              reservation.hasClosedConstat ||
-              constats.closedReservationIds.contains(reservation.id) ||
-              _reservationHasClosedConstatForVehicle(reservation, constats),
-        ),
+        _reservationWithConstatState(reservation, constats),
     ];
 
     reservationsWithConstats.sort((a, b) => a.startAt.compareTo(b.startAt));
     return reservationsWithConstats;
+  }
+
+  FleetReservation _reservationWithConstatState(
+    FleetReservation reservation,
+    _ConstatIndex constats,
+  ) {
+    final returnedAt =
+        reservation.returnedAt ??
+        _reservationReturnedAtFromConstats(reservation, constats);
+
+    return reservation.copyWith(
+      hasOpenConstat:
+          reservation.hasOpenConstat ||
+          constats.openReservationIds.contains(reservation.id) ||
+          _reservationHasOpenConstatForVehicle(reservation, constats),
+      hasClosedConstat:
+          reservation.hasClosedConstat ||
+          constats.closedReservationIds.containsKey(reservation.id) ||
+          _reservationHasClosedConstatForVehicle(reservation, constats),
+      returnedAt: returnedAt,
+    );
   }
 
   Future<Map<int, AvailabilityStatus>> fetchVehicleAvailabilityForMonth({
@@ -136,7 +148,15 @@ class FleetApiService {
         },
       );
 
-      final apiAvailability = _availabilityFromResponse(response, month);
+      final constats = _availabilityResponseMayContainReservedRanges(response)
+          ? await _fetchConstatIndex()
+          : const _ConstatIndex();
+      final apiAvailability = _availabilityFromResponse(
+        response,
+        month,
+        vehicleId: vehicle.id,
+        constats: constats,
+      );
       availabilityByDay.addAll(apiAvailability.availabilityByDay);
       return VehicleAvailabilityMonth(
         availabilityByDay: availabilityByDay,
@@ -184,7 +204,78 @@ class FleetApiService {
     );
     final availableVehicleIds = _vehicleIdsFromAvailabilityResponse(response);
 
-    return _vehicleIdsMatch(availableVehicleIds, vehicle.id);
+    if (_vehicleIdsMatch(availableVehicleIds, vehicle.id)) {
+      return true;
+    }
+
+    return _isVehicleAvailableForPeriodFromClosedConstats(
+      vehicle: vehicle,
+      startAt: startAt,
+      endAt: endAt,
+    );
+  }
+
+  Future<bool> _isVehicleAvailableForPeriodFromClosedConstats({
+    required Vehicle vehicle,
+    required DateTime startAt,
+    required DateTime endAt,
+  }) async {
+    final constats = await _fetchConstatIndex();
+    final hasClosedVehicleConstat = constats.closedVehicleConstats.any((
+      constat,
+    ) {
+      final returnedAt = constat.returnedAt;
+      return constat.vehicleId == vehicle.id &&
+          returnedAt != null &&
+          !returnedAt.isAfter(endAt);
+    });
+    if (!hasClosedVehicleConstat) {
+      return false;
+    }
+
+    var month = DateTime(startAt.year, startAt.month);
+    final lastMonth = DateTime(endAt.year, endAt.month);
+
+    while (!month.isAfter(lastMonth)) {
+      final Object? response;
+      try {
+        response = await _apiClient.getJson(
+          '/metier/vehicules/${vehicle.id}/disponibilites',
+          queryParameters: {
+            'mois': _monthParameter(month),
+            ..._refreshQueryParameters(),
+          },
+        );
+      } on ApiException catch (error) {
+        if (error.statusCode == 404) {
+          return false;
+        }
+        rethrow;
+      }
+
+      final apiAvailability = _availabilityFromResponse(
+        response,
+        month,
+        vehicleId: vehicle.id,
+        constats: constats,
+      );
+      final availabilityByDay = Map<int, AvailabilityStatus>.of(
+        vehicle.availabilityByDay,
+      )..addAll(apiAvailability.availabilityByDay);
+
+      if (reservationPeriodContainsUnavailableDayForMonth(
+        startAt: startAt,
+        endAt: endAt,
+        month: month,
+        availabilityByDay: availabilityByDay,
+      )) {
+        return false;
+      }
+
+      month = DateTime(month.year, month.month + 1);
+    }
+
+    return true;
   }
 
   Future<FleetReservation> updateReservation({
@@ -386,7 +477,7 @@ class FleetApiService {
       final constats = FleetApiMappers.itemsFromResponse(response);
       final openReservationIds = <String>{};
       final openVehicleConstats = <_OpenVehicleConstat>[];
-      final closedReservationIds = <String>{};
+      final closedReservationIds = <String, DateTime?>{};
       final closedVehicleConstats = <_ClosedVehicleConstat>[];
 
       for (final constat in constats) {
@@ -415,14 +506,15 @@ class FleetApiService {
         }
 
         if (_constatIsClosed(constat)) {
+          final returnedAt = _constatReturnedAt(constat);
           if (reservationId != null) {
-            closedReservationIds.add(reservationId);
+            closedReservationIds[reservationId] = returnedAt;
           }
           if (vehicleId != null) {
             closedVehicleConstats.add(
               _ClosedVehicleConstat(
                 vehicleId: vehicleId,
-                returnedAt: _constatReturnedAt(constat),
+                returnedAt: returnedAt,
                 hasFinalMileage: _hasFinalMileage(constat),
               ),
             );
@@ -498,6 +590,33 @@ class FleetApiService {
     }
 
     return false;
+  }
+
+  DateTime? _reservationReturnedAtFromConstats(
+    FleetReservation reservation,
+    _ConstatIndex constats,
+  ) {
+    if (constats.closedReservationIds.containsKey(reservation.id)) {
+      return constats.closedReservationIds[reservation.id];
+    }
+
+    for (final constat in constats.closedVehicleConstats) {
+      if (constat.vehicleId != reservation.vehicle.id) {
+        continue;
+      }
+
+      final returnedAt = constat.returnedAt;
+      if (returnedAt == null) {
+        continue;
+      }
+
+      if (!returnedAt.isBefore(reservation.startAt) &&
+          !returnedAt.isAfter(reservation.endAt)) {
+        return returnedAt;
+      }
+    }
+
+    return null;
   }
 
   bool _constatMatchesReservation(
@@ -701,8 +820,10 @@ class FleetApiService {
 
   VehicleAvailabilityMonth _availabilityFromResponse(
     Object? response,
-    DateTime month,
-  ) {
+    DateTime month, {
+    required String vehicleId,
+    _ConstatIndex constats = const _ConstatIndex(),
+  }) {
     final availabilityByDay = <int, AvailabilityStatus>{};
     final suggestionsByDay = <int, VehicleAvailabilitySuggestion>{};
 
@@ -744,8 +865,9 @@ class FleetApiService {
     bool addRangeStatus(
       Object? startValue,
       Object? endValue,
-      Object? statusValue,
-    ) {
+      Object? statusValue, {
+      Object? reservationValue,
+    }) {
       final start = _dateFromApiValue(startValue);
       final end = _dateFromApiValue(endValue);
       final status = _availabilityStatusFromApiValue(statusValue);
@@ -757,8 +879,22 @@ class FleetApiService {
         return false;
       }
 
+      final effectiveEnd = _effectiveAvailabilityRangeEnd(
+        startAt: start,
+        endAt: end,
+        status: status,
+        reservationValue: reservationValue,
+        vehicleId: vehicleId,
+        constats: constats,
+      );
+      if (!start.isBefore(effectiveEnd)) {
+        return false;
+      }
+
       var current = DateTime(start.year, start.month, start.day);
-      final lastOccupiedInstant = end.subtract(const Duration(microseconds: 1));
+      final lastOccupiedInstant = effectiveEnd.subtract(
+        const Duration(microseconds: 1),
+      );
       final last = DateTime(
         lastOccupiedInstant.year,
         lastOccupiedInstant.month,
@@ -773,7 +909,7 @@ class FleetApiService {
               status: status,
               day: current,
               rangeStart: start,
-              rangeEnd: end,
+              rangeEnd: effectiveEnd,
             ),
           );
         }
@@ -786,8 +922,8 @@ class FleetApiService {
           latestEndAt: start.subtract(reservationTurnaroundDuration),
         );
         setSuggestion(
-          dateTime: end.add(reservationTurnaroundDuration),
-          earliestStartAt: end.add(reservationTurnaroundDuration),
+          dateTime: effectiveEnd.add(reservationTurnaroundDuration),
+          earliestStartAt: effectiveEnd.add(reservationTurnaroundDuration),
         );
       }
 
@@ -823,6 +959,7 @@ class FleetApiService {
                 reservation['dateDebut'] ?? reservation['startAt'],
                 reservation['dateFin'] ?? reservation['endAt'],
                 AvailabilityStatus.reserved.name,
+                reservationValue: reservation,
               ) ||
               parsedNestedReservationRange;
         }
@@ -835,6 +972,7 @@ class FleetApiService {
             entry['dateDebut'],
             entry['dateFin'],
             statusValue ?? AvailabilityStatus.reserved.name,
+            reservationValue: entry,
           );
           return;
         }
@@ -862,6 +1000,7 @@ class FleetApiService {
                   reservation['dateDebut'] ?? reservation['startAt'],
                   reservation['dateFin'] ?? reservation['endAt'],
                   AvailabilityStatus.reserved.name,
+                  reservationValue: reservation,
                 ) ||
                 parsedNestedReservationRange;
           }
@@ -883,6 +1022,7 @@ class FleetApiService {
                   value['isAvailable'] ??
                   value['type'] ??
                   AvailabilityStatus.reserved.name,
+              reservationValue: value,
             );
             continue;
           }
@@ -951,6 +1091,127 @@ class FleetApiService {
       availabilityByDay: availabilityByDay,
       suggestionsByDay: suggestionsByDay,
     );
+  }
+
+  DateTime _effectiveAvailabilityRangeEnd({
+    required DateTime startAt,
+    required DateTime endAt,
+    required AvailabilityStatus status,
+    required Object? reservationValue,
+    required String vehicleId,
+    required _ConstatIndex constats,
+  }) {
+    if (status != AvailabilityStatus.reserved) {
+      return endAt;
+    }
+
+    final returnedAt = _closedReturnedAtForAvailabilityRange(
+      startAt: startAt,
+      endAt: endAt,
+      reservationValue: reservationValue,
+      vehicleId: vehicleId,
+      constats: constats,
+    );
+    if (returnedAt == null ||
+        returnedAt.isBefore(startAt) ||
+        returnedAt.isAfter(endAt)) {
+      return endAt;
+    }
+
+    return returnedAt;
+  }
+
+  DateTime? _closedReturnedAtForAvailabilityRange({
+    required DateTime startAt,
+    required DateTime endAt,
+    required Object? reservationValue,
+    required String vehicleId,
+    required _ConstatIndex constats,
+  }) {
+    final reservationId = _reservationIdFromAvailabilityValue(reservationValue);
+    if (reservationId != null &&
+        constats.closedReservationIds.containsKey(reservationId)) {
+      return constats.closedReservationIds[reservationId];
+    }
+
+    final rangeVehicleId =
+        _vehicleIdFromAvailabilityValue(reservationValue) ?? vehicleId;
+    DateTime? returnedAt;
+    for (final constat in constats.closedVehicleConstats) {
+      if (constat.vehicleId != rangeVehicleId || constat.returnedAt == null) {
+        continue;
+      }
+
+      final candidate = constat.returnedAt!;
+      if (candidate.isBefore(startAt) || candidate.isAfter(endAt)) {
+        continue;
+      }
+
+      if (returnedAt == null || candidate.isBefore(returnedAt)) {
+        returnedAt = candidate;
+      }
+    }
+
+    return returnedAt;
+  }
+
+  String? _reservationIdFromAvailabilityValue(Object? value) {
+    if (value is! Map<String, dynamic>) {
+      return _idFromNestedValue(value);
+    }
+
+    return _idFromNestedValue(
+      value['id'] ??
+          value['@id'] ??
+          value['reservation'] ??
+          value['reservationId'] ??
+          value['reservation_id'],
+    );
+  }
+
+  String? _vehicleIdFromAvailabilityValue(Object? value) {
+    if (value is! Map<String, dynamic>) {
+      return null;
+    }
+
+    return _idFromNestedValue(
+      value['vehicule'] ?? value['vehiculeId'] ?? value['vehicleId'],
+    );
+  }
+
+  bool _availabilityResponseMayContainReservedRanges(Object? value) {
+    if (value is List) {
+      return value.any(_availabilityResponseMayContainReservedRanges);
+    }
+
+    if (value is! Map<String, dynamic>) {
+      return false;
+    }
+
+    final nestedReservations = FleetApiMappers.itemsFromResponse({
+      'items': value['reservations'],
+    });
+    if (nestedReservations.isNotEmpty) {
+      return true;
+    }
+
+    if (value['dateDebut'] != null && value['dateFin'] != null) {
+      final status = _availabilityStatusFromApiValue(
+        value['statut'] ??
+            value['status'] ??
+            value['etat'] ??
+            value['availability'] ??
+            value['disponibilite'] ??
+            value['disponible'] ??
+            value['estDisponible'] ??
+            value['isAvailable'] ??
+            value['type'] ??
+            AvailabilityStatus.reserved.name,
+      );
+      return status == AvailabilityStatus.reserved;
+    }
+
+    return value.values.any(_availabilityResponseMayContainReservedRanges);
   }
 
   String _monthParameter(DateTime month) {
@@ -1154,7 +1415,7 @@ class _ConstatIndex {
 
   final Set<String> openReservationIds;
   final List<_OpenVehicleConstat> openVehicleConstats;
-  final Set<String> closedReservationIds;
+  final Map<String, DateTime?> closedReservationIds;
   final List<_ClosedVehicleConstat> closedVehicleConstats;
 }
 
