@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:mobile_habitat_insertion/models/reservation.dart';
 import 'package:mobile_habitat_insertion/models/vehicle.dart';
 import 'package:mobile_habitat_insertion/services/api_client.dart';
+import 'package:mobile_habitat_insertion/services/api_exception.dart';
 import 'package:mobile_habitat_insertion/services/fleet_api_mappers.dart';
 import 'package:mobile_habitat_insertion/services/fleet_api_service.dart';
 import 'package:mobile_habitat_insertion/services/reservation_video_service.dart';
@@ -254,12 +255,12 @@ void main() {
         sentBody?['dateRendu'],
         FleetApiMappers.iso(DateTime(2026, 6, 18, 8, 39, 59)),
       );
-      expect(statusBody, {'statue': 'terminé'});
+      expect(statusBody, {'termine': true});
     },
   );
 
   test(
-    'finishConstat succeeds when status patch is rejected after return post',
+    'finishConstat fails when the termine patch is rejected after return post',
     () async {
       var returnRequests = 0;
       var statusRequests = 0;
@@ -296,14 +297,17 @@ void main() {
         endAt: DateTime(2026, 6, 18, 8, 40),
       );
 
-      await service.finishConstat(
-        reservation: reservation,
-        mileage: 120,
-        confirmedAt: DateTime(2026, 6, 18, 8, 39),
+      await expectLater(
+        service.finishConstat(
+          reservation: reservation,
+          mileage: 120,
+          confirmedAt: DateTime(2026, 6, 18, 8, 39),
+        ),
+        throwsA(isA<ApiException>()),
       );
 
       expect(returnRequests, 1);
-      expect(statusRequests, 6);
+      expect(statusRequests, 1);
     },
   );
 
@@ -500,58 +504,54 @@ void main() {
     );
   });
 
-  test(
-    'fetchReservations keeps completed status in history with stale open constat',
-    () async {
-      final startAt = DateTime.now().subtract(const Duration(hours: 2));
-      final endAt = DateTime.now().subtract(const Duration(hours: 1));
-      final service = _serviceWithMockClient((request) async {
-        if (request.url.path == '/api/metier/mes-reservations') {
-          return http.Response(
-            jsonEncode({
-              'items': [
-                _reservationJson(
-                  id: 10,
-                  startAt: startAt,
-                  endAt: endAt,
-                  status: 'termine',
-                ),
-              ],
-            }),
-            200,
-          );
-        }
+  test('fetchReservations lets termine win over stale open constat', () async {
+    final startAt = DateTime.now().subtract(const Duration(hours: 2));
+    final endAt = DateTime.now().subtract(const Duration(hours: 1));
+    final service = _serviceWithMockClient((request) async {
+      if (request.url.path == '/api/metier/mes-reservations') {
+        return http.Response(
+          jsonEncode({
+            'items': [
+              {
+                ..._reservationJson(id: 10, startAt: startAt, endAt: endAt),
+                'termine': true,
+              },
+            ],
+          }),
+          200,
+        );
+      }
 
-        if (request.url.path == '/api/metier/mes-constats') {
-          return http.Response(
-            jsonEncode({
-              'items': [
-                {
-                  'id': 99,
-                  'estOuvert': true,
-                  'reservation': {'id': 10},
-                  'vehicule': {'id': 1},
-                  'datePrise': startAt.toIso8601String(),
-                },
-              ],
-            }),
-            200,
-          );
-        }
+      if (request.url.path == '/api/metier/mes-constats') {
+        return http.Response(
+          jsonEncode({
+            'items': [
+              {
+                'id': 99,
+                'estOuvert': true,
+                'reservation': {'id': 10},
+                'vehicule': {'id': 1},
+                'datePrise': startAt.toIso8601String(),
+              },
+            ],
+          }),
+          200,
+        );
+      }
 
-        return http.Response('{}', 404);
-      });
+      return http.Response('{}', 404);
+    });
 
-      final reservations = await service.fetchReservations();
+    final reservations = await service.fetchReservations();
 
-      expect(reservations.single.hasOpenConstat, isTrue);
-      expect(reservations.single.isInHistory, isTrue);
-      expect(
-        reservations.single.shouldShowReturnActionAt(DateTime.now()),
-        isFalse,
-      );
-    },
-  );
+    expect(reservations.single.hasOpenConstat, isFalse);
+    expect(reservations.single.hasClosedConstat, isTrue);
+    expect(reservations.single.isInHistory, isTrue);
+    expect(
+      reservations.single.shouldShowReturnActionAt(DateTime.now()),
+      isFalse,
+    );
+  });
 
   test(
     'fetchReservations moves reservation to history when statut is termine',
@@ -1194,6 +1194,58 @@ void main() {
         availability.suggestionsByDay[7]?.earliestStartAt,
         DateTime(2026, 6, 7, 11, 30),
       );
+    },
+  );
+
+  test(
+    'fetchVehicleAvailabilityForMonth frees a termine reservation without constat lookup',
+    () async {
+      var constatsRequests = 0;
+      final service = _serviceWithMockClient((request) async {
+        if (request.url.path == '/api/metier/vehicules/1/disponibilites') {
+          return http.Response(
+            jsonEncode({
+              'jours': [
+                {
+                  'date': '2026-06-06',
+                  'statut': 'réservé',
+                  'reservations': [
+                    {
+                      'id': 10,
+                      'dateDebut': '2026-06-06T10:00:00',
+                      'dateFin': '2026-06-11T10:00:00',
+                      'termine': true,
+                    },
+                  ],
+                },
+              ],
+            }),
+            200,
+          );
+        }
+
+        if (request.url.path == '/api/metier/mes-constats') {
+          constatsRequests++;
+          return _emptyConstatsResponse();
+        }
+
+        return http.Response('{}', 404);
+      });
+
+      final availability = await service
+          .fetchVehicleAvailabilityDetailsForMonth(
+            vehicle: _vehicle,
+            month: DateTime(2026, 6),
+          );
+
+      expect(constatsRequests, 0);
+      expect(availability.availabilityByDay[6], isNull);
+      expect(availability.availabilityByDay[7], isNull);
+      expect(availability.availabilityByDay[8], isNull);
+      expect(availability.availabilityByDay[9], isNull);
+      expect(availability.availabilityByDay[10], isNull);
+      expect(availability.availabilityByDay[11], isNull);
+      expect(availability.hasEffectiveReturnAdjustments, isTrue);
     },
   );
 

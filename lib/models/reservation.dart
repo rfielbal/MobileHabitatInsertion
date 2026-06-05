@@ -38,6 +38,7 @@ class FleetReservation {
     this.createdAt,
     this.hasOpenConstat = false,
     this.hasClosedConstat = false,
+    this.isTerminated = false,
     this.returnedAt,
   });
 
@@ -60,15 +61,16 @@ class FleetReservation {
   final DateTime? createdAt;
   final bool hasOpenConstat;
   final bool hasClosedConstat;
+  final bool isTerminated;
   final DateTime? returnedAt;
 
   bool get isInHistory {
-    return status == ReservationStatus.completed;
+    return isTerminated || status == ReservationStatus.completed;
   }
 
   DateTime get effectiveEndAt {
     final actualReturn = returnedAt;
-    if (!hasClosedConstat || actualReturn == null) {
+    if ((!isTerminated && !hasClosedConstat) || actualReturn == null) {
       return endAt;
     }
 
@@ -79,6 +81,7 @@ class FleetReservation {
     ReservationStatus? status,
     bool? hasOpenConstat,
     bool? hasClosedConstat,
+    bool? isTerminated,
     DateTime? returnedAt,
   }) {
     return FleetReservation(
@@ -94,6 +97,7 @@ class FleetReservation {
       createdAt: createdAt,
       hasOpenConstat: hasOpenConstat ?? this.hasOpenConstat,
       hasClosedConstat: hasClosedConstat ?? this.hasClosedConstat,
+      isTerminated: isTerminated ?? this.isTerminated,
       returnedAt: returnedAt ?? this.returnedAt,
     );
   }

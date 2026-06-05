@@ -88,6 +88,7 @@ class FleetApiMappers {
     final endAt =
         _date(json['dateFin']) ?? startAt.add(const Duration(hours: 1));
     final returnedAt = reservationReturnedAt(json);
+    final isTerminated = reservationIsTerminated(json);
     final createdAt =
         _date(json['createdAt']) ??
         _date(json['created_at']) ??
@@ -103,13 +104,45 @@ class FleetApiMappers {
       endAt: endAt,
       startLabel: _reservationDateLabel(startAt),
       endLabel: _reservationDateLabel(endAt),
-      status: _reservationStatus(startAt, endAt, _reservationStatusValue(json)),
+      status: _reservationStatus(
+        startAt,
+        endAt,
+        _reservationStatusValue(json),
+        isTerminated: isTerminated,
+      ),
       expectedStartMileage: vehicle.currentMileage,
       createdAt: createdAt,
       hasOpenConstat: reservationHasOpenConstat(json),
-      hasClosedConstat: reservationHasClosedConstat(json),
+      hasClosedConstat: isTerminated || reservationHasClosedConstat(json),
+      isTerminated: isTerminated,
       returnedAt: returnedAt,
     );
+  }
+
+  static bool reservationHasTerminatedFlag(Map<String, dynamic> json) {
+    return _bool(
+          json['termine'] ??
+              json['isTerminated'] ??
+              json['terminated'] ??
+              json['finished'] ??
+              json['completed'],
+        ) !=
+        null;
+  }
+
+  static bool reservationIsTerminated(Map<String, dynamic> json) {
+    final directValue = _bool(
+      json['termine'] ??
+          json['isTerminated'] ??
+          json['terminated'] ??
+          json['finished'] ??
+          json['completed'],
+    );
+    if (directValue != null) {
+      return directValue;
+    }
+
+    return _statusIsCompleted(_text(_reservationStatusValue(json)));
   }
 
   static DateTime? reservationReturnedAt(Map<String, dynamic> json) {
@@ -171,6 +204,7 @@ class FleetApiMappers {
 
   static bool reservationHasClosedConstat(Map<String, dynamic> json) {
     final directValue =
+        json['termine'] ??
         json['constatFerme'] ??
         json['hasClosedConstat'] ??
         json['retourConfirme'] ??
@@ -277,16 +311,13 @@ class FleetApiMappers {
   static ReservationStatus _reservationStatus(
     DateTime startAt,
     DateTime endAt,
-    Object? apiStatus,
-  ) {
+    Object? apiStatus, {
+    required bool isTerminated,
+  }) {
     final status = _text(apiStatus).toLowerCase();
     final now = DateTime.now();
 
-    if (status.contains('term') ||
-        status.contains('fini') ||
-        status.contains('clos') ||
-        status.contains('completed') ||
-        status.contains('done')) {
+    if (isTerminated || _statusIsCompleted(status)) {
       return ReservationStatus.completed;
     }
     if (_sameDay(startAt, now)) {
@@ -409,6 +440,16 @@ class FleetApiMappers {
   }
 
   static bool _constatIsClosed(Map<String, dynamic> constat) {
+    final terminated = _bool(
+      constat['termine'] ??
+          constat['isTerminated'] ??
+          constat['terminated'] ??
+          constat['finished'] ??
+          constat['completed'],
+    );
+    if (terminated == true) {
+      return true;
+    }
     if (constat['estOuvert'] == false) {
       return true;
     }
@@ -427,6 +468,17 @@ class FleetApiMappers {
   }
 
   static bool _constatIsOpen(Map<String, dynamic> constat) {
+    final terminated = _bool(
+      constat['termine'] ??
+          constat['isTerminated'] ??
+          constat['terminated'] ??
+          constat['finished'] ??
+          constat['completed'],
+    );
+    if (terminated == true) {
+      return false;
+    }
+
     final explicitOpen =
         constat['estOuvert'] ??
         constat['constatOuvert'] ??
@@ -446,11 +498,7 @@ class FleetApiMappers {
           constat['etat'],
     ).toLowerCase();
 
-    if (status.contains('term') ||
-        status.contains('fini') ||
-        status.contains('clos') ||
-        status.contains('completed') ||
-        status.contains('done')) {
+    if (_statusIsCompleted(status)) {
       return false;
     }
 
@@ -494,6 +542,56 @@ class FleetApiMappers {
           constat['closedAt'] ??
           constat['termineLe'],
     );
+  }
+
+  static bool? _bool(Object? value) {
+    if (value is bool) {
+      return value;
+    }
+    if (value is num) {
+      if (value == 0) {
+        return false;
+      }
+      if (value == 1) {
+        return true;
+      }
+    }
+
+    final text = value?.toString().trim().toLowerCase();
+    if (text == null || text.isEmpty) {
+      return null;
+    }
+
+    if (text == 'true' ||
+        text == '1' ||
+        text == 'oui' ||
+        text == 'yes' ||
+        text == 'termine' ||
+        text == 'terminé' ||
+        text == 'completed' ||
+        text == 'done') {
+      return true;
+    }
+
+    if (text == 'false' ||
+        text == '0' ||
+        text == 'non' ||
+        text == 'no' ||
+        text == 'active' ||
+        text == 'en_cours') {
+      return false;
+    }
+
+    return null;
+  }
+
+  static bool _statusIsCompleted(String status) {
+    final lower = status.toLowerCase();
+    return lower.contains('term') ||
+        lower.contains('fini') ||
+        lower.contains('clos') ||
+        lower.contains('completed') ||
+        lower.contains('done');
   }
 
   static const _weekDays = [

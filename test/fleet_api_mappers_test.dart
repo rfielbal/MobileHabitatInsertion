@@ -108,6 +108,36 @@ void main() {
     expect(reservation.isInHistory, isTrue);
   });
 
+  test('termine true moves reservation to history', () {
+    final reservation = FleetApiMappers.reservationFromJson({
+      'id': 1,
+      'dateDebut': '2026-06-18T09:00:00Z',
+      'dateFin': '2026-06-18T17:00:00Z',
+      'termine': true,
+      'vehicule': {'id': 10, 'marque': 'Renault', 'modele': 'Clio'},
+    });
+
+    expect(reservation.isTerminated, isTrue);
+    expect(reservation.hasClosedConstat, isTrue);
+    expect(reservation.status, ReservationStatus.completed);
+    expect(reservation.isInHistory, isTrue);
+  });
+
+  test('termine false keeps a past reservation out of history', () {
+    final now = DateTime.now();
+    final reservation = FleetApiMappers.reservationFromJson({
+      'id': 1,
+      'dateDebut': now.subtract(const Duration(days: 2)).toIso8601String(),
+      'dateFin': now.subtract(const Duration(days: 1)).toIso8601String(),
+      'termine': false,
+      'vehicule': {'id': 10, 'marque': 'Renault', 'modele': 'Clio'},
+    });
+
+    expect(reservation.isTerminated, isFalse);
+    expect(reservation.status, isNot(ReservationStatus.completed));
+    expect(reservation.isInHistory, isFalse);
+  });
+
   test('statut termine moves reservation to history', () {
     final reservation = FleetApiMappers.reservationFromJson({
       'id': 1,

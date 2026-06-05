@@ -291,6 +291,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
             status: ReservationStatus.completed,
             hasOpenConstat: false,
             hasClosedConstat: true,
+            isTerminated: true,
           )
         else if (_locallyStartedReservationIds.contains(reservation.id) &&
             reservation.status != ReservationStatus.completed)

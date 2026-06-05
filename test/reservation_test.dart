@@ -207,6 +207,27 @@ void main() {
     );
   });
 
+  test(
+    'terminated reservations enter history even with an upcoming status',
+    () {
+      final reservation = _reservation(
+        startAt: DateTime(2026, 6, 18, 9),
+        endAt: DateTime(2026, 6, 18, 17),
+        isTerminated: true,
+      );
+
+      expect(reservation.isInHistory, isTrue);
+      expect(
+        reservation.shouldShowDepartureActionAt(DateTime(2026, 6, 18, 10)),
+        isFalse,
+      );
+      expect(
+        reservation.shouldShowReturnActionAt(DateTime(2026, 6, 18, 16)),
+        isFalse,
+      );
+    },
+  );
+
   test('completed status wins over stale open constat state', () {
     final reservation = _reservation(
       startAt: DateTime(2026, 6, 18, 9),
@@ -265,7 +286,7 @@ void main() {
       final reservation = _reservation(
         startAt: DateTime(2026, 6, 5, 10),
         endAt: DateTime(2026, 6, 7, 10),
-        hasClosedConstat: true,
+        isTerminated: true,
         returnedAt: DateTime(2026, 6, 5, 10, 30),
       );
 
@@ -281,6 +302,7 @@ FleetReservation _reservation({
   bool hasClosedConstat = false,
   ReservationStatus status = ReservationStatus.upcoming,
   DateTime? createdAt,
+  bool isTerminated = false,
   DateTime? returnedAt,
 }) {
   return FleetReservation(
@@ -296,6 +318,7 @@ FleetReservation _reservation({
     createdAt: createdAt,
     hasOpenConstat: hasOpenConstat,
     hasClosedConstat: hasClosedConstat,
+    isTerminated: isTerminated,
     returnedAt: returnedAt,
   );
 }
