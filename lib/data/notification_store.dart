@@ -7,6 +7,7 @@ import '../models/app_notification.dart';
 import '../models/reservation.dart';
 import '../services/notification_api_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/reservation_sync.dart';
 
 class NotificationStore {
   const NotificationStore._();
@@ -23,6 +24,8 @@ class NotificationStore {
       'dismissed_local_notification_ids';
   static final Set<int> _dismissedLocalNotificationIds = <int>{};
   static final Set<int> _emittedLocalNotificationIds = <int>{};
+  static final Set<int> _managedReminderNotificationIds = <int>{};
+  static List<FleetReservation>? _lastServerReservations;
   static bool _dismissedLocalNotificationIdsLoaded = false;
 
   static int get unreadCount {
@@ -97,6 +100,16 @@ class NotificationStore {
       for (final item in items.value)
         if (_isLocalNotification(item.id)) item.id,
     };
+    final currentReminderIds = {
+      for (final reservation in reservations) ...[
+        _departureReminderId(reservation),
+        _returnReminderId(reservation),
+      ],
+    };
+    final managedReminderIds = {
+      ..._managedReminderNotificationIds,
+      ...currentReminderIds,
+    };
     final reminders = [
       for (final reservation in reservations)
         if (reservation.shouldCreateDepartureReminderAt(now) &&
@@ -140,10 +153,78 @@ class NotificationStore {
 
     items.value = [
       for (final item in items.value)
-        if (!_isLocalNotification(item.id) || reminderIds.contains(item.id))
+        if (!_isLocalNotification(item.id) ||
+            !managedReminderIds.contains(item.id) ||
+            reminderIds.contains(item.id))
           item,
       for (final reminder in reminders)
         if (!items.value.any((item) => item.id == reminder.id)) reminder,
+    ];
+    _managedReminderNotificationIds
+      ..clear()
+      ..addAll(currentReminderIds);
+  }
+
+  static Future<void> syncServerReservations(
+    List<FleetReservation> reservations, {
+    Set<String> locallyDeletedReservationIds = const {},
+  }) async {
+    final previousReservations = _lastServerReservations;
+    if (previousReservations != null) {
+      final deletedReservations = reservationsDeletedOnServer(
+        previousReservations: previousReservations,
+        currentReservations: reservations,
+        locallyDeletedReservationIds: locallyDeletedReservationIds,
+      );
+      await upsertDeletedReservationNotifications(deletedReservations);
+    }
+
+    _lastServerReservations = reservations;
+  }
+
+  static void resetReservationSyncState() {
+    _lastServerReservations = null;
+  }
+
+  static Future<void> upsertDeletedReservationNotifications(
+    List<FleetReservation> deletedReservations,
+  ) async {
+    if (deletedReservations.isEmpty) {
+      return;
+    }
+
+    await _ensureDismissedLocalNotificationIdsLoaded();
+
+    final existingLocalIds = {
+      for (final item in items.value)
+        if (_isLocalNotification(item.id)) item.id,
+    };
+    final notifications = [
+      for (final reservation in deletedReservations)
+        if (_shouldEmitLocalNotification(
+          _deletedReservationId(reservation),
+          existingLocalIds,
+        ))
+          AppNotification(
+            id: _deletedReservationId(reservation),
+            title: 'Réservation supprimée',
+            body:
+                'Votre réservation de ${reservation.vehicle.name} du ${reservation.startLabel} a été supprimée côté serveur.',
+            timeLabel: 'Maintenant',
+            icon: Icons.event_busy_outlined,
+            color: AppColors.error,
+          ),
+    ];
+
+    for (final notification in notifications) {
+      _emittedLocalNotificationIds.add(notification.id);
+    }
+
+    items.value = [
+      ...items.value,
+      for (final notification in notifications)
+        if (!items.value.any((item) => item.id == notification.id))
+          notification,
     ];
   }
 
@@ -157,6 +238,10 @@ class NotificationStore {
 
   static int _returnReminderId(FleetReservation reservation) {
     return -2000000 - reservation.id.hashCode.abs();
+  }
+
+  static int _deletedReservationId(FleetReservation reservation) {
+    return -3000000 - reservation.id.hashCode.abs();
   }
 
   static bool _shouldEmitLocalNotification(int id, Set<int> existingLocalIds) {

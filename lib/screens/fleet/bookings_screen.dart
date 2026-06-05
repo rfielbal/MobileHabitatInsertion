@@ -37,6 +37,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
   String? _deletingReservationId;
   final _locallyStartedReservationIds = <String>{};
   final _locallyCompletedReservationIds = <String>{};
+  final _locallyDeletedReservationIds = <String>{};
 
   @override
   void initState() {
@@ -253,9 +254,17 @@ class _BookingsScreenState extends State<BookingsScreen> {
 
   Future<List<FleetReservation>> _fetchReservations() async {
     final reservations = await _fleetApiService.fetchReservations();
+    await NotificationStore.syncServerReservations(
+      reservations,
+      locallyDeletedReservationIds: _locallyDeletedReservationIds,
+    );
+
     final reservationIds = reservations
         .map((reservation) => reservation.id)
         .toSet();
+    _locallyDeletedReservationIds.removeWhere(
+      (reservationId) => !reservationIds.contains(reservationId),
+    );
     final apiCompletedReservationIds = reservations
         .where(
           (reservation) => reservation.status == ReservationStatus.completed,
@@ -402,6 +411,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
       if (!mounted) {
         return;
       }
+      _locallyDeletedReservationIds.add(reservation.id);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Réservation supprimée')));

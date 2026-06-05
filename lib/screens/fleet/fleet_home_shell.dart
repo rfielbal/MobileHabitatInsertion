@@ -60,6 +60,7 @@ class _FleetHomeShellState extends State<FleetHomeShell> {
   }
 
   Future<void> _logout() async {
+    NotificationStore.resetReservationSyncState();
     await _authSessionService.clearSession();
     if (!mounted) {
       return;
