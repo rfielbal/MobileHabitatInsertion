@@ -1,3 +1,5 @@
+import 'package:path/path.dart' as p;
+
 import '../models/reservation.dart';
 import '../models/vehicle.dart';
 import '../utils/reservation_calendar_days.dart';
@@ -308,6 +310,7 @@ class FleetApiService {
   Future<void> startConstat(
     FleetReservation reservation, {
     DateTime? confirmedAt,
+    ReservationVideoDraft? departureVideo,
   }) async {
     if (await _reservationAlreadyHasConstat(reservation)) {
       return;
@@ -317,6 +320,17 @@ class FleetApiService {
       reservation,
       confirmedAt ?? DateTime.now(),
     );
+    final uploadedVideo = departureVideo == null
+        ? null
+        : await uploadReservationVideo(
+            departureVideo.copyWith(
+              description: _videoDescription(
+                reservation: reservation,
+                kind: ReservationVideoKind.departure,
+                fallback: departureVideo.description,
+              ),
+            ),
+          );
 
     await _apiClient.post(
       '/metier/constats/demarrer',
@@ -326,7 +340,9 @@ class FleetApiService {
             int.tryParse(reservation.vehicle.id) ?? reservation.vehicle.id,
         'datePrise': FleetApiMappers.iso(datePrise),
         'kmDebut': reservation.expectedStartMileage,
-        'depart': const {'nomFichier': 'video-non-requise', 'taille': '0'},
+        'depart':
+            uploadedVideo?.toConstatPayload() ??
+            _missingVideoPayload(ReservationVideoKind.departure),
       },
     );
   }
@@ -335,19 +351,33 @@ class FleetApiService {
     required FleetReservation reservation,
     required int mileage,
     DateTime? confirmedAt,
+    ReservationVideoDraft? returnVideo,
   }) async {
     final constatId = await _findOpenConstatId(reservation.vehicle.id);
     final dateRendu = _returnTimestampInsideReservation(
       reservation,
       confirmedAt ?? DateTime.now(),
     );
+    final uploadedVideo = returnVideo == null
+        ? null
+        : await uploadReservationVideo(
+            returnVideo.copyWith(
+              description: _videoDescription(
+                reservation: reservation,
+                kind: ReservationVideoKind.returnVehicle,
+                fallback: returnVideo.description,
+              ),
+            ),
+          );
 
     await _apiClient.post(
       '/metier/constats/$constatId/terminer',
       body: {
         'dateRendu': FleetApiMappers.iso(dateRendu),
         'kmFin': mileage,
-        'arrive': const {'nomFichier': 'video-non-requise', 'taille': '0'},
+        'arrive':
+            uploadedVideo?.toConstatPayload() ??
+            _missingVideoPayload(ReservationVideoKind.returnVehicle),
       },
     );
 
@@ -401,13 +431,100 @@ class FleetApiService {
     );
   }
 
-  Future<void> uploadReservationVideo(ReservationVideoDraft video) async {
-    await _apiClient.postMultipart(
+  Future<ReservationVideoUpload> uploadReservationVideo(
+    ReservationVideoDraft video,
+  ) async {
+    final fileSize = await video.file.length();
+    final response = await _apiClient.postMultipart(
       _reservationVideoUploadPath,
       fileField: _reservationVideoFileField,
       filePath: video.file.path,
       fields: video.multipartFields,
     );
+
+    return _videoUploadFromResponse(response, video, fileSize: fileSize);
+  }
+
+  Map<String, dynamic> _missingVideoPayload(ReservationVideoKind kind) {
+    return {
+      'nomFichier': 'video-non-requise',
+      'taille': '0',
+      'type': kind.apiValue,
+      'description': 'Aucune vidéo transmise depuis l’application mobile.',
+    };
+  }
+
+  String _videoDescription({
+    required FleetReservation reservation,
+    required ReservationVideoKind kind,
+    required String fallback,
+  }) {
+    final trimmedFallback = fallback.trim();
+    if (trimmedFallback.isNotEmpty) {
+      return trimmedFallback;
+    }
+
+    final phase = kind == ReservationVideoKind.departure ? 'départ' : 'retour';
+    return 'Vidéo de $phase du véhicule ${reservation.vehicle.internalNumber} pour la réservation ${reservation.id}.';
+  }
+
+  ReservationVideoUpload _videoUploadFromResponse(
+    Object? response,
+    ReservationVideoDraft video, {
+    required int fileSize,
+  }) {
+    final json = _videoResponseMap(response);
+
+    final id = _idFromNestedValue(json['id'] ?? json['videoId'] ?? json['@id']);
+    final nomFichier = _textFromApiValue(
+      json['nomFichier'] ??
+          json['filename'] ??
+          json['fileName'] ??
+          json['name'] ??
+          video.file.name,
+    );
+    final taille = _textFromApiValue(
+      json['taille'] ?? json['size'] ?? json['fileSize'],
+    );
+    final capturedAt =
+        _dateFromApiValue(json['capturedAt'] ?? json['dateCapture']) ??
+        video.capturedAt;
+
+    return ReservationVideoUpload(
+      kind: video.kind,
+      type: _textFromApiValue(json['type']).isEmpty
+          ? video.kind.apiValue
+          : _textFromApiValue(json['type']),
+      description: _textFromApiValue(json['description']).isEmpty
+          ? video.description
+          : _textFromApiValue(json['description']),
+      nomFichier: nomFichier.isEmpty ? p.basename(video.file.path) : nomFichier,
+      taille: taille.isEmpty ? fileSize.toString() : taille,
+      id: id,
+      chemin: _nullableText(json['chemin'] ?? json['path']),
+      url: _nullableText(json['url'] ?? json['publicUrl']),
+      capturedAt: capturedAt,
+    );
+  }
+
+  Map<String, dynamic> _videoResponseMap(Object? response) {
+    if (response is! Map<String, dynamic>) {
+      return const {};
+    }
+
+    for (final key in ['video', 'item', 'data', 'result']) {
+      final nested = response[key];
+      if (nested is Map<String, dynamic>) {
+        return nested;
+      }
+    }
+
+    return response;
+  }
+
+  String? _nullableText(Object? value) {
+    final text = _textFromApiValue(value);
+    return text.isEmpty ? null : text;
   }
 
   Future<void> _markReservationTerminated(FleetReservation reservation) async {

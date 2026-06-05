@@ -333,16 +333,26 @@ void main() {
         startsWith('multipart/form-data'),
       );
       sentBody = request.body;
-      return http.Response('{}', 201);
+      return http.Response(
+        jsonEncode({
+          'id': 45,
+          'nomFichier': 'depart-stocke.mp4',
+          'taille': '5',
+          'type': 'depart',
+          'description': 'Vidéo de départ',
+        }),
+        201,
+      );
     });
     final capturedAt = DateTime(2026, 6, 18, 8, 35);
 
-    await service.uploadReservationVideo(
+    final upload = await service.uploadReservationVideo(
       ReservationVideoDraft(
         reservationId: '10',
         kind: ReservationVideoKind.departure,
         file: XFile(videoFile.path),
         capturedAt: capturedAt,
+        description: 'Vidéo de départ',
       ),
     );
 
@@ -350,9 +360,169 @@ void main() {
     expect(sentBody, contains('10'));
     expect(sentBody, contains('name="type"'));
     expect(sentBody, contains('depart'));
+    expect(sentBody, contains('name="description"'));
+    expect(sentBody, contains('Vidéo de départ'));
     expect(sentBody, contains('name="capturedAt"'));
     expect(sentBody, contains(capturedAt.toIso8601String()));
     expect(sentBody, contains('name="video"; filename="depart.mp4"'));
+    expect(upload.toConstatPayload(), {
+      'nomFichier': 'depart-stocke.mp4',
+      'taille': '5',
+      'type': 'depart',
+      'description': 'Vidéo de départ',
+    });
+  });
+
+  test('startConstat uploads departure video into depart payload', () async {
+    final tempDir = await Directory.systemTemp.createTemp(
+      'wheello_departure_video_test_',
+    );
+    addTearDown(() async {
+      if (await tempDir.exists()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    final videoFile = File('${tempDir.path}/depart.mp4');
+    await videoFile.writeAsBytes([0, 1, 2, 3, 4]);
+
+    String? uploadBody;
+    Map<String, dynamic>? startBody;
+    final service = _serviceWithMockClient((request) async {
+      if (request.method == 'GET') {
+        return _emptyConstatsResponse();
+      }
+
+      if (request.url.path == '/api/metier/videos') {
+        uploadBody = request.body;
+        return http.Response(
+          jsonEncode({
+            'id': 33,
+            'nomFichier': 'depart-stocke.mp4',
+            'taille': '5',
+            'type': 'depart',
+            'description': 'État départ OK',
+          }),
+          201,
+        );
+      }
+
+      expect(request.method, 'POST');
+      expect(request.url.path, '/api/metier/constats/demarrer');
+      startBody = jsonDecode(request.body) as Map<String, dynamic>;
+      return http.Response('{}', 200);
+    });
+    final reservation = _reservation(
+      startAt: DateTime(2026, 6, 18, 8, 30),
+      endAt: DateTime(2026, 6, 18, 17),
+    );
+
+    await service.startConstat(
+      reservation,
+      departureVideo: ReservationVideoDraft(
+        reservationId: reservation.id,
+        kind: ReservationVideoKind.departure,
+        file: XFile(videoFile.path),
+        capturedAt: DateTime(2026, 6, 18, 8, 25),
+        description: 'État départ OK',
+      ),
+    );
+
+    expect(uploadBody, contains('name="type"'));
+    expect(uploadBody, contains('depart'));
+    expect(uploadBody, contains('État départ OK'));
+    expect(startBody?['depart'], {
+      'nomFichier': 'depart-stocke.mp4',
+      'taille': '5',
+      'type': 'depart',
+      'description': 'État départ OK',
+    });
+  });
+
+  test('finishConstat uploads return video into arrive payload', () async {
+    final tempDir = await Directory.systemTemp.createTemp(
+      'wheello_return_video_test_',
+    );
+    addTearDown(() async {
+      if (await tempDir.exists()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    final videoFile = File('${tempDir.path}/arrive.mp4');
+    await videoFile.writeAsBytes([0, 1, 2, 3, 4]);
+
+    String? uploadBody;
+    Map<String, dynamic>? returnBody;
+    Map<String, dynamic>? statusBody;
+    final service = _serviceWithMockClient((request) async {
+      if (request.method == 'GET') {
+        return http.Response(
+          jsonEncode({
+            'items': [
+              {
+                'id': 99,
+                'estOuvert': true,
+                'vehicule': {'id': 1},
+              },
+            ],
+          }),
+          200,
+        );
+      }
+
+      if (request.url.path == '/api/metier/videos') {
+        uploadBody = request.body;
+        return http.Response(
+          jsonEncode({
+            'id': 34,
+            'nomFichier': 'arrive-stocke.mp4',
+            'taille': '5',
+            'type': 'arrive',
+            'description': 'État retour OK',
+          }),
+          201,
+        );
+      }
+
+      if (request.url.path == '/api/metier/constats/99/terminer') {
+        returnBody = jsonDecode(request.body) as Map<String, dynamic>;
+        return http.Response('{}', 200);
+      }
+
+      expect(request.method, 'PATCH');
+      expect(request.url.path, '/api/metier/reservations/10');
+      statusBody = jsonDecode(request.body) as Map<String, dynamic>;
+      return http.Response('{}', 200);
+    });
+    final reservation = _reservation(
+      startAt: DateTime(2026, 6, 18, 8, 30),
+      endAt: DateTime(2026, 6, 18, 17),
+    );
+
+    await service.finishConstat(
+      reservation: reservation,
+      mileage: 120,
+      confirmedAt: DateTime(2026, 6, 18, 16, 30),
+      returnVideo: ReservationVideoDraft(
+        reservationId: reservation.id,
+        kind: ReservationVideoKind.returnVehicle,
+        file: XFile(videoFile.path),
+        capturedAt: DateTime(2026, 6, 18, 16, 25),
+        description: 'État retour OK',
+      ),
+    );
+
+    expect(uploadBody, contains('name="type"'));
+    expect(uploadBody, contains('arrive'));
+    expect(uploadBody, contains('État retour OK'));
+    expect(returnBody?['arrive'], {
+      'nomFichier': 'arrive-stocke.mp4',
+      'taille': '5',
+      'type': 'arrive',
+      'description': 'État retour OK',
+    });
+    expect(statusBody, {'termine': true});
   });
 
   test(

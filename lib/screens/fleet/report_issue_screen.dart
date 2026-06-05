@@ -59,7 +59,9 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
       final message = _descriptionController.text.trim();
 
       if (video != null) {
-        await _fleetApiService.uploadReservationVideo(video);
+        await _fleetApiService.uploadReservationVideo(
+          video.copyWith(description: message),
+        );
         if (mounted) {
           setState(() {
             _isUploadingVideo = false;
