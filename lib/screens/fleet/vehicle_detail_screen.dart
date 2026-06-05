@@ -6,6 +6,7 @@ import '../../services/api_exception.dart';
 import '../../services/fleet_api_service.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/reservation_calendar_days.dart';
+import '../../utils/reservation_time_constraints.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/availability_calendar.dart';
 import '../../widgets/bottom_action_bar.dart';
@@ -247,8 +248,41 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
       return 'L’heure de départ est déjà passée';
     }
 
+    final startTimeError = _startTimeConstraintError(startAt);
+    if (startTimeError != null) {
+      return startTimeError;
+    }
+
+    final endTimeError = _endTimeConstraintError(endAt);
+    if (endTimeError != null) {
+      return endTimeError;
+    }
+
     if (_visibleRangeContainsUnavailableDay(startAt: startAt, endAt: endAt)) {
       return 'La période contient une date réservée, en maintenance ou déjà occupée';
+    }
+
+    return null;
+  }
+
+  String? _startTimeConstraintError(DateTime startAt) {
+    if (reservationStartViolatesEarliestStart(
+      startAt: startAt,
+      suggestionsByDay: _availabilitySuggestionsForDate(startAt),
+    )) {
+      return 'Le départ doit être au moins 1 h après le retour précédent';
+    }
+
+    return null;
+  }
+
+  String? _endTimeConstraintError(DateTime endAt) {
+    if (reservationEndViolatesLatestEnd(
+      endAt: endAt,
+      suggestionsByDay: _availabilitySuggestionsForDate(endAt),
+      userReservations: _userReservations,
+    )) {
+      return 'Le retour doit être au moins 1 h avant le prochain départ';
     }
 
     return null;
@@ -288,9 +322,35 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
       return;
     }
 
+    final date = isStart ? _startDate : _endDate;
+    final pickedAt = date == null ? null : _dateTimeWithTime(date, picked);
+    String? constraintError;
+    if (pickedAt != null) {
+      constraintError = isStart
+          ? _startTimeConstraintError(pickedAt)
+          : _endTimeConstraintError(pickedAt);
+    }
+
+    if (constraintError != null && date != null) {
+      setState(() {
+        if (isStart) {
+          _startTime = _suggestedStartTimeForDate(date);
+        } else {
+          _endTime = _suggestedEndTimeForDate(date);
+        }
+        _calendarError = constraintError;
+      });
+      return;
+    }
+
     setState(() {
       if (isStart) {
         _startTime = picked;
+        if (_startDate != null &&
+            _endDate != null &&
+            _sameCalendarDay(_startDate!, _endDate!)) {
+          _endTime = _suggestedEndTimeForDate(_endDate!);
+        }
       } else {
         _endTime = picked;
       }
@@ -566,32 +626,41 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   }
 
   TimeOfDay _suggestedStartTimeForDate(DateTime date) {
-    final suggestion = _availabilitySuggestionsByDay[date.day]?.earliestStartAt;
-    final nowPlusTurnaround = DateTime.now().add(reservationTurnaroundDuration);
-    var selected = suggestion ?? _dateTimeWithTime(date, _defaultStartTime());
-
-    if (_sameDay(date, DateTime.now()) &&
-        selected.isBefore(nowPlusTurnaround)) {
-      selected = nowPlusTurnaround;
-    }
-
-    return TimeOfDay.fromDateTime(selected);
+    return TimeOfDay.fromDateTime(
+      suggestedReservationStartAt(
+        date: date,
+        suggestionsByDay: _availabilitySuggestionsForDate(date),
+      ),
+    );
   }
 
   TimeOfDay _suggestedEndTimeForDate(DateTime date) {
-    final suggestion = _availabilitySuggestionsByDay[date.day]?.latestEndAt;
-    if (suggestion == null) {
-      return _endTime;
+    return TimeOfDay.fromDateTime(
+      suggestedReservationEndAt(
+        date: date,
+        suggestionsByDay: _availabilitySuggestionsForDate(date),
+        startAt: _selectedDateTime(_startDate, _startTime),
+        userReservations: _userReservations,
+      ),
+    );
+  }
+
+  Map<int, VehicleAvailabilitySuggestion> _availabilitySuggestionsForDate(
+    DateTime date,
+  ) {
+    if (date.year != _calendarMonth.year ||
+        date.month != _calendarMonth.month) {
+      return const {};
     }
 
-    return TimeOfDay.fromDateTime(suggestion);
+    return _availabilitySuggestionsByDay;
   }
 
   DateTime _dateTimeWithTime(DateTime date, TimeOfDay time) {
     return DateTime(date.year, date.month, date.day, time.hour, time.minute);
   }
 
-  bool _sameDay(DateTime first, DateTime second) {
+  bool _sameCalendarDay(DateTime first, DateTime second) {
     return first.year == second.year &&
         first.month == second.month &&
         first.day == second.day;
