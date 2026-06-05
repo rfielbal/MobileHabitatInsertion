@@ -78,10 +78,12 @@ class VehicleAvailabilityMonth {
   const VehicleAvailabilityMonth({
     required this.availabilityByDay,
     this.suggestionsByDay = const {},
+    this.hasEffectiveReturnAdjustments = false,
   });
 
   final Map<int, AvailabilityStatus> availabilityByDay;
   final Map<int, VehicleAvailabilitySuggestion> suggestionsByDay;
+  final bool hasEffectiveReturnAdjustments;
 }
 
 class VehicleAvailabilitySuggestion {

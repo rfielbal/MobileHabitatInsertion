@@ -116,6 +116,10 @@ class FleetApiMappers {
     final directReturn =
         _date(json['dateRendu']) ??
         _date(json['dateRetour']) ??
+        _date(json['dateFinReelle']) ??
+        _date(json['dateFinEffective']) ??
+        _date(json['finEffective']) ??
+        _date(json['returned_at']) ??
         _date(json['returnedAt']) ??
         _date(json['closedAt']) ??
         _date(json['termineLe']);

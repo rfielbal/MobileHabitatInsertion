@@ -852,7 +852,35 @@ void main() {
     'isVehicleAvailableForPeriod blocks exact unavailable periods',
     () async {
       final service = _serviceWithMockClient((request) async {
-        expect(request.url.path, '/api/metier/vehicules-disponibles');
+        if (request.url.path == '/api/metier/vehicules-disponibles') {
+          return http.Response(jsonEncode({'items': []}), 200);
+        }
+
+        if (request.url.path == '/api/metier/mes-constats') {
+          return _emptyConstatsResponse();
+        }
+
+        if (request.url.path == '/api/metier/vehicules/1/disponibilites') {
+          return http.Response(
+            jsonEncode({
+              'jours': [
+                {
+                  'date': '2026-06-04',
+                  'statut': 'réservé',
+                  'reservations': [
+                    {
+                      'id': 10,
+                      'dateDebut': '2026-06-04T08:30:00',
+                      'dateFin': '2026-06-04T12:00:00',
+                    },
+                  ],
+                },
+              ],
+            }),
+            200,
+          );
+        }
+
         return http.Response(jsonEncode({'items': []}), 200);
       });
 
@@ -1115,6 +1143,105 @@ void main() {
       expect(
         availability.suggestionsByDay[5]?.earliestStartAt,
         DateTime(2026, 6, 5, 11, 30),
+      );
+    },
+  );
+
+  test(
+    'fetchVehicleAvailabilityForMonth truncates reservation using direct return date',
+    () async {
+      final service = _serviceWithMockClient((request) async {
+        if (request.url.path == '/api/metier/vehicules/1/disponibilites') {
+          return http.Response(
+            jsonEncode({
+              'jours': [
+                {
+                  'date': '2026-06-06',
+                  'statut': 'réservé',
+                  'reservations': [
+                    {
+                      'id': 10,
+                      'dateDebut': '2026-06-06T10:00:00',
+                      'dateFin': '2026-06-11T10:00:00',
+                      'dateRendu': '2026-06-07T10:30:00',
+                      'constatFerme': true,
+                    },
+                  ],
+                },
+              ],
+            }),
+            200,
+          );
+        }
+
+        return http.Response('{}', 404);
+      });
+
+      final availability = await service
+          .fetchVehicleAvailabilityDetailsForMonth(
+            vehicle: _vehicle,
+            month: DateTime(2026, 6),
+          );
+
+      expect(availability.availabilityByDay[6], AvailabilityStatus.partial);
+      expect(availability.availabilityByDay[7], AvailabilityStatus.partial);
+      expect(availability.availabilityByDay[8], isNull);
+      expect(availability.availabilityByDay[9], isNull);
+      expect(availability.availabilityByDay[10], isNull);
+      expect(availability.availabilityByDay[11], isNull);
+      expect(availability.hasEffectiveReturnAdjustments, isTrue);
+      expect(
+        availability.suggestionsByDay[7]?.earliestStartAt,
+        DateTime(2026, 6, 7, 11, 30),
+      );
+    },
+  );
+
+  test(
+    'isVehicleAvailableForPeriod allows a period after direct early return',
+    () async {
+      final service = _serviceWithMockClient((request) async {
+        if (request.url.path == '/api/metier/vehicules-disponibles') {
+          return http.Response(jsonEncode({'items': []}), 200);
+        }
+
+        if (request.url.path == '/api/metier/mes-constats') {
+          return _emptyConstatsResponse();
+        }
+
+        if (request.url.path == '/api/metier/vehicules/1/disponibilites') {
+          return http.Response(
+            jsonEncode({
+              'jours': [
+                {
+                  'date': '2026-06-06',
+                  'statut': 'réservé',
+                  'reservations': [
+                    {
+                      'id': 10,
+                      'dateDebut': '2026-06-06T10:00:00',
+                      'dateFin': '2026-06-11T10:00:00',
+                      'dateRendu': '2026-06-07T10:30:00',
+                      'constatFerme': true,
+                    },
+                  ],
+                },
+              ],
+            }),
+            200,
+          );
+        }
+
+        return http.Response('{}', 404);
+      });
+
+      expect(
+        await service.isVehicleAvailableForPeriod(
+          vehicle: _vehicle,
+          startAt: DateTime(2026, 6, 8, 9),
+          endAt: DateTime(2026, 6, 8, 18),
+        ),
+        isTrue,
       );
     },
   );

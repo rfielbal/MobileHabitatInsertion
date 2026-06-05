@@ -161,6 +161,8 @@ class FleetApiService {
       return VehicleAvailabilityMonth(
         availabilityByDay: availabilityByDay,
         suggestionsByDay: apiAvailability.suggestionsByDay,
+        hasEffectiveReturnAdjustments:
+            apiAvailability.hasEffectiveReturnAdjustments,
       );
     } on ApiException catch (error) {
       if (error.statusCode != 404) {
@@ -208,33 +210,22 @@ class FleetApiService {
       return true;
     }
 
-    return _isVehicleAvailableForPeriodFromClosedConstats(
+    return _isVehicleAvailableForPeriodFromEffectiveAvailability(
       vehicle: vehicle,
       startAt: startAt,
       endAt: endAt,
     );
   }
 
-  Future<bool> _isVehicleAvailableForPeriodFromClosedConstats({
+  Future<bool> _isVehicleAvailableForPeriodFromEffectiveAvailability({
     required Vehicle vehicle,
     required DateTime startAt,
     required DateTime endAt,
   }) async {
     final constats = await _fetchConstatIndex();
-    final hasClosedVehicleConstat = constats.closedVehicleConstats.any((
-      constat,
-    ) {
-      final returnedAt = constat.returnedAt;
-      return constat.vehicleId == vehicle.id &&
-          returnedAt != null &&
-          !returnedAt.isAfter(endAt);
-    });
-    if (!hasClosedVehicleConstat) {
-      return false;
-    }
-
     var month = DateTime(startAt.year, startAt.month);
     final lastMonth = DateTime(endAt.year, endAt.month);
+    var hasEffectiveReturnAdjustment = false;
 
     while (!month.isAfter(lastMonth)) {
       final Object? response;
@@ -259,6 +250,9 @@ class FleetApiService {
         vehicleId: vehicle.id,
         constats: constats,
       );
+      hasEffectiveReturnAdjustment =
+          hasEffectiveReturnAdjustment ||
+          apiAvailability.hasEffectiveReturnAdjustments;
       final availabilityByDay = Map<int, AvailabilityStatus>.of(
         vehicle.availabilityByDay,
       )..addAll(apiAvailability.availabilityByDay);
@@ -275,7 +269,7 @@ class FleetApiService {
       month = DateTime(month.year, month.month + 1);
     }
 
-    return true;
+    return hasEffectiveReturnAdjustment;
   }
 
   Future<FleetReservation> updateReservation({
@@ -826,6 +820,7 @@ class FleetApiService {
   }) {
     final availabilityByDay = <int, AvailabilityStatus>{};
     final suggestionsByDay = <int, VehicleAvailabilitySuggestion>{};
+    var hasEffectiveReturnAdjustments = false;
 
     void setStatus(int day, AvailabilityStatus status) {
       final existing = availabilityByDay[day];
@@ -889,6 +884,9 @@ class FleetApiService {
       );
       if (!start.isBefore(effectiveEnd)) {
         return false;
+      }
+      if (effectiveEnd.isBefore(end)) {
+        hasEffectiveReturnAdjustments = true;
       }
 
       var current = DateTime(start.year, start.month, start.day);
@@ -1052,6 +1050,7 @@ class FleetApiService {
       return VehicleAvailabilityMonth(
         availabilityByDay: availabilityByDay,
         suggestionsByDay: suggestionsByDay,
+        hasEffectiveReturnAdjustments: hasEffectiveReturnAdjustments,
       );
     }
 
@@ -1059,6 +1058,7 @@ class FleetApiService {
       return VehicleAvailabilityMonth(
         availabilityByDay: availabilityByDay,
         suggestionsByDay: suggestionsByDay,
+        hasEffectiveReturnAdjustments: hasEffectiveReturnAdjustments,
       );
     }
 
@@ -1090,6 +1090,7 @@ class FleetApiService {
     return VehicleAvailabilityMonth(
       availabilityByDay: availabilityByDay,
       suggestionsByDay: suggestionsByDay,
+      hasEffectiveReturnAdjustments: hasEffectiveReturnAdjustments,
     );
   }
 
@@ -1128,6 +1129,13 @@ class FleetApiService {
     required String vehicleId,
     required _ConstatIndex constats,
   }) {
+    final returnedAtFromReservation = _returnedAtFromAvailabilityValue(
+      reservationValue,
+    );
+    if (returnedAtFromReservation != null) {
+      return returnedAtFromReservation;
+    }
+
     final reservationId = _reservationIdFromAvailabilityValue(reservationValue);
     if (reservationId != null &&
         constats.closedReservationIds.containsKey(reservationId)) {
@@ -1153,6 +1161,14 @@ class FleetApiService {
     }
 
     return returnedAt;
+  }
+
+  DateTime? _returnedAtFromAvailabilityValue(Object? value) {
+    if (value is! Map<String, dynamic>) {
+      return null;
+    }
+
+    return FleetApiMappers.reservationReturnedAt(value);
   }
 
   String? _reservationIdFromAvailabilityValue(Object? value) {
