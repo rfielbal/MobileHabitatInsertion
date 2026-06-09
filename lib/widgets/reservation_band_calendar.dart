@@ -16,6 +16,7 @@ class ReservationBandCalendar extends StatelessWidget {
     required this.onPreviousMonth,
     required this.onNextMonth,
     this.onCurrentMonth,
+    this.now,
   });
 
   final DateTime month;
@@ -26,12 +27,14 @@ class ReservationBandCalendar extends StatelessWidget {
   final VoidCallback onPreviousMonth;
   final VoidCallback onNextMonth;
   final VoidCallback? onCurrentMonth;
+  final DateTime? now;
 
   @override
   Widget build(BuildContext context) {
     final firstDay = DateTime(month.year, month.month);
     final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
     final leadingEmptyDays = firstDay.weekday - 1;
+    final today = _dateOnly(now ?? DateTime.now());
 
     return AppCard(
       child: Column(
@@ -95,11 +98,20 @@ class ReservationBandCalendar extends StatelessWidget {
             childAspectRatio: 0.82,
             children: [
               for (var index = 0; index < leadingEmptyDays; index++)
-                const _ReservationCalendarDay(day: null, bands: []),
+                const _ReservationCalendarDay(
+                  day: null,
+                  bands: [],
+                  isPast: false,
+                ),
               for (var day = 1; day <= daysInMonth; day++)
                 _ReservationCalendarDay(
                   day: day,
                   bands: _bandsForDay(DateTime(month.year, month.month, day)),
+                  isPast: DateTime(
+                    month.year,
+                    month.month,
+                    day,
+                  ).isBefore(today),
                 ),
             ],
           ),
@@ -157,10 +169,15 @@ class ReservationBandCalendar extends StatelessWidget {
 }
 
 class _ReservationCalendarDay extends StatelessWidget {
-  const _ReservationCalendarDay({required this.day, required this.bands});
+  const _ReservationCalendarDay({
+    required this.day,
+    required this.bands,
+    required this.isPast,
+  });
 
   final int? day;
   final List<_ReservationBand> bands;
+  final bool isPast;
 
   @override
   Widget build(BuildContext context) {
@@ -170,6 +187,11 @@ class _ReservationCalendarDay extends StatelessWidget {
 
     final visibleBands = bands.take(3).toList();
     final hiddenCount = bands.length - visibleBands.length;
+    final dayColor = isPast
+        ? AppColors.outline
+        : bands.isEmpty
+        ? AppColors.onSurface
+        : AppColors.primary;
 
     return Semantics(
       label: _semanticLabel,
@@ -182,7 +204,7 @@ class _ReservationCalendarDay extends StatelessWidget {
               right: 0,
               top: 0,
               height: 32,
-              child: _ReservationBandHighlight(band: band),
+              child: _ReservationBandHighlight(band: band, isPast: isPast),
             ),
           Positioned(
             left: 0,
@@ -193,9 +215,7 @@ class _ReservationCalendarDay extends StatelessWidget {
               child: Text(
                 '$day',
                 style: TextStyle(
-                  color: bands.isEmpty
-                      ? AppColors.onSurface
-                      : AppColors.primary,
+                  color: dayColor,
                   fontWeight: bands.isEmpty ? FontWeight.w600 : FontWeight.w800,
                 ),
               ),
@@ -209,8 +229,10 @@ class _ReservationCalendarDay extends StatelessWidget {
                 ? Text(
                     '+$hiddenCount',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: AppColors.onSurfaceVariant,
+                    style: TextStyle(
+                      color: isPast
+                          ? AppColors.outline
+                          : AppColors.onSurfaceVariant,
                       fontSize: 9,
                       fontWeight: FontWeight.w700,
                     ),
@@ -223,18 +245,20 @@ class _ReservationCalendarDay extends StatelessWidget {
   }
 
   String get _semanticLabel {
+    final pastSuffix = isPast ? ', passé' : '';
     if (bands.isEmpty) {
-      return 'Jour $day, aucune réservation';
+      return 'Jour $day$pastSuffix, aucune réservation';
     }
 
-    return 'Jour $day, ${bands.length} réservation${bands.length > 1 ? 's' : ''}';
+    return 'Jour $day$pastSuffix, ${bands.length} réservation${bands.length > 1 ? 's' : ''}';
   }
 }
 
 class _ReservationBandHighlight extends StatelessWidget {
-  const _ReservationBandHighlight({required this.band});
+  const _ReservationBandHighlight({required this.band, required this.isPast});
 
   final _ReservationBand band;
+  final bool isPast;
 
   @override
   Widget build(BuildContext context) {
@@ -244,7 +268,9 @@ class _ReservationBandHighlight extends StatelessWidget {
         right: band.endsToday ? 4 : 0,
       ),
       decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.18),
+        color: isPast
+            ? AppColors.outline.withValues(alpha: 0.18)
+            : AppColors.primary.withValues(alpha: 0.18),
         borderRadius: BorderRadius.horizontal(
           left: Radius.circular(band.startsToday ? 999 : 0),
           right: Radius.circular(band.endsToday ? 999 : 0),

@@ -3,6 +3,7 @@ import 'package:mobile_habitat_insertion/main.dart';
 import 'package:mobile_habitat_insertion/models/reservation.dart';
 import 'package:mobile_habitat_insertion/models/vehicle.dart';
 import 'package:mobile_habitat_insertion/screens/fleet/vehicles_screen.dart';
+import 'package:mobile_habitat_insertion/theme/app_colors.dart';
 import 'package:mobile_habitat_insertion/theme/app_theme.dart';
 import 'package:mobile_habitat_insertion/widgets/availability_calendar.dart';
 import 'package:mobile_habitat_insertion/widgets/reservation_band_calendar.dart';
@@ -143,6 +144,32 @@ void main() {
     expect(find.text('Juin 2026'), findsOneWidget);
     expect(find.text('6'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Reservation band calendar greys past days', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: ReservationBandCalendar(
+              month: DateTime(2026, 6),
+              now: DateTime(2026, 6, 9, 12),
+              reservations: const [],
+              canGoToPreviousMonth: false,
+              onPreviousMonth: () {},
+              onNextMonth: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final pastDay = tester.widget<Text>(find.text('8'));
+    final currentDay = tester.widget<Text>(find.text('9'));
+
+    expect(pastDay.style?.color, AppColors.outline);
+    expect(currentDay.style?.color, AppColors.onSurface);
   });
 }
 
