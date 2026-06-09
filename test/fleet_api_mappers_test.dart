@@ -20,21 +20,20 @@ void main() {
     },
   );
 
-  test('reservation mapper detects open constats', () {
+  test('reservation mapper detects started reservations from demarre', () {
     final reservation = FleetApiMappers.reservationFromJson({
       'id': 1,
       'dateDebut': '2026-06-18T09:00:00Z',
       'dateFin': '2026-06-18T17:00:00Z',
       'vehicule': {'id': 10, 'marque': 'Renault', 'modele': 'Clio'},
-      'constats': [
-        {'estOuvert': true},
-      ],
+      'demarre': true,
     });
 
+    expect(reservation.isStarted, isTrue);
     expect(reservation.hasOpenConstat, isTrue);
   });
 
-  test('reservation mapper detects open constats from status', () {
+  test('reservation mapper keeps constats from deciding started state', () {
     final reservation = FleetApiMappers.reservationFromJson({
       'id': 1,
       'dateDebut': '2026-06-18T09:00:00Z',
@@ -45,25 +44,30 @@ void main() {
       ],
     });
 
-    expect(reservation.hasOpenConstat, isTrue);
+    expect(reservation.isStarted, isFalse);
+    expect(reservation.hasOpenConstat, isFalse);
   });
 
-  test('reservation mapper detects closed constats', () {
+  test('reservation mapper detects returned terminated reservations', () {
     final reservation = FleetApiMappers.reservationFromJson({
       'id': 1,
       'dateDebut': '2026-06-18T09:00:00Z',
       'dateFin': '2026-06-18T17:00:00Z',
+      'termine': true,
+      'dateRendu': '2026-06-18T16:59:59Z',
       'vehicule': {'id': 10, 'marque': 'Renault', 'modele': 'Clio'},
-      'constats': [
-        {'estOuvert': false, 'dateRendu': '2026-06-18T16:59:59Z'},
-      ],
     });
 
+    expect(reservation.isTerminated, isTrue);
     expect(reservation.hasClosedConstat, isTrue);
-    expect(reservation.isInHistory, isFalse);
+    expect(reservation.isInHistory, isTrue);
+    expect(
+      reservation.effectiveEndAt,
+      DateTime.parse('2026-06-18T16:59:59Z').toLocal(),
+    );
   });
 
-  test('reservation mapper detects final mileage as closed constat', () {
+  test('reservation mapper ignores final mileage without termine', () {
     final reservation = FleetApiMappers.reservationFromJson({
       'id': 1,
       'dateDebut': '2026-06-18T09:00:00Z',
@@ -74,8 +78,22 @@ void main() {
       ],
     });
 
-    expect(reservation.hasClosedConstat, isTrue);
+    expect(reservation.hasClosedConstat, isFalse);
     expect(reservation.isInHistory, isFalse);
+  });
+
+  test('reservation mapper reads constat id for started reservation', () {
+    final reservation = FleetApiMappers.reservationFromJson({
+      'id': 1,
+      'dateDebut': '2026-06-18T09:00:00Z',
+      'dateFin': '2026-06-18T17:00:00Z',
+      'demarre': true,
+      'constat': {'@id': '/api/metier/constats/99'},
+      'vehicule': {'id': 10, 'marque': 'Renault', 'modele': 'Clio'},
+    });
+
+    expect(reservation.isStarted, isTrue);
+    expect(reservation.constatId, '99');
   });
 
   test(

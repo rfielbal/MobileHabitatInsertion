@@ -247,14 +247,14 @@ void main() {
     );
   });
 
-  test('closed constats alone do not move reservations to history', () {
+  test('terminated reservations move reservations to history', () {
     final reservation = _reservation(
       startAt: DateTime(2026, 6, 18, 9),
       endAt: DateTime(2026, 6, 18, 17),
       hasClosedConstat: true,
     );
 
-    expect(reservation.isInHistory, isFalse);
+    expect(reservation.isInHistory, isTrue);
   });
 
   test('closed constats prevent starting the same reservation again', () {

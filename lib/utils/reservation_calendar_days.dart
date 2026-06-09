@@ -11,9 +11,7 @@ Set<int> userUnavailableReservationDaysForMonth({
   final days = <int>{};
 
   for (final reservation in reservations) {
-    if (reservation.id == excludedReservationId ||
-        reservation.isInHistory ||
-        reservation.hasClosedConstat) {
+    if (reservation.id == excludedReservationId || reservation.isInHistory) {
       continue;
     }
 
@@ -89,9 +87,7 @@ bool userHasOverlappingReservation({
   }
 
   for (final reservation in reservations) {
-    if (reservation.id == excludedReservationId ||
-        reservation.isInHistory ||
-        reservation.hasClosedConstat) {
+    if (reservation.id == excludedReservationId || reservation.isInHistory) {
       continue;
     }
 

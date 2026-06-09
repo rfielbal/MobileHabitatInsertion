@@ -90,45 +90,9 @@ class FleetApiService {
     final reservations = FleetApiMappers.itemsFromResponse(
       response,
     ).map(FleetApiMappers.reservationFromJson).toList();
-    final constats = await _fetchConstatIndex();
-    final reservationsWithConstats = [
-      for (final reservation in reservations)
-        _reservationWithConstatState(reservation, constats),
-    ];
 
-    reservationsWithConstats.sort((a, b) => a.startAt.compareTo(b.startAt));
-    return reservationsWithConstats;
-  }
-
-  FleetReservation _reservationWithConstatState(
-    FleetReservation reservation,
-    _ConstatIndex constats,
-  ) {
-    if (reservation.isTerminated) {
-      return reservation.copyWith(
-        hasOpenConstat: false,
-        hasClosedConstat: true,
-        returnedAt:
-            reservation.returnedAt ??
-            _reservationReturnedAtFromConstats(reservation, constats),
-      );
-    }
-
-    final returnedAt =
-        reservation.returnedAt ??
-        _reservationReturnedAtFromConstats(reservation, constats);
-
-    return reservation.copyWith(
-      hasOpenConstat:
-          reservation.hasOpenConstat ||
-          constats.openReservationIds.contains(reservation.id) ||
-          _reservationHasOpenConstatForVehicle(reservation, constats),
-      hasClosedConstat:
-          reservation.hasClosedConstat ||
-          constats.closedReservationIds.containsKey(reservation.id) ||
-          _reservationHasClosedConstatForVehicle(reservation, constats),
-      returnedAt: returnedAt,
-    );
+    reservations.sort((a, b) => a.startAt.compareTo(b.startAt));
+    return reservations;
   }
 
   Future<Map<int, AvailabilityStatus>> fetchVehicleAvailabilityForMonth({
@@ -160,14 +124,10 @@ class FleetApiService {
         },
       );
 
-      final constats = _availabilityResponseNeedsConstatLookup(response)
-          ? await _fetchConstatIndex()
-          : const _ConstatIndex();
       final apiAvailability = _availabilityFromResponse(
         response,
         month,
         vehicleId: vehicle.id,
-        constats: constats,
       );
       availabilityByDay.addAll(apiAvailability.availabilityByDay);
       return VehicleAvailabilityMonth(
@@ -222,22 +182,20 @@ class FleetApiService {
       return true;
     }
 
-    return _isVehicleAvailableForPeriodFromEffectiveAvailability(
+    return _isVehicleAvailableForPeriodFromDetailedAvailability(
       vehicle: vehicle,
       startAt: startAt,
       endAt: endAt,
     );
   }
 
-  Future<bool> _isVehicleAvailableForPeriodFromEffectiveAvailability({
+  Future<bool> _isVehicleAvailableForPeriodFromDetailedAvailability({
     required Vehicle vehicle,
     required DateTime startAt,
     required DateTime endAt,
   }) async {
-    final constats = await _fetchConstatIndex();
     var month = DateTime(startAt.year, startAt.month);
     final lastMonth = DateTime(endAt.year, endAt.month);
-    var hasEffectiveReturnAdjustment = false;
 
     while (!month.isAfter(lastMonth)) {
       final Object? response;
@@ -256,15 +214,19 @@ class FleetApiService {
         rethrow;
       }
 
+      if (_availabilityResponseHasActiveOverlap(
+        response,
+        startAt: startAt,
+        endAt: endAt,
+      )) {
+        return false;
+      }
+
       final apiAvailability = _availabilityFromResponse(
         response,
         month,
         vehicleId: vehicle.id,
-        constats: constats,
       );
-      hasEffectiveReturnAdjustment =
-          hasEffectiveReturnAdjustment ||
-          apiAvailability.hasEffectiveReturnAdjustments;
       final availabilityByDay = Map<int, AvailabilityStatus>.of(
         vehicle.availabilityByDay,
       )..addAll(apiAvailability.availabilityByDay);
@@ -281,7 +243,119 @@ class FleetApiService {
       month = DateTime(month.year, month.month + 1);
     }
 
-    return hasEffectiveReturnAdjustment;
+    return true;
+  }
+
+  bool _availabilityResponseHasActiveOverlap(
+    Object? value, {
+    required DateTime startAt,
+    required DateTime endAt,
+  }) {
+    if (value is List) {
+      return value.any(
+        (entry) => _availabilityResponseHasActiveOverlap(
+          entry,
+          startAt: startAt,
+          endAt: endAt,
+        ),
+      );
+    }
+
+    if (value is! Map<String, dynamic>) {
+      return false;
+    }
+
+    final nestedReservations = FleetApiMappers.itemsFromResponse({
+      'items': value['reservations'],
+    });
+    if (nestedReservations.any(
+      (reservation) => _availabilityRangeOverlapsPeriod(
+        reservation,
+        fallbackStatus: AvailabilityStatus.reserved,
+        startAt: startAt,
+        endAt: endAt,
+      ),
+    )) {
+      return true;
+    }
+
+    if (_availabilityRangeOverlapsPeriod(
+      value,
+      fallbackStatus: _availabilityStatusFromApiValue(
+        value['statut'] ??
+            value['status'] ??
+            value['etat'] ??
+            value['availability'] ??
+            value['disponibilite'] ??
+            value['disponible'] ??
+            value['estDisponible'] ??
+            value['isAvailable'] ??
+            value['type'],
+      ),
+      startAt: startAt,
+      endAt: endAt,
+    )) {
+      return true;
+    }
+
+    return value.values.any(
+      (entry) => _availabilityResponseHasActiveOverlap(
+        entry,
+        startAt: startAt,
+        endAt: endAt,
+      ),
+    );
+  }
+
+  bool _availabilityRangeOverlapsPeriod(
+    Map<String, dynamic> value, {
+    required AvailabilityStatus? fallbackStatus,
+    required DateTime startAt,
+    required DateTime endAt,
+  }) {
+    final rangeStart = _dateFromApiValue(
+      value['dateDebut'] ?? value['startAt'],
+    );
+    final rangeEnd = _dateFromApiValue(value['dateFin'] ?? value['endAt']);
+    if (rangeStart == null ||
+        rangeEnd == null ||
+        !rangeStart.isBefore(rangeEnd)) {
+      return false;
+    }
+
+    final status =
+        _availabilityStatusFromApiValue(
+          value['statut'] ??
+              value['status'] ??
+              value['etat'] ??
+              value['availability'] ??
+              value['disponibilite'] ??
+              value['disponible'] ??
+              value['estDisponible'] ??
+              value['isAvailable'] ??
+              value['type'],
+        ) ??
+        fallbackStatus;
+    if (status == AvailabilityStatus.free || status == null) {
+      return false;
+    }
+
+    final effectiveEnd = _effectiveAvailabilityRangeEnd(
+      startAt: rangeStart,
+      endAt: rangeEnd,
+      status: status,
+      reservationValue: value,
+    );
+    if (!rangeStart.isBefore(effectiveEnd)) {
+      return false;
+    }
+
+    return reservationPeriodsOverlap(
+      firstStartAt: startAt,
+      firstEndAt: endAt,
+      secondStartAt: rangeStart,
+      secondEndAt: effectiveEnd,
+    );
   }
 
   Future<FleetReservation> updateReservation({
@@ -312,7 +386,7 @@ class FleetApiService {
     DateTime? confirmedAt,
     ReservationVideoDraft? departureVideo,
   }) async {
-    if (await _reservationAlreadyHasConstat(reservation)) {
+    if (reservation.isStarted || reservation.isTerminated) {
       return;
     }
 
@@ -353,7 +427,7 @@ class FleetApiService {
     DateTime? confirmedAt,
     ReservationVideoDraft? returnVideo,
   }) async {
-    final constatId = await _findOpenConstatId(reservation.vehicle.id);
+    final constatId = _constatIdForReturn(reservation);
     final dateRendu = _returnTimestampInsideReservation(
       reservation,
       confirmedAt ?? DateTime.now(),
@@ -534,225 +608,15 @@ class FleetApiService {
     );
   }
 
-  Future<bool> _reservationAlreadyHasConstat(
-    FleetReservation reservation,
-  ) async {
-    try {
-      final response = await _apiClient.getJson('/metier/mes-constats');
-      final constats = FleetApiMappers.itemsFromResponse(response);
-
-      for (final constat in constats) {
-        if (_constatMatchesReservation(constat, reservation)) {
-          return true;
-        }
-      }
-    } catch (_) {
-      return false;
-    }
-
-    return false;
-  }
-
-  Future<int> _findOpenConstatId(String vehicleId) async {
-    final response = await _apiClient.getMap('/metier/mes-constats');
-    final constats = FleetApiMappers.itemsFromResponse(response);
-
-    for (final constat in constats) {
-      final vehicle = constat['vehicule'];
-      if (_constatIsOpen(constat) &&
-          vehicle is Map<String, dynamic> &&
-          vehicle['id'].toString() == vehicleId) {
-        final constatId = int.tryParse('${constat['id']}');
-        if (constatId != null) {
-          return constatId;
-        }
-      }
-    }
-
-    throw const FormatException(
-      'Aucun constat ouvert trouvé pour ce véhicule.',
-    );
-  }
-
-  Future<_ConstatIndex> _fetchConstatIndex() async {
-    try {
-      final response = await _apiClient.getJson('/metier/mes-constats');
-      final constats = FleetApiMappers.itemsFromResponse(response);
-      final openReservationIds = <String>{};
-      final openVehicleConstats = <_OpenVehicleConstat>[];
-      final closedReservationIds = <String, DateTime?>{};
-      final closedVehicleConstats = <_ClosedVehicleConstat>[];
-
-      for (final constat in constats) {
-        final reservationId = _idFromNestedValue(
-          constat['reservation'] ??
-              constat['reservationId'] ??
-              constat['reservation_id'],
-        );
-        final vehicleId = _idFromNestedValue(
-          constat['vehicule'] ?? constat['vehiculeId'] ?? constat['vehicleId'],
-        );
-
-        if (_constatIsOpen(constat)) {
-          if (reservationId != null) {
-            openReservationIds.add(reservationId);
-          }
-          if (vehicleId != null) {
-            openVehicleConstats.add(
-              _OpenVehicleConstat(
-                vehicleId: vehicleId,
-                pickedUpAt: _constatPickedUpAt(constat),
-              ),
-            );
-          }
-          continue;
-        }
-
-        if (_constatIsClosed(constat)) {
-          final returnedAt = _constatReturnedAt(constat);
-          if (reservationId != null) {
-            closedReservationIds[reservationId] = returnedAt;
-          }
-          if (vehicleId != null) {
-            closedVehicleConstats.add(
-              _ClosedVehicleConstat(
-                vehicleId: vehicleId,
-                returnedAt: returnedAt,
-                hasFinalMileage: _hasFinalMileage(constat),
-              ),
-            );
-          }
-        }
-      }
-
-      return _ConstatIndex(
-        openReservationIds: openReservationIds,
-        openVehicleConstats: openVehicleConstats,
-        closedReservationIds: closedReservationIds,
-        closedVehicleConstats: closedVehicleConstats,
+  String _constatIdForReturn(FleetReservation reservation) {
+    final constatId = reservation.constatId;
+    if (constatId == null || constatId.trim().isEmpty) {
+      throw const FormatException(
+        'Identifiant du constat absent sur la réservation démarrée.',
       );
-    } catch (_) {
-      return const _ConstatIndex();
-    }
-  }
-
-  bool _reservationMayHaveOpenConstat(FleetReservation reservation) {
-    final now = DateTime.now();
-
-    return !reservation.isInHistory &&
-        !now.isBefore(
-          reservation.startAt.subtract(FleetReservation.pickupFormLeadTime),
-        );
-  }
-
-  bool _reservationHasOpenConstatForVehicle(
-    FleetReservation reservation,
-    _ConstatIndex constats,
-  ) {
-    for (final constat in constats.openVehicleConstats) {
-      if (constat.vehicleId != reservation.vehicle.id) {
-        continue;
-      }
-
-      final pickedUpAt = constat.pickedUpAt;
-      if (pickedUpAt == null) {
-        return _reservationMayHaveOpenConstat(reservation);
-      }
-
-      if (!pickedUpAt.isBefore(reservation.startAt) &&
-          pickedUpAt.isBefore(reservation.endAt)) {
-        return true;
-      }
     }
 
-    return false;
-  }
-
-  bool _reservationHasClosedConstatForVehicle(
-    FleetReservation reservation,
-    _ConstatIndex constats,
-  ) {
-    for (final constat in constats.closedVehicleConstats) {
-      if (constat.vehicleId != reservation.vehicle.id) {
-        continue;
-      }
-
-      final returnedAt = constat.returnedAt;
-      if (returnedAt == null) {
-        if (constat.hasFinalMileage &&
-            reservation.endAt.isBefore(DateTime.now())) {
-          return true;
-        }
-        continue;
-      }
-
-      if (!returnedAt.isBefore(reservation.startAt) &&
-          !returnedAt.isAfter(reservation.endAt)) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  DateTime? _reservationReturnedAtFromConstats(
-    FleetReservation reservation,
-    _ConstatIndex constats,
-  ) {
-    if (constats.closedReservationIds.containsKey(reservation.id)) {
-      return constats.closedReservationIds[reservation.id];
-    }
-
-    for (final constat in constats.closedVehicleConstats) {
-      if (constat.vehicleId != reservation.vehicle.id) {
-        continue;
-      }
-
-      final returnedAt = constat.returnedAt;
-      if (returnedAt == null) {
-        continue;
-      }
-
-      if (!returnedAt.isBefore(reservation.startAt) &&
-          !returnedAt.isAfter(reservation.endAt)) {
-        return returnedAt;
-      }
-    }
-
-    return null;
-  }
-
-  bool _constatMatchesReservation(
-    Map<String, dynamic> constat,
-    FleetReservation reservation,
-  ) {
-    final reservationId = _idFromNestedValue(
-      constat['reservation'] ??
-          constat['reservationId'] ??
-          constat['reservation_id'],
-    );
-    if (reservationId != null) {
-      return reservationId == reservation.id;
-    }
-
-    final vehicleId = _idFromNestedValue(
-      constat['vehicule'] ?? constat['vehiculeId'] ?? constat['vehicleId'],
-    );
-    if (vehicleId != reservation.vehicle.id) {
-      return false;
-    }
-
-    final pickupAt = _constatPickedUpAt(constat);
-    final returnedAt = _constatReturnedAt(constat);
-    final referenceDate = returnedAt ?? pickupAt;
-
-    if (referenceDate == null) {
-      return _constatIsOpen(constat) &&
-          _reservationMayHaveOpenConstat(reservation);
-    }
-
-    return !referenceDate.isBefore(reservation.startAt) &&
-        !referenceDate.isAfter(reservation.endAt);
+    return constatId;
   }
 
   String? _idFromNestedValue(Object? value) {
@@ -839,84 +703,6 @@ class FleetApiService {
     return candidateIds.any(vehicleIdCandidates.contains);
   }
 
-  bool _constatIsClosed(Map<String, dynamic> constat) {
-    return constat['estOuvert'] == false ||
-        _hasFinalMileage(constat) ||
-        _constatReturnedAt(constat) != null;
-  }
-
-  bool _constatIsOpen(Map<String, dynamic> constat) {
-    final explicitOpen =
-        constat['estOuvert'] ??
-        constat['constatOuvert'] ??
-        constat['open'] ??
-        constat['isOpen'];
-
-    if (explicitOpen is bool) {
-      return explicitOpen;
-    }
-
-    final status = _textFromApiValue(
-      constat['statut'] ??
-          constat['statue'] ??
-          constat['statu'] ??
-          constat['status'] ??
-          constat['state'] ??
-          constat['etat'],
-    ).toLowerCase();
-
-    if (status.contains('term') ||
-        status.contains('fini') ||
-        status.contains('clos') ||
-        status.contains('completed') ||
-        status.contains('done')) {
-      return false;
-    }
-
-    if (status.contains('ouvert') ||
-        status.contains('open') ||
-        status.contains('cours') ||
-        status.contains('progress') ||
-        status.contains('demarr') ||
-        status.contains('démarr') ||
-        status.contains('active')) {
-      return true;
-    }
-
-    return _constatPickedUpAt(constat) != null &&
-        _constatReturnedAt(constat) == null &&
-        !_hasFinalMileage(constat);
-  }
-
-  bool _hasFinalMileage(Map<String, dynamic> constat) {
-    return _textFromApiValue(
-      constat['kmFin'] ??
-          constat['kilometrageFin'] ??
-          constat['kilometrageRetour'] ??
-          constat['mileageEnd'],
-    ).isNotEmpty;
-  }
-
-  DateTime? _constatPickedUpAt(Map<String, dynamic> constat) {
-    return _dateFromApiValue(
-      constat['datePrise'] ??
-          constat['dateDepart'] ??
-          constat['pickedUpAt'] ??
-          constat['startedAt'] ??
-          constat['demarreLe'],
-    );
-  }
-
-  DateTime? _constatReturnedAt(Map<String, dynamic> constat) {
-    return _dateFromApiValue(
-      constat['dateRendu'] ??
-          constat['dateRetour'] ??
-          constat['returnedAt'] ??
-          constat['closedAt'] ??
-          constat['termineLe'],
-    );
-  }
-
   String _textFromApiValue(Object? value) {
     return value?.toString().trim() ?? '';
   }
@@ -925,7 +711,6 @@ class FleetApiService {
     Object? response,
     DateTime month, {
     required String vehicleId,
-    _ConstatIndex constats = const _ConstatIndex(),
   }) {
     final availabilityByDay = <int, AvailabilityStatus>{};
     final suggestionsByDay = <int, VehicleAvailabilitySuggestion>{};
@@ -988,8 +773,6 @@ class FleetApiService {
         endAt: end,
         status: status,
         reservationValue: reservationValue,
-        vehicleId: vehicleId,
-        constats: constats,
       );
       final rangeIsTerminated = _availabilityValueIsTerminated(
         reservationValue,
@@ -1215,8 +998,6 @@ class FleetApiService {
     required DateTime endAt,
     required AvailabilityStatus status,
     required Object? reservationValue,
-    required String vehicleId,
-    required _ConstatIndex constats,
   }) {
     if (status != AvailabilityStatus.reserved) {
       return endAt;
@@ -1226,8 +1007,6 @@ class FleetApiService {
       startAt: startAt,
       endAt: endAt,
       reservationValue: reservationValue,
-      vehicleId: vehicleId,
-      constats: constats,
     );
     if (returnedAt == null ||
         returnedAt.isBefore(startAt) ||
@@ -1242,43 +1021,12 @@ class FleetApiService {
     required DateTime startAt,
     required DateTime endAt,
     required Object? reservationValue,
-    required String vehicleId,
-    required _ConstatIndex constats,
   }) {
-    final returnedAtFromReservation = _returnedAtFromAvailabilityValue(
+    return _returnedAtFromAvailabilityValue(
       reservationValue,
       startAt: startAt,
       endAt: endAt,
     );
-    if (returnedAtFromReservation != null) {
-      return returnedAtFromReservation;
-    }
-
-    final reservationId = _reservationIdFromAvailabilityValue(reservationValue);
-    if (reservationId != null &&
-        constats.closedReservationIds.containsKey(reservationId)) {
-      return constats.closedReservationIds[reservationId];
-    }
-
-    final rangeVehicleId =
-        _vehicleIdFromAvailabilityValue(reservationValue) ?? vehicleId;
-    DateTime? returnedAt;
-    for (final constat in constats.closedVehicleConstats) {
-      if (constat.vehicleId != rangeVehicleId || constat.returnedAt == null) {
-        continue;
-      }
-
-      final candidate = constat.returnedAt!;
-      if (candidate.isBefore(startAt) || candidate.isAfter(endAt)) {
-        continue;
-      }
-
-      if (returnedAt == null || candidate.isBefore(returnedAt)) {
-        returnedAt = candidate;
-      }
-    }
-
-    return returnedAt;
   }
 
   DateTime? _returnedAtFromAvailabilityValue(
@@ -1290,95 +1038,16 @@ class FleetApiService {
       return null;
     }
 
+    if (!FleetApiMappers.reservationIsTerminated(value)) {
+      return null;
+    }
+
     final returnedAt = FleetApiMappers.reservationReturnedAt(value);
     if (returnedAt != null) {
       return returnedAt;
     }
 
-    if (!FleetApiMappers.reservationIsTerminated(value)) {
-      return null;
-    }
-
-    final now = DateTime.now();
-    if (now.isAfter(startAt) && now.isBefore(endAt)) {
-      return now;
-    }
-
     return startAt;
-  }
-
-  String? _reservationIdFromAvailabilityValue(Object? value) {
-    if (value is! Map<String, dynamic>) {
-      return _idFromNestedValue(value);
-    }
-
-    return _idFromNestedValue(
-      value['id'] ??
-          value['@id'] ??
-          value['reservation'] ??
-          value['reservationId'] ??
-          value['reservation_id'],
-    );
-  }
-
-  String? _vehicleIdFromAvailabilityValue(Object? value) {
-    if (value is! Map<String, dynamic>) {
-      return null;
-    }
-
-    return _idFromNestedValue(
-      value['vehicule'] ?? value['vehiculeId'] ?? value['vehicleId'],
-    );
-  }
-
-  bool _availabilityResponseNeedsConstatLookup(Object? value) {
-    if (value is List) {
-      return value.any(_availabilityResponseNeedsConstatLookup);
-    }
-
-    if (value is! Map<String, dynamic>) {
-      return false;
-    }
-
-    final nestedReservations = FleetApiMappers.itemsFromResponse({
-      'items': value['reservations'],
-    });
-    if (nestedReservations.isNotEmpty) {
-      return nestedReservations.any(_availabilityRangeNeedsConstatLookup);
-    }
-
-    if (value['dateDebut'] != null && value['dateFin'] != null) {
-      final status = _availabilityStatusFromApiValue(
-        value['statut'] ??
-            value['status'] ??
-            value['etat'] ??
-            value['availability'] ??
-            value['disponibilite'] ??
-            value['disponible'] ??
-            value['estDisponible'] ??
-            value['isAvailable'] ??
-            value['type'] ??
-            AvailabilityStatus.reserved.name,
-      );
-      return status == AvailabilityStatus.reserved &&
-          _availabilityRangeNeedsConstatLookup(value);
-    }
-
-    return value.values.any(_availabilityResponseNeedsConstatLookup);
-  }
-
-  bool _availabilityRangeNeedsConstatLookup(Map<String, dynamic> value) {
-    if (FleetApiMappers.reservationHasTerminatedFlag(value)) {
-      return false;
-    }
-    if (FleetApiMappers.reservationReturnedAt(value) != null) {
-      return false;
-    }
-    if (FleetApiMappers.reservationIsTerminated(value)) {
-      return false;
-    }
-
-    return true;
   }
 
   bool _availabilityValueIsTerminated(Object? value) {
@@ -1402,9 +1071,7 @@ class FleetApiService {
       final inUseReservationsByVehicleId = <String, FleetReservation>{};
 
       for (final reservation in reservations) {
-        if (reservation.isInHistory ||
-            !reservation.hasOpenConstat ||
-            reservation.hasClosedConstat) {
+        if (reservation.isTerminated || !reservation.isStarted) {
           continue;
         }
 
@@ -1575,40 +1242,4 @@ class FleetApiService {
       AvailabilityStatus.maintenance => 3,
     };
   }
-}
-
-class _ConstatIndex {
-  const _ConstatIndex({
-    this.openReservationIds = const {},
-    this.openVehicleConstats = const [],
-    this.closedReservationIds = const {},
-    this.closedVehicleConstats = const [],
-  });
-
-  final Set<String> openReservationIds;
-  final List<_OpenVehicleConstat> openVehicleConstats;
-  final Map<String, DateTime?> closedReservationIds;
-  final List<_ClosedVehicleConstat> closedVehicleConstats;
-}
-
-class _OpenVehicleConstat {
-  const _OpenVehicleConstat({
-    required this.vehicleId,
-    required this.pickedUpAt,
-  });
-
-  final String vehicleId;
-  final DateTime? pickedUpAt;
-}
-
-class _ClosedVehicleConstat {
-  const _ClosedVehicleConstat({
-    required this.vehicleId,
-    required this.returnedAt,
-    required this.hasFinalMileage,
-  });
-
-  final String vehicleId;
-  final DateTime? returnedAt;
-  final bool hasFinalMileage;
 }

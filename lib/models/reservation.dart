@@ -36,11 +36,15 @@ class FleetReservation {
     required this.status,
     required this.expectedStartMileage,
     this.createdAt,
-    this.hasOpenConstat = false,
-    this.hasClosedConstat = false,
-    this.isTerminated = false,
+    bool hasOpenConstat = false,
+    bool hasClosedConstat = false,
+    bool isStarted = false,
+    bool isTerminated = false,
+    this.constatId,
     this.returnedAt,
-  });
+  }) : isStarted =
+           (isStarted || hasOpenConstat) && !(isTerminated || hasClosedConstat),
+       isTerminated = isTerminated || hasClosedConstat;
 
   static const editLockDelay = Duration(hours: 24);
   static const pickupFormLeadTime = Duration(hours: 1);
@@ -59,10 +63,13 @@ class FleetReservation {
   final ReservationStatus status;
   final int expectedStartMileage;
   final DateTime? createdAt;
-  final bool hasOpenConstat;
-  final bool hasClosedConstat;
+  final bool isStarted;
   final bool isTerminated;
+  final String? constatId;
   final DateTime? returnedAt;
+
+  bool get hasOpenConstat => isStarted && !isTerminated;
+  bool get hasClosedConstat => isTerminated;
 
   bool get isInHistory {
     return isTerminated || status == ReservationStatus.completed;
@@ -70,7 +77,7 @@ class FleetReservation {
 
   DateTime get effectiveEndAt {
     final actualReturn = returnedAt;
-    if ((!isTerminated && !hasClosedConstat) || actualReturn == null) {
+    if (!isTerminated || actualReturn == null) {
       return endAt;
     }
 
@@ -81,9 +88,16 @@ class FleetReservation {
     ReservationStatus? status,
     bool? hasOpenConstat,
     bool? hasClosedConstat,
+    bool? isStarted,
     bool? isTerminated,
+    String? constatId,
     DateTime? returnedAt,
   }) {
+    final nextTerminated =
+        isTerminated ?? hasClosedConstat ?? this.isTerminated;
+    final nextStarted =
+        ((isStarted ?? hasOpenConstat ?? this.isStarted) && !nextTerminated);
+
     return FleetReservation(
       id: id,
       vehicle: vehicle,
@@ -95,9 +109,9 @@ class FleetReservation {
       status: status ?? this.status,
       expectedStartMileage: expectedStartMileage,
       createdAt: createdAt,
-      hasOpenConstat: hasOpenConstat ?? this.hasOpenConstat,
-      hasClosedConstat: hasClosedConstat ?? this.hasClosedConstat,
-      isTerminated: isTerminated ?? this.isTerminated,
+      isStarted: nextStarted,
+      isTerminated: nextTerminated,
+      constatId: constatId ?? this.constatId,
       returnedAt: returnedAt ?? this.returnedAt,
     );
   }

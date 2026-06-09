@@ -75,9 +75,7 @@ DateTime? latestReservationEndAt({
   }
 
   for (final reservation in userReservations) {
-    if (reservation.id == excludedReservationId ||
-        reservation.isInHistory ||
-        reservation.hasClosedConstat) {
+    if (reservation.id == excludedReservationId || reservation.isInHistory) {
       continue;
     }
 

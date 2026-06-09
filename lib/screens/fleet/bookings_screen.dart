@@ -289,13 +289,12 @@ class _BookingsScreenState extends State<BookingsScreen> {
         if (_locallyCompletedReservationIds.contains(reservation.id))
           reservation.copyWith(
             status: ReservationStatus.completed,
-            hasOpenConstat: false,
-            hasClosedConstat: true,
+            isStarted: false,
             isTerminated: true,
           )
         else if (_locallyStartedReservationIds.contains(reservation.id) &&
             reservation.status != ReservationStatus.completed)
-          reservation.copyWith(hasOpenConstat: true)
+          reservation.copyWith(isStarted: true)
         else
           reservation,
     ];

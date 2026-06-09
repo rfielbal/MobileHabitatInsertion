@@ -89,6 +89,7 @@ class FleetApiMappers {
         _date(json['dateFin']) ?? startAt.add(const Duration(hours: 1));
     final returnedAt = reservationReturnedAt(json);
     final isTerminated = reservationIsTerminated(json);
+    final isStarted = reservationIsStarted(json) && !isTerminated;
     final createdAt =
         _date(json['createdAt']) ??
         _date(json['created_at']) ??
@@ -112,9 +113,9 @@ class FleetApiMappers {
       ),
       expectedStartMileage: vehicle.currentMileage,
       createdAt: createdAt,
-      hasOpenConstat: reservationHasOpenConstat(json),
-      hasClosedConstat: isTerminated || reservationHasClosedConstat(json),
+      isStarted: isStarted,
       isTerminated: isTerminated,
+      constatId: reservationConstatId(json),
       returnedAt: returnedAt,
     );
   }
@@ -145,9 +146,48 @@ class FleetApiMappers {
     return _statusIsCompleted(_text(_reservationStatusValue(json)));
   }
 
+  static bool reservationIsStarted(Map<String, dynamic> json) {
+    final directValue = _bool(
+      json['demarre'] ??
+          json['démarre'] ??
+          json['isStarted'] ??
+          json['started'] ??
+          json['inProgress'] ??
+          json['enCours'],
+    );
+    if (directValue != null) {
+      return directValue;
+    }
+
+    return false;
+  }
+
+  static String? reservationConstatId(Map<String, dynamic> json) {
+    final directId = _id(
+      json['constatId'] ??
+          json['constat_id'] ??
+          json['idConstat'] ??
+          json['openConstatId'],
+    );
+    if (directId != null) {
+      return directId;
+    }
+
+    final constat = json['constat'];
+    if (constat is Map<String, dynamic>) {
+      return _id(constat['id'] ?? constat['@id']);
+    }
+
+    final constats = _listOfMaps(json['constats']);
+    if (constats.isNotEmpty) {
+      return _id(constats.first['id'] ?? constats.first['@id']);
+    }
+
+    return null;
+  }
+
   static DateTime? reservationReturnedAt(Map<String, dynamic> json) {
-    final directReturn =
-        _date(json['dateRendu']) ??
+    return _date(json['dateRendu']) ??
         _date(json['dateRetour']) ??
         _date(json['dateFinReelle']) ??
         _date(json['dateFinEffective']) ??
@@ -156,77 +196,14 @@ class FleetApiMappers {
         _date(json['returnedAt']) ??
         _date(json['closedAt']) ??
         _date(json['termineLe']);
-    if (directReturn != null) {
-      return directReturn;
-    }
-
-    final constat = json['constat'];
-    if (constat is Map<String, dynamic> && _constatIsClosed(constat)) {
-      return _constatReturnedAt(constat);
-    }
-
-    for (final constat in _listOfMaps(json['constats'])) {
-      if (_constatIsClosed(constat)) {
-        final returnedAt = _constatReturnedAt(constat);
-        if (returnedAt != null) {
-          return returnedAt;
-        }
-      }
-    }
-
-    return null;
   }
 
   static bool reservationHasOpenConstat(Map<String, dynamic> json) {
-    final directValue =
-        json['constatOuvert'] ??
-        json['hasOpenConstat'] ??
-        json['estOuvert'] ??
-        json['openConstat'];
-
-    if (directValue is bool) {
-      return directValue;
-    }
-
-    final constat = json['constat'];
-    if (constat is Map<String, dynamic> && _constatIsOpen(constat)) {
-      return true;
-    }
-
-    for (final constat in _listOfMaps(json['constats'])) {
-      if (_constatIsOpen(constat)) {
-        return true;
-      }
-    }
-
-    return false;
+    return reservationIsStarted(json) && !reservationIsTerminated(json);
   }
 
   static bool reservationHasClosedConstat(Map<String, dynamic> json) {
-    final directValue =
-        json['termine'] ??
-        json['constatFerme'] ??
-        json['hasClosedConstat'] ??
-        json['retourConfirme'] ??
-        json['returnConfirmed'] ??
-        json['constatTermine'];
-
-    if (directValue is bool) {
-      return directValue;
-    }
-
-    final constat = json['constat'];
-    if (constat is Map<String, dynamic> && _constatIsClosed(constat)) {
-      return true;
-    }
-
-    for (final constat in _listOfMaps(json['constats'])) {
-      if (_constatIsClosed(constat)) {
-        return true;
-      }
-    }
-
-    return false;
+    return reservationIsTerminated(json);
   }
 
   static ApiNotificationPayload notificationFromJson(
@@ -435,113 +412,26 @@ class FleetApiMappers {
     return text.isEmpty ? fallback : text;
   }
 
+  static String? _id(Object? value) {
+    if (value is Map<String, dynamic>) {
+      return _id(value['id'] ?? value['@id']);
+    }
+
+    final text = value?.toString().trim();
+    if (text == null || text.isEmpty) {
+      return null;
+    }
+
+    final pathSegments = text.split('/').where((segment) => segment.isNotEmpty);
+    if (pathSegments.length > 1) {
+      return pathSegments.last;
+    }
+
+    return text;
+  }
+
   static bool _sameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
-  }
-
-  static bool _constatIsClosed(Map<String, dynamic> constat) {
-    final terminated = _bool(
-      constat['termine'] ??
-          constat['isTerminated'] ??
-          constat['terminated'] ??
-          constat['finished'] ??
-          constat['completed'],
-    );
-    if (terminated == true) {
-      return true;
-    }
-    if (constat['estOuvert'] == false) {
-      return true;
-    }
-    if (_hasFinalMileage(constat)) {
-      return true;
-    }
-
-    return _date(
-          constat['dateRendu'] ??
-              constat['dateRetour'] ??
-              constat['returnedAt'] ??
-              constat['closedAt'] ??
-              constat['termineLe'],
-        ) !=
-        null;
-  }
-
-  static bool _constatIsOpen(Map<String, dynamic> constat) {
-    final terminated = _bool(
-      constat['termine'] ??
-          constat['isTerminated'] ??
-          constat['terminated'] ??
-          constat['finished'] ??
-          constat['completed'],
-    );
-    if (terminated == true) {
-      return false;
-    }
-
-    final explicitOpen =
-        constat['estOuvert'] ??
-        constat['constatOuvert'] ??
-        constat['open'] ??
-        constat['isOpen'];
-
-    if (explicitOpen is bool) {
-      return explicitOpen;
-    }
-
-    final status = _text(
-      constat['statut'] ??
-          constat['statue'] ??
-          constat['statu'] ??
-          constat['status'] ??
-          constat['state'] ??
-          constat['etat'],
-    ).toLowerCase();
-
-    if (_statusIsCompleted(status)) {
-      return false;
-    }
-
-    if (status.contains('ouvert') ||
-        status.contains('open') ||
-        status.contains('cours') ||
-        status.contains('progress') ||
-        status.contains('demarr') ||
-        status.contains('démarr') ||
-        status.contains('active')) {
-      return true;
-    }
-
-    final pickedUpAt =
-        _date(
-          constat['datePrise'] ??
-              constat['dateDepart'] ??
-              constat['pickedUpAt'] ??
-              constat['startedAt'] ??
-              constat['demarreLe'],
-        ) !=
-        null;
-
-    return pickedUpAt && !_constatIsClosed(constat);
-  }
-
-  static bool _hasFinalMileage(Map<String, dynamic> constat) {
-    return _text(
-      constat['kmFin'] ??
-          constat['kilometrageFin'] ??
-          constat['kilometrageRetour'] ??
-          constat['mileageEnd'],
-    ).isNotEmpty;
-  }
-
-  static DateTime? _constatReturnedAt(Map<String, dynamic> constat) {
-    return _date(
-      constat['dateRendu'] ??
-          constat['dateRetour'] ??
-          constat['returnedAt'] ??
-          constat['closedAt'] ??
-          constat['termineLe'],
-    );
   }
 
   static bool? _bool(Object? value) {

@@ -95,33 +95,18 @@ void main() {
   );
 
   test(
-    'startConstat does not create another constat when one already exists',
+    'startConstat does not create another constat when demarre is true',
     () async {
       var startRequests = 0;
       final service = _serviceWithMockClient((request) async {
-        if (request.method == 'GET') {
-          return http.Response(
-            jsonEncode({
-              'items': [
-                {
-                  'id': 99,
-                  'estOuvert': true,
-                  'reservation': {'id': 10},
-                  'vehicule': {'id': 1},
-                  'datePrise': '2026-06-18T08:30:00Z',
-                },
-              ],
-            }),
-            200,
-          );
-        }
-
         startRequests++;
         return http.Response('{}', 200);
       });
       final reservation = _reservation(
         startAt: DateTime(2026, 6, 18, 8, 30),
         endAt: DateTime(2026, 6, 18, 8, 40),
+        isStarted: true,
+        constatId: '99',
       );
 
       await service.startConstat(
@@ -134,32 +119,17 @@ void main() {
   );
 
   test(
-    'startConstat does not create another constat after final mileage exists',
+    'startConstat does not create another constat when termine is true',
     () async {
       var startRequests = 0;
       final service = _serviceWithMockClient((request) async {
-        if (request.method == 'GET') {
-          return http.Response(
-            jsonEncode({
-              'items': [
-                {
-                  'id': 99,
-                  'reservation': {'id': 10},
-                  'vehicule': {'id': 1},
-                  'kmFin': 120,
-                },
-              ],
-            }),
-            200,
-          );
-        }
-
         startRequests++;
         return http.Response('{}', 200);
       });
       final reservation = _reservation(
         startAt: DateTime(2026, 6, 18, 8, 30),
         endAt: DateTime(2026, 6, 18, 8, 40),
+        isTerminated: true,
       );
 
       await service.startConstat(
@@ -243,6 +213,8 @@ void main() {
       final reservation = _reservation(
         startAt: DateTime(2026, 6, 18, 8, 30),
         endAt: DateTime(2026, 6, 18, 8, 40),
+        isStarted: true,
+        constatId: '99',
       );
 
       await service.finishConstat(
@@ -295,6 +267,8 @@ void main() {
       final reservation = _reservation(
         startAt: DateTime(2026, 6, 18, 8, 30),
         endAt: DateTime(2026, 6, 18, 8, 40),
+        isStarted: true,
+        constatId: '99',
       );
 
       await expectLater(
@@ -498,6 +472,8 @@ void main() {
     final reservation = _reservation(
       startAt: DateTime(2026, 6, 18, 8, 30),
       endAt: DateTime(2026, 6, 18, 17),
+      isStarted: true,
+      constatId: '99',
     );
 
     await service.finishConstat(
@@ -526,39 +502,25 @@ void main() {
   });
 
   test(
-    'fetchReservations detects closed constat without moving reservation to history',
+    'fetchReservations uses termine and dateRendu from reservation',
     () async {
       final startAt = DateTime.now().subtract(const Duration(hours: 2));
       final endAt = DateTime.now().subtract(const Duration(hours: 1));
+      final returnedAt = endAt.subtract(const Duration(seconds: 1));
       final service = _serviceWithMockClient((request) async {
         if (request.url.path == '/api/metier/mes-reservations') {
           return http.Response(
             jsonEncode({
               'items': [
-                _reservationJson(
-                  id: 10,
-                  startAt: startAt,
-                  endAt: endAt,
-                  status: 'reservee',
-                ),
-              ],
-            }),
-            200,
-          );
-        }
-
-        if (request.url.path == '/api/metier/mes-constats') {
-          return http.Response(
-            jsonEncode({
-              'items': [
                 {
-                  'id': 99,
-                  'estOuvert': false,
-                  'reservation': {'id': 10},
-                  'vehicule': {'id': 1},
-                  'dateRendu': endAt
-                      .subtract(const Duration(seconds: 1))
-                      .toIso8601String(),
+                  ..._reservationJson(
+                    id: 10,
+                    startAt: startAt,
+                    endAt: endAt,
+                    status: 'reservee',
+                  ),
+                  'termine': true,
+                  'dateRendu': returnedAt.toIso8601String(),
                 },
               ],
             }),
@@ -572,15 +534,9 @@ void main() {
       final reservations = await service.fetchReservations();
 
       expect(reservations.single.hasClosedConstat, isTrue);
-      expect(reservations.single.isInHistory, isFalse);
-      expect(
-        reservations.single.returnedAt,
-        endAt.subtract(const Duration(seconds: 1)),
-      );
-      expect(
-        reservations.single.effectiveEndAt,
-        endAt.subtract(const Duration(seconds: 1)),
-      );
+      expect(reservations.single.isInHistory, isTrue);
+      expect(reservations.single.returnedAt, returnedAt);
+      expect(reservations.single.effectiveEndAt, returnedAt);
     },
   );
 
@@ -625,7 +581,7 @@ void main() {
     },
   );
 
-  test('fetchReservations detects open constat from constat status', () async {
+  test('fetchReservations detects started reservation from demarre', () async {
     final startAt = DateTime.now().subtract(const Duration(minutes: 30));
     final endAt = DateTime.now().add(const Duration(minutes: 30));
     final service = _serviceWithMockClient((request) async {
@@ -633,28 +589,15 @@ void main() {
         return http.Response(
           jsonEncode({
             'items': [
-              _reservationJson(
-                id: 10,
-                startAt: startAt,
-                endAt: endAt,
-                status: 'reservee',
-              ),
-            ],
-          }),
-          200,
-        );
-      }
-
-      if (request.url.path == '/api/metier/mes-constats') {
-        return http.Response(
-          jsonEncode({
-            'items': [
               {
-                'id': 99,
-                'statut': 'en_cours',
-                'reservation': {'id': 10},
-                'vehicule': {'id': 1},
-                'datePrise': startAt.toIso8601String(),
+                ..._reservationJson(
+                  id: 10,
+                  startAt: startAt,
+                  endAt: endAt,
+                  status: 'reservee',
+                ),
+                'demarre': true,
+                'constatId': 99,
               },
             ],
           }),
@@ -667,6 +610,8 @@ void main() {
 
     final reservations = await service.fetchReservations();
 
+    expect(reservations.single.isStarted, isTrue);
+    expect(reservations.single.constatId, '99');
     expect(reservations.single.hasOpenConstat, isTrue);
     expect(
       reservations.single.shouldShowReturnActionAt(DateTime.now()),
@@ -759,8 +704,53 @@ void main() {
     },
   );
 
+  test('fetchReservations ignores final mileage constats', () async {
+    final startAt = DateTime.now().subtract(const Duration(hours: 2));
+    final endAt = DateTime.now().subtract(const Duration(hours: 1));
+    final service = _serviceWithMockClient((request) async {
+      if (request.url.path == '/api/metier/mes-reservations') {
+        return http.Response(
+          jsonEncode({
+            'items': [
+              _reservationJson(
+                id: 10,
+                startAt: startAt,
+                endAt: endAt,
+                status: 'reservee',
+              ),
+            ],
+          }),
+          200,
+        );
+      }
+
+      if (request.url.path == '/api/metier/mes-constats') {
+        return http.Response(
+          jsonEncode({
+            'items': [
+              {
+                'id': 99,
+                'reservation': {'id': 10},
+                'vehicule': {'id': 1},
+                'kmFin': 120,
+              },
+            ],
+          }),
+          200,
+        );
+      }
+
+      return http.Response('{}', 404);
+    });
+
+    final reservations = await service.fetchReservations();
+
+    expect(reservations.single.hasClosedConstat, isFalse);
+    expect(reservations.single.isInHistory, isFalse);
+  });
+
   test(
-    'fetchReservations detects final mileage without moving reservation to history',
+    'fetchReservations ignores vehicle final mileage without termine',
     () async {
       final startAt = DateTime.now().subtract(const Duration(hours: 2));
       final endAt = DateTime.now().subtract(const Duration(hours: 1));
@@ -787,7 +777,6 @@ void main() {
               'items': [
                 {
                   'id': 99,
-                  'reservation': {'id': 10},
                   'vehicule': {'id': 1},
                   'kmFin': 120,
                 },
@@ -802,60 +791,13 @@ void main() {
 
       final reservations = await service.fetchReservations();
 
-      expect(reservations.single.hasClosedConstat, isTrue);
+      expect(reservations.single.hasClosedConstat, isFalse);
       expect(reservations.single.isInHistory, isFalse);
     },
   );
 
   test(
-    'fetchReservations matches vehicle final mileage when return date is missing',
-    () async {
-      final startAt = DateTime.now().subtract(const Duration(hours: 2));
-      final endAt = DateTime.now().subtract(const Duration(hours: 1));
-      final service = _serviceWithMockClient((request) async {
-        if (request.url.path == '/api/metier/mes-reservations') {
-          return http.Response(
-            jsonEncode({
-              'items': [
-                _reservationJson(
-                  id: 10,
-                  startAt: startAt,
-                  endAt: endAt,
-                  status: 'reservee',
-                ),
-              ],
-            }),
-            200,
-          );
-        }
-
-        if (request.url.path == '/api/metier/mes-constats') {
-          return http.Response(
-            jsonEncode({
-              'items': [
-                {
-                  'id': 99,
-                  'vehicule': {'id': 1},
-                  'kmFin': 120,
-                },
-              ],
-            }),
-            200,
-          );
-        }
-
-        return http.Response('{}', 404);
-      });
-
-      final reservations = await service.fetchReservations();
-
-      expect(reservations.single.hasClosedConstat, isTrue);
-      expect(reservations.single.isInHistory, isFalse);
-    },
-  );
-
-  test(
-    'fetchReservations matches closed vehicle constat by return date when reservation id is missing',
+    'fetchReservations ignores closed vehicle constat when reservation has no termine',
     () async {
       final startAt = DateTime.now().subtract(const Duration(hours: 2));
       final endAt = DateTime.now().subtract(const Duration(hours: 1));
@@ -899,7 +841,7 @@ void main() {
 
       final reservations = await service.fetchReservations();
 
-      expect(reservations.single.hasClosedConstat, isTrue);
+      expect(reservations.single.hasClosedConstat, isFalse);
       expect(reservations.single.isInHistory, isFalse);
     },
   );
@@ -1272,6 +1214,8 @@ void main() {
                       'id': 10,
                       'dateDebut': '2026-06-05T10:00:00',
                       'dateFin': '2026-06-07T10:00:00',
+                      'termine': true,
+                      'dateRendu': returnedAt.toIso8601String(),
                     },
                   ],
                 },
@@ -1333,8 +1277,8 @@ void main() {
                       'id': 10,
                       'dateDebut': '2026-06-06T10:00:00',
                       'dateFin': '2026-06-11T10:00:00',
+                      'termine': true,
                       'dateRendu': '2026-06-07T10:30:00',
-                      'constatFerme': true,
                     },
                   ],
                 },
@@ -1443,8 +1387,8 @@ void main() {
                       'id': 10,
                       'dateDebut': '2026-06-06T10:00:00',
                       'dateFin': '2026-06-11T10:00:00',
+                      'termine': true,
                       'dateRendu': '2026-06-07T10:30:00',
-                      'constatFerme': true,
                     },
                   ],
                 },
@@ -1506,6 +1450,8 @@ void main() {
                       'id': 10,
                       'dateDebut': '2026-06-05T10:00:00',
                       'dateFin': '2026-06-07T10:00:00',
+                      'termine': true,
+                      'dateRendu': returnedAt.toIso8601String(),
                     },
                   ],
                 },
@@ -1622,12 +1568,16 @@ void main() {
         return http.Response(
           jsonEncode({
             'items': [
-              _reservationJson(
-                id: 12,
-                startAt: now.subtract(const Duration(minutes: 30)),
-                endAt: now.add(const Duration(hours: 2)),
-                vehicleId: 2,
-              ),
+              {
+                ..._reservationJson(
+                  id: 12,
+                  startAt: now.subtract(const Duration(minutes: 30)),
+                  endAt: now.add(const Duration(hours: 2)),
+                  vehicleId: 2,
+                ),
+                'demarre': true,
+                'constatId': 99,
+              },
             ],
           }),
           200,
@@ -1709,7 +1659,7 @@ void main() {
                   startAt: now.subtract(const Duration(hours: 2)),
                   endAt: now.add(const Duration(hours: 2)),
                 ),
-                'constatFerme': true,
+                'termine': true,
               },
             ],
           }),
@@ -1770,11 +1720,14 @@ void main() {
           return http.Response(
             jsonEncode({
               'items': [
-                _reservationJson(
-                  id: 12,
-                  startAt: now.subtract(const Duration(hours: 2)),
-                  endAt: now.add(const Duration(hours: 2)),
-                ),
+                {
+                  ..._reservationJson(
+                    id: 12,
+                    startAt: now.subtract(const Duration(hours: 2)),
+                    endAt: now.add(const Duration(hours: 2)),
+                  ),
+                  'termine': true,
+                },
               ],
             }),
             200,
@@ -1836,6 +1789,9 @@ FleetApiService _serviceWithMockClient(
 FleetReservation _reservation({
   required DateTime startAt,
   required DateTime endAt,
+  bool isStarted = false,
+  bool isTerminated = false,
+  String? constatId,
 }) {
   return FleetReservation(
     id: '10',
@@ -1847,6 +1803,9 @@ FleetReservation _reservation({
     endLabel: 'Retour',
     status: ReservationStatus.upcoming,
     expectedStartMileage: 100,
+    isStarted: isStarted,
+    isTerminated: isTerminated,
+    constatId: constatId,
   );
 }
 
