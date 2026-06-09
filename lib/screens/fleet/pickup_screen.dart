@@ -48,7 +48,9 @@ class _PickupScreenState extends State<PickupScreen> {
     });
 
     try {
-      await _fleetApiService.startConstat(widget.reservation);
+      final startedReservation = await _fleetApiService.startConstat(
+        widget.reservation,
+      );
 
       if (!mounted) {
         return;
@@ -58,7 +60,7 @@ class _PickupScreenState extends State<PickupScreen> {
         context,
       ).showSnackBar(const SnackBar(content: Text('Trajet démarré')));
 
-      Navigator.of(context).pop(true);
+      Navigator.of(context).pop(startedReservation);
     } on ApiException catch (e) {
       if (!mounted) {
         return;

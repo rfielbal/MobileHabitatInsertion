@@ -52,6 +52,27 @@ void main() {
     },
   );
 
+  test('startConstat keeps the created constat id for return', () async {
+    final service = _serviceWithMockClient((request) async {
+      if (request.method == 'PATCH') {
+        return http.Response('{}', 200);
+      }
+
+      expect(request.method, 'POST');
+      expect(request.url.path, '/api/metier/constats/demarrer');
+      return http.Response(jsonEncode({'id': 99, 'reservationId': 10}), 201);
+    });
+    final reservation = _reservation(
+      startAt: DateTime(2026, 6, 18, 8, 30),
+      endAt: DateTime(2026, 6, 18, 8, 40),
+    );
+
+    final startedReservation = await service.startConstat(reservation);
+
+    expect(startedReservation.isStarted, isTrue);
+    expect(startedReservation.constatId, '99');
+  });
+
   test(
     'startConstat sends reservation start when confirmed too early',
     () async {

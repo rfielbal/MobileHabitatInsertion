@@ -36,6 +36,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
   bool _showHistory = false;
   String? _deletingReservationId;
   final _locallyStartedReservationIds = <String>{};
+  final _locallyStartedReservationConstatIds = <String, String>{};
   final _locallyCompletedReservationIds = <String>{};
   final _locallyDeletedReservationIds = <String>{};
 
@@ -277,7 +278,16 @@ class _BookingsScreenState extends State<BookingsScreen> {
           !reservationIds.contains(reservationId) ||
           apiCompletedReservationIds.contains(reservationId),
     );
+    _locallyStartedReservationConstatIds.removeWhere(
+      (reservationId, _) =>
+          !reservationIds.contains(reservationId) ||
+          apiCompletedReservationIds.contains(reservationId),
+    );
     _locallyStartedReservationIds.removeAll(_locallyCompletedReservationIds);
+    _locallyStartedReservationConstatIds.removeWhere(
+      (reservationId, _) =>
+          _locallyCompletedReservationIds.contains(reservationId),
+    );
     _locallyCompletedReservationIds.removeWhere(
       (reservationId) =>
           !reservationIds.contains(reservationId) ||
@@ -294,7 +304,10 @@ class _BookingsScreenState extends State<BookingsScreen> {
           )
         else if (_locallyStartedReservationIds.contains(reservation.id) &&
             reservation.status != ReservationStatus.completed)
-          reservation.copyWith(isStarted: true)
+          reservation.copyWith(
+            isStarted: true,
+            constatId: _locallyStartedReservationConstatIds[reservation.id],
+          )
         else
           reservation,
     ];
@@ -323,14 +336,18 @@ class _BookingsScreenState extends State<BookingsScreen> {
     }
 
     Navigator.of(context)
-        .push<bool>(
-          MaterialPageRoute<bool>(
+        .push<FleetReservation>(
+          MaterialPageRoute<FleetReservation>(
             builder: (context) => PickupScreen(reservation: reservation),
           ),
         )
-        .then((updated) {
-          if (updated ?? false) {
+        .then((startedReservation) {
+          if (startedReservation != null) {
             _locallyStartedReservationIds.add(reservation.id);
+            final constatId = startedReservation.constatId;
+            if (constatId != null && constatId.trim().isNotEmpty) {
+              _locallyStartedReservationConstatIds[reservation.id] = constatId;
+            }
             _handleReservationChanged();
           }
         });
@@ -362,6 +379,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
         .then((updated) {
           if (updated ?? false) {
             _locallyStartedReservationIds.remove(reservation.id);
+            _locallyStartedReservationConstatIds.remove(reservation.id);
             _locallyCompletedReservationIds.add(reservation.id);
             _handleReservationChanged();
           }

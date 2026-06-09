@@ -381,13 +381,13 @@ class FleetApiService {
     await _apiClient.delete('/metier/reservations/${reservation.id}');
   }
 
-  Future<void> startConstat(
+  Future<FleetReservation> startConstat(
     FleetReservation reservation, {
     DateTime? confirmedAt,
     ReservationVideoDraft? departureVideo,
   }) async {
     if (reservation.isStarted || reservation.isTerminated) {
-      return;
+      return reservation;
     }
 
     final datePrise = _pickupTimestampInsideReservation(
@@ -406,7 +406,7 @@ class FleetApiService {
             ),
           );
 
-    await _apiClient.post(
+    final response = await _apiClient.postMap(
       '/metier/constats/demarrer',
       body: {
         'reservationId': int.tryParse(reservation.id) ?? reservation.id,
@@ -419,8 +419,15 @@ class FleetApiService {
             _missingVideoPayload(ReservationVideoKind.departure),
       },
     );
+    final constatId = _constatIdFromStartResponse(response);
 
     await _markReservationStarted(reservation);
+
+    return reservation.copyWith(
+      isStarted: true,
+      isTerminated: false,
+      constatId: constatId,
+    );
   }
 
   Future<void> finishConstat({
@@ -612,6 +619,35 @@ class FleetApiService {
     }
 
     return constatId;
+  }
+
+  String? _constatIdFromStartResponse(Map<String, dynamic> response) {
+    final directId = _idFromNestedValue(
+      response['id'] ??
+          response['constatId'] ??
+          response['idConstat'] ??
+          response['openConstatId'],
+    );
+    if (directId != null) {
+      return directId;
+    }
+
+    for (final key in ['constat', 'item', 'data', 'result']) {
+      final nested = response[key];
+      if (nested is Map<String, dynamic>) {
+        final nestedId = _idFromNestedValue(
+          nested['id'] ??
+              nested['@id'] ??
+              nested['constatId'] ??
+              nested['idConstat'],
+        );
+        if (nestedId != null) {
+          return nestedId;
+        }
+      }
+    }
+
+    return null;
   }
 
   String? _idFromNestedValue(Object? value) {
