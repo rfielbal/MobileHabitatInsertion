@@ -4,12 +4,10 @@ import '../../models/reservation.dart';
 import '../../models/vehicle.dart';
 import '../../services/api_exception.dart';
 import '../../services/fleet_api_service.dart';
-import '../../services/reservation_video_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/bottom_action_bar.dart';
 import '../../widgets/known_issues_card.dart';
-import '../../widgets/upload_tile.dart';
 import 'report_issue_screen.dart';
 
 class PickupScreen extends StatefulWidget {
@@ -25,14 +23,8 @@ class _PickupScreenState extends State<PickupScreen> {
   final _formKey = GlobalKey<FormState>();
   final _fuelController = TextEditingController();
   final _fleetApiService = FleetApiService();
-  final _videoService = ReservationVideoService();
-  ReservationVideoDraft? _departureVideo;
   bool _mileageConfirmed = false;
-  bool _isPreparingVideo = false;
-  bool _isUploadingVideo = false;
   bool _isSubmitting = false;
-
-  bool get _hasDepartureVideo => _departureVideo != null;
 
   @override
   void dispose() {
@@ -50,23 +42,13 @@ class _PickupScreenState extends State<PickupScreen> {
       }
       return;
     }
-    if (_departureVideo == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ajoutez une vidéo de départ')),
-      );
-      return;
-    }
 
     setState(() {
       _isSubmitting = true;
-      _isUploadingVideo = true;
     });
 
     try {
-      await _fleetApiService.startConstat(
-        widget.reservation,
-        departureVideo: _departureVideo,
-      );
+      await _fleetApiService.startConstat(widget.reservation);
 
       if (!mounted) {
         return;
@@ -83,7 +65,6 @@ class _PickupScreenState extends State<PickupScreen> {
       }
       setState(() {
         _isSubmitting = false;
-        _isUploadingVideo = false;
       });
       ScaffoldMessenger.of(
         context,
@@ -94,7 +75,6 @@ class _PickupScreenState extends State<PickupScreen> {
       }
       setState(() {
         _isSubmitting = false;
-        _isUploadingVideo = false;
       });
       ScaffoldMessenger.of(
         context,
@@ -110,49 +90,6 @@ class _PickupScreenState extends State<PickupScreen> {
       return 'Niveau obligatoire';
     }
     return null;
-  }
-
-  Future<void> _recordDepartureVideo() async {
-    try {
-      setState(() {
-        _isPreparingVideo = true;
-      });
-
-      final video = await _videoService.recordReservationVideo(
-        reservationId: widget.reservation.id,
-        kind: ReservationVideoKind.departure,
-        description: _departureVideoDescription,
-      );
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _departureVideo = video ?? _departureVideo;
-        _isPreparingVideo = false;
-      });
-
-      if (video != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Vidéo de départ ajoutée')),
-        );
-      }
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _isPreparingVideo = false;
-      });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Erreur vidéo : $e')));
-    }
-  }
-
-  String get _departureVideoDescription {
-    return 'Vidéo de départ du véhicule ${widget.reservation.vehicle.internalNumber} pour la réservation ${widget.reservation.id}.';
   }
 
   @override
@@ -232,16 +169,6 @@ class _PickupScreenState extends State<PickupScreen> {
               ),
               const SizedBox(height: 24),
               KnownIssuesCard(issues: widget.reservation.vehicle.knownIssues),
-              const SizedBox(height: 24),
-              UploadTile(
-                label: 'Filmer l’état au départ',
-                selected: _hasDepartureVideo,
-                processing: _isPreparingVideo || _isUploadingVideo,
-                statusText: _isUploadingVideo
-                    ? 'Envoi de la vidéo'
-                    : 'Préparation de la vidéo',
-                onTap: _isSubmitting ? null : _recordDepartureVideo,
-              ),
               const SizedBox(height: 24),
               const Text(
                 'Kilométrage',
