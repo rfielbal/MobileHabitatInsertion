@@ -9,6 +9,7 @@ import '../../utils/reservation_calendar_days.dart';
 import '../../utils/reservation_time_constraints.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/availability_calendar.dart';
+import '../../widgets/availability_help_dialog.dart';
 import '../../widgets/bottom_action_bar.dart';
 
 class ReservationEditScreen extends StatefulWidget {
@@ -144,9 +145,20 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
-              'Nouvelle période',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Nouvelle période',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: _showAvailabilityHelp,
+                  icon: const Icon(Icons.help_outline, size: 18),
+                  label: const Text('Aide'),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             const AvailabilityLegend(includeUserUnavailable: true),
@@ -229,6 +241,13 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  void _showAvailabilityHelp() {
+    showDialog<void>(
+      context: context,
+      builder: (context) => const AvailabilityHelpDialog(),
     );
   }
 

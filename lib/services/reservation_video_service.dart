@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:image_picker/image_picker.dart';
+import 'package:video_compress/video_compress.dart';
 
 enum ReservationVideoKind {
   departure(apiValue: 'depart', label: 'début'),
@@ -45,6 +48,29 @@ class ReservationVideoDraft {
   }
 }
 
+class ReservationVideoTooLargeException implements Exception {
+  const ReservationVideoTooLargeException({
+    required this.actualBytes,
+    required this.maxBytes,
+  });
+
+  final int actualBytes;
+  final int maxBytes;
+
+  String get message {
+    return 'La vidéo est trop lourde (${_formatBytes(actualBytes)}). '
+        'La limite mobile est de ${_formatBytes(maxBytes)} pour rester sous la limite serveur.';
+  }
+
+  @override
+  String toString() => message;
+
+  static String _formatBytes(int bytes) {
+    final megaBytes = bytes / (1024 * 1024);
+    return '${megaBytes.toStringAsFixed(1)} Mo';
+  }
+}
+
 class ReservationVideoUpload {
   const ReservationVideoUpload({
     required this.kind,
@@ -82,13 +108,18 @@ class ReservationVideoService {
   ReservationVideoService({ImagePicker? picker})
     : _picker = picker ?? ImagePicker();
 
+  static const maxUploadBytes = 200 * 1024 * 1024;
+  static const compressionThresholdBytes = 50 * 1024 * 1024;
+  static const defaultMaxDuration = Duration(minutes: 1);
+
   final ImagePicker _picker;
 
   Future<ReservationVideoDraft?> recordReservationVideo({
     required String reservationId,
     required ReservationVideoKind kind,
     String description = '',
-    Duration maxDuration = const Duration(minutes: 1),
+    Duration maxDuration = defaultMaxDuration,
+    void Function(double progress)? onCompressionProgress,
   }) async {
     final file = await _picker.pickVideo(
       source: ImageSource.camera,
@@ -99,12 +130,81 @@ class ReservationVideoService {
       return null;
     }
 
+    final preparedFile = await _prepareVideoForUpload(
+      file,
+      onCompressionProgress: onCompressionProgress,
+    );
+
     return ReservationVideoDraft(
       reservationId: reservationId,
       kind: kind,
-      file: file,
+      file: preparedFile,
       capturedAt: DateTime.now(),
       description: description,
     );
+  }
+
+  Future<XFile> _prepareVideoForUpload(
+    XFile file, {
+    void Function(double progress)? onCompressionProgress,
+  }) async {
+    final originalSize = await file.length();
+    var uploadFile = file;
+
+    if (originalSize > compressionThresholdBytes) {
+      uploadFile =
+          await _compressedVideo(file, onCompressionProgress) ?? uploadFile;
+    }
+
+    final uploadSize = await uploadFile.length();
+    if (uploadSize > maxUploadBytes) {
+      throw ReservationVideoTooLargeException(
+        actualBytes: uploadSize,
+        maxBytes: maxUploadBytes,
+      );
+    }
+
+    return uploadFile;
+  }
+
+  Future<XFile?> _compressedVideo(
+    XFile file,
+    void Function(double progress)? onCompressionProgress,
+  ) async {
+    Subscription? subscription;
+    if (onCompressionProgress != null) {
+      subscription = VideoCompress.compressProgress$.subscribe((progress) {
+        onCompressionProgress((progress / 100).clamp(0, 1).toDouble());
+      });
+    }
+
+    try {
+      final compressed = await VideoCompress.compressVideo(
+        file.path,
+        quality: VideoQuality.LowQuality,
+        deleteOrigin: false,
+        includeAudio: true,
+        frameRate: 24,
+      );
+      final compressedPath = compressed?.path;
+      if (compressedPath == null || compressedPath.trim().isEmpty) {
+        return null;
+      }
+
+      final compressedFile = File(compressedPath);
+      if (!await compressedFile.exists()) {
+        return null;
+      }
+
+      final compressedSize = await compressedFile.length();
+      final originalSize = await file.length();
+      if (compressedSize <= 0 || compressedSize >= originalSize) {
+        return null;
+      }
+
+      return XFile(compressedPath);
+    } finally {
+      subscription?.unsubscribe();
+    }
   }
 }

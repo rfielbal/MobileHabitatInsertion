@@ -393,6 +393,45 @@ void main() {
     });
   });
 
+  test(
+    'uploadReservationVideo rejects oversized videos before request',
+    () async {
+      final tempDir = await Directory.systemTemp.createTemp(
+        'wheello_large_video_upload_test_',
+      );
+      addTearDown(() async {
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+      });
+
+      final videoFile = File('${tempDir.path}/large.mp4');
+      final largeVideo = await videoFile.open(mode: FileMode.write);
+      await largeVideo.truncate(ReservationVideoService.maxUploadBytes + 1);
+      await largeVideo.close();
+
+      var requests = 0;
+      final service = _serviceWithMockClient((request) async {
+        requests++;
+        return http.Response('{}', 200);
+      });
+
+      await expectLater(
+        service.uploadReservationVideo(
+          ReservationVideoDraft(
+            reservationId: '10',
+            kind: ReservationVideoKind.departure,
+            file: XFile(videoFile.path),
+            capturedAt: DateTime(2026, 6, 18, 8, 35),
+            description: 'Vidéo trop lourde',
+          ),
+        ),
+        throwsA(isA<ReservationVideoTooLargeException>()),
+      );
+      expect(requests, 0);
+    },
+  );
+
   test('startConstat uploads departure video into depart payload', () async {
     final tempDir = await Directory.systemTemp.createTemp(
       'wheello_departure_video_test_',

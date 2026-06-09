@@ -504,6 +504,13 @@ class FleetApiService {
     ReservationVideoDraft video,
   ) async {
     final fileSize = await video.file.length();
+    if (fileSize > ReservationVideoService.maxUploadBytes) {
+      throw ReservationVideoTooLargeException(
+        actualBytes: fileSize,
+        maxBytes: ReservationVideoService.maxUploadBytes,
+      );
+    }
+
     final response = await _apiClient.postMultipart(
       _reservationVideoUploadPath,
       fileField: _reservationVideoFileField,

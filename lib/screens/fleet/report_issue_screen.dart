@@ -33,6 +33,8 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
   bool _isPreparingVideo = false;
   bool _isUploadingVideo = false;
   bool _isSubmitting = false;
+  double? _videoProgress;
+  String? _videoStatusText;
   String _issueType = 'Problème véhicule';
 
   bool get _hasVideo => _issueVideo != null;
@@ -57,14 +59,23 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
 
     try {
       final message = _descriptionController.text.trim();
+      var videoUploaded = false;
+      String? videoWarning;
 
       if (video != null) {
-        await _fleetApiService.uploadReservationVideo(
-          video.copyWith(description: message),
-        );
+        try {
+          await _fleetApiService.uploadReservationVideo(
+            video.copyWith(description: message),
+          );
+          videoUploaded = true;
+        } catch (e) {
+          videoWarning = _videoUploadWarning(e);
+        }
         if (mounted) {
           setState(() {
             _isUploadingVideo = false;
+            _videoProgress = null;
+            _videoStatusText = null;
           });
         }
       }
@@ -72,16 +83,24 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
       await _fleetApiService.createSignalement(
         reservation: widget.reservation,
         type: _issueType,
-        message: video != null
-            ? '$message\n\nVidéo transmise depuis l’application mobile.'
-            : message,
+        message: _signalementMessage(
+          message: message,
+          videoUploaded: videoUploaded,
+          videoWarning: videoWarning,
+        ),
       );
 
       if (!mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Signalement envoyé à l’administrateur')),
+        SnackBar(
+          content: Text(
+            videoWarning == null
+                ? 'Signalement envoyé à l’administrateur'
+                : 'Signalement envoyé, vidéo non transmise',
+          ),
+        ),
       );
       Navigator.of(context).pop();
     } on ApiException catch (e) {
@@ -91,6 +110,8 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
       setState(() {
         _isSubmitting = false;
         _isUploadingVideo = false;
+        _videoProgress = null;
+        _videoStatusText = null;
       });
       ScaffoldMessenger.of(
         context,
@@ -102,6 +123,8 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
       setState(() {
         _isSubmitting = false;
         _isUploadingVideo = false;
+        _videoProgress = null;
+        _videoStatusText = null;
       });
       ScaffoldMessenger.of(
         context,
@@ -113,11 +136,22 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
     try {
       setState(() {
         _isPreparingVideo = true;
+        _videoProgress = null;
+        _videoStatusText = 'Ouverture de la caméra';
       });
 
       final video = await _videoService.recordReservationVideo(
         reservationId: widget.reservation.id,
         kind: _videoKind,
+        onCompressionProgress: (progress) {
+          if (!mounted) {
+            return;
+          }
+          setState(() {
+            _videoProgress = progress;
+            _videoStatusText = 'Compression de la vidéo';
+          });
+        },
       );
 
       if (video == null) {
@@ -126,6 +160,8 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
         }
         setState(() {
           _isPreparingVideo = false;
+          _videoProgress = null;
+          _videoStatusText = null;
         });
         return;
       }
@@ -137,6 +173,8 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
       setState(() {
         _issueVideo = video;
         _isPreparingVideo = false;
+        _videoProgress = null;
+        _videoStatusText = null;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -148,11 +186,40 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
       }
       setState(() {
         _isPreparingVideo = false;
+        _videoProgress = null;
+        _videoStatusText = null;
       });
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Erreur vidéo : $e')));
+      ).showSnackBar(SnackBar(content: Text(_videoUploadWarning(e))));
     }
+  }
+
+  String _signalementMessage({
+    required String message,
+    required bool videoUploaded,
+    required String? videoWarning,
+  }) {
+    if (videoUploaded) {
+      return '$message\n\nVidéo transmise depuis l’application mobile.';
+    }
+
+    if (videoWarning != null) {
+      return '$message\n\nVidéo non transmise : $videoWarning';
+    }
+
+    return message;
+  }
+
+  String _videoUploadWarning(Object error) {
+    if (error is ReservationVideoTooLargeException) {
+      return error.message;
+    }
+    if (error is ApiException) {
+      return error.message;
+    }
+
+    return 'la vidéo n’a pas pu être envoyée.';
   }
 
   ReservationVideoKind get _videoKind {
@@ -258,9 +325,10 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
                 label: 'Ajouter une vidéo si nécessaire',
                 selected: _hasVideo,
                 processing: _isPreparingVideo || _isUploadingVideo,
+                progress: _videoProgress,
                 statusText: _isUploadingVideo
                     ? 'Envoi de la vidéo'
-                    : 'Préparation de la vidéo',
+                    : _videoStatusText ?? 'Préparation de la vidéo',
                 onTap: _isSubmitting ? null : _recordIssueVideo,
               ),
               const SizedBox(height: 8),
