@@ -427,33 +427,19 @@ class FleetApiService {
     required FleetReservation reservation,
     required int mileage,
     DateTime? confirmedAt,
-    ReservationVideoDraft? returnVideo,
   }) async {
     final constatId = _constatIdForReturn(reservation);
     final dateRendu = _returnTimestampInsideReservation(
       reservation,
       confirmedAt ?? DateTime.now(),
     );
-    final uploadedVideo = returnVideo == null
-        ? null
-        : await uploadReservationVideo(
-            returnVideo.copyWith(
-              description: _videoDescription(
-                reservation: reservation,
-                kind: ReservationVideoKind.returnVehicle,
-                fallback: returnVideo.description,
-              ),
-            ),
-          );
 
     await _apiClient.post(
       '/metier/constats/$constatId/terminer',
       body: {
         'dateRendu': FleetApiMappers.iso(dateRendu),
         'kmFin': mileage,
-        'arrive':
-            uploadedVideo?.toConstatPayload() ??
-            _missingVideoPayload(ReservationVideoKind.returnVehicle),
+        'arrive': _missingVideoPayload(ReservationVideoKind.returnVehicle),
       },
     );
 

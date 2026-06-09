@@ -4,12 +4,10 @@ import '../../models/reservation.dart';
 import '../../models/vehicle.dart';
 import '../../services/api_exception.dart';
 import '../../services/fleet_api_service.dart';
-import '../../services/reservation_video_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/bottom_action_bar.dart';
 import '../../widgets/known_issues_card.dart';
-import '../../widgets/upload_tile.dart';
 import 'report_issue_screen.dart';
 
 class ReturnVehicleScreen extends StatefulWidget {
@@ -26,16 +24,10 @@ class _ReturnVehicleScreenState extends State<ReturnVehicleScreen> {
   final _mileageController = TextEditingController();
   final _fuelController = TextEditingController();
   final _fleetApiService = FleetApiService();
-  final _videoService = ReservationVideoService();
 
-  ReservationVideoDraft? _returnVideo;
   bool _keysReturned = false;
   bool _vehicleClean = false;
-  bool _isPreparingVideo = false;
-  bool _isUploadingVideo = false;
   bool _isSubmitting = false;
-
-  bool get _hasReturnVideo => _returnVideo != null;
 
   @override
   void dispose() {
@@ -49,23 +41,15 @@ class _ReturnVehicleScreenState extends State<ReturnVehicleScreen> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
-    if (_returnVideo == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ajoutez une vidéo de retour')),
-      );
-      return;
-    }
 
     setState(() {
       _isSubmitting = true;
-      _isUploadingVideo = true;
     });
 
     try {
       await _fleetApiService.finishConstat(
         reservation: widget.reservation,
         mileage: int.parse(_mileageController.text.trim()),
-        returnVideo: _returnVideo,
       );
 
       if (!mounted) {
@@ -83,7 +67,6 @@ class _ReturnVehicleScreenState extends State<ReturnVehicleScreen> {
       }
       setState(() {
         _isSubmitting = false;
-        _isUploadingVideo = false;
       });
       ScaffoldMessenger.of(
         context,
@@ -94,7 +77,6 @@ class _ReturnVehicleScreenState extends State<ReturnVehicleScreen> {
       }
       setState(() {
         _isSubmitting = false;
-        _isUploadingVideo = false;
       });
       ScaffoldMessenger.of(
         context,
@@ -111,49 +93,6 @@ class _ReturnVehicleScreenState extends State<ReturnVehicleScreen> {
       return 'Le kilométrage ne peut pas être inférieur au départ';
     }
     return null;
-  }
-
-  Future<void> _recordReturnVideo() async {
-    try {
-      setState(() {
-        _isPreparingVideo = true;
-      });
-
-      final video = await _videoService.recordReservationVideo(
-        reservationId: widget.reservation.id,
-        kind: ReservationVideoKind.returnVehicle,
-        description: _returnVideoDescription,
-      );
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _returnVideo = video ?? _returnVideo;
-        _isPreparingVideo = false;
-      });
-
-      if (video != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Vidéo de retour ajoutée')),
-        );
-      }
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _isPreparingVideo = false;
-      });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Erreur vidéo : $e')));
-    }
-  }
-
-  String get _returnVideoDescription {
-    return 'Vidéo de retour du véhicule ${widget.reservation.vehicle.internalNumber} pour la réservation ${widget.reservation.id}.';
   }
 
   String? _requiredFuelLevel(String? value) {
@@ -234,16 +173,6 @@ class _ReturnVehicleScreenState extends State<ReturnVehicleScreen> {
               ),
               const SizedBox(height: 16),
               KnownIssuesCard(issues: widget.reservation.vehicle.knownIssues),
-              const SizedBox(height: 24),
-              UploadTile(
-                label: 'Filmer l’état au retour',
-                selected: _hasReturnVideo,
-                processing: _isPreparingVideo || _isUploadingVideo,
-                statusText: _isUploadingVideo
-                    ? 'Envoi de la vidéo'
-                    : 'Préparation de la vidéo',
-                onTap: _isSubmitting ? null : _recordReturnVideo,
-              ),
               const SizedBox(height: 24),
               const Text(
                 'Informations de retour',

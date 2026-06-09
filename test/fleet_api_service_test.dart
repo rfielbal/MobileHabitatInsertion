@@ -446,20 +446,7 @@ void main() {
     expect(statusBody, {'demarre': true, 'termine': false});
   });
 
-  test('finishConstat uploads return video into arrive payload', () async {
-    final tempDir = await Directory.systemTemp.createTemp(
-      'wheello_return_video_test_',
-    );
-    addTearDown(() async {
-      if (await tempDir.exists()) {
-        await tempDir.delete(recursive: true);
-      }
-    });
-
-    final videoFile = File('${tempDir.path}/arrive.mp4');
-    await videoFile.writeAsBytes([0, 1, 2, 3, 4]);
-
-    String? uploadBody;
+  test('finishConstat sends return without uploading video', () async {
     Map<String, dynamic>? returnBody;
     Map<String, dynamic>? statusBody;
     final service = _serviceWithMockClient((request) async {
@@ -479,17 +466,7 @@ void main() {
       }
 
       if (request.url.path == '/api/metier/videos') {
-        uploadBody = request.body;
-        return http.Response(
-          jsonEncode({
-            'id': 34,
-            'nomFichier': 'arrive-stocke.mp4',
-            'taille': '5',
-            'type': 'arrive',
-            'description': 'État retour OK',
-          }),
-          201,
-        );
+        fail('A return should not upload a video.');
       }
 
       if (request.url.path == '/api/metier/constats/99/terminer') {
@@ -513,23 +490,13 @@ void main() {
       reservation: reservation,
       mileage: 120,
       confirmedAt: DateTime(2026, 6, 18, 16, 30),
-      returnVideo: ReservationVideoDraft(
-        reservationId: reservation.id,
-        kind: ReservationVideoKind.returnVehicle,
-        file: XFile(videoFile.path),
-        capturedAt: DateTime(2026, 6, 18, 16, 25),
-        description: 'État retour OK',
-      ),
     );
 
-    expect(uploadBody, contains('name="type"'));
-    expect(uploadBody, contains('arrive'));
-    expect(uploadBody, contains('État retour OK'));
     expect(returnBody?['arrive'], {
-      'nomFichier': 'arrive-stocke.mp4',
-      'taille': '5',
+      'nomFichier': 'video-non-requise',
+      'taille': '0',
       'type': 'arrive',
-      'description': 'État retour OK',
+      'description': 'Aucune vidéo transmise depuis l’application mobile.',
     });
     expect(statusBody, {'termine': true, 'demarre': false});
   });
