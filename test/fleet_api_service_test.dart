@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -9,6 +10,7 @@ import 'package:mobile_habitat_insertion/models/reservation.dart';
 import 'package:mobile_habitat_insertion/models/vehicle.dart';
 import 'package:mobile_habitat_insertion/services/api_client.dart';
 import 'package:mobile_habitat_insertion/services/api_exception.dart';
+import 'package:mobile_habitat_insertion/services/auth_session_service.dart';
 import 'package:mobile_habitat_insertion/services/fleet_api_mappers.dart';
 import 'package:mobile_habitat_insertion/services/fleet_api_service.dart';
 import 'package:mobile_habitat_insertion/services/reservation_video_service.dart';
@@ -358,6 +360,7 @@ void main() {
           'id': 45,
           'nomFichier': 'depart-stocke.mp4',
           'taille': '5',
+          'mimeType': 'video/mp4',
           'type': 'depart',
           'description': 'Vidéo de départ',
         }),
@@ -388,6 +391,7 @@ void main() {
     expect(upload.toConstatPayload(), {
       'nomFichier': 'depart-stocke.mp4',
       'taille': '5',
+      'mimeType': 'video/mp4',
       'type': 'depart',
       'description': 'Vidéo de départ',
     });
@@ -431,6 +435,109 @@ void main() {
       expect(requests, 0);
     },
   );
+
+  test('createSignalement sends uploaded video metadata', () async {
+    Map<String, dynamic>? sentBody;
+    final service = _serviceWithMockClient((request) async {
+      expect(request.method, 'POST');
+      expect(request.url.path, '/api/metier/signalements');
+      sentBody = jsonDecode(request.body) as Map<String, dynamic>;
+      return http.Response('{}', 201);
+    });
+
+    await service.createSignalement(
+      reservation: _reservation(
+        startAt: DateTime(2026, 6, 18, 8, 30),
+        endAt: DateTime(2026, 6, 18, 17),
+      ),
+      type: 'Problème véhicule',
+      message: 'Rayure sur la porte.',
+      video: const ReservationVideoUpload(
+        kind: ReservationVideoKind.departure,
+        type: 'depart',
+        description: 'Rayure sur la porte.',
+        nomFichier: 'signalement.mp4',
+        taille: '2048',
+        mimeType: 'video/mp4',
+      ),
+    );
+
+    expect(sentBody, {
+      'vehiculeId': 1,
+      'type': 'Problème véhicule',
+      'message': 'Rayure sur la porte.',
+      'video': {
+        'nomFichier': 'signalement.mp4',
+        'taille': '2048',
+        'mimeType': 'video/mp4',
+        'type': 'depart',
+        'description': 'Rayure sur la porte.',
+        'context': 'depart',
+      },
+    });
+  });
+
+  test('createSignalement refreshes expired JWT and retries once', () async {
+    FlutterSecureStorage.setMockInitialValues({
+      AuthSessionService.tokenKey: 'expired-token',
+      AuthSessionService.userIdKey: '10',
+      AuthSessionService.userEmailKey: 'g@g.c',
+      AuthSessionService.firstNameKey: 'G',
+      AuthSessionService.lastNameKey: 'C',
+      AuthSessionService.roleKey: 'user',
+      AuthSessionService.poleKey: 'Site',
+    });
+
+    final calls = <String>[];
+    Map<String, dynamic>? sentBody;
+    final service = _serviceWithMockClient((request) async {
+      calls.add('${request.method} ${request.url.path}');
+
+      if (request.url.path == '/api/metier/signalements' && calls.length == 1) {
+        expect(request.headers['authorization'], 'Bearer expired-token');
+        return http.Response(jsonEncode({'message': 'Expired JWT Token'}), 401);
+      }
+
+      if (request.url.path == '/api/mobile/session') {
+        expect(jsonDecode(request.body), {'identifier': 'g@g.c'});
+        return http.Response(
+          jsonEncode({
+            'token': 'fresh-token',
+            'user': {
+              'id': 10,
+              'email': 'g@g.c',
+              'prenom': 'G',
+              'nom': 'C',
+              'roles': ['ROLE_USER'],
+              'pole': 'Site',
+            },
+          }),
+          200,
+        );
+      }
+
+      expect(request.url.path, '/api/metier/signalements');
+      expect(request.headers['authorization'], 'Bearer fresh-token');
+      sentBody = jsonDecode(request.body) as Map<String, dynamic>;
+      return http.Response('{}', 201);
+    });
+
+    await service.createSignalement(
+      reservation: _reservation(
+        startAt: DateTime(2026, 6, 18, 8, 30),
+        endAt: DateTime(2026, 6, 18, 17),
+      ),
+      type: 'Problème véhicule',
+      message: 'Voyant moteur allumé.',
+    );
+
+    expect(calls, [
+      'POST /api/metier/signalements',
+      'POST /api/mobile/session',
+      'POST /api/metier/signalements',
+    ]);
+    expect(sentBody?['message'], 'Voyant moteur allumé.');
+  });
 
   test('startConstat uploads departure video into depart payload', () async {
     final tempDir = await Directory.systemTemp.createTemp(
@@ -500,6 +607,7 @@ void main() {
     expect(startBody?['depart'], {
       'nomFichier': 'depart-stocke.mp4',
       'taille': '5',
+      'mimeType': 'video/mp4',
       'type': 'depart',
       'description': 'État départ OK',
     });
@@ -1836,11 +1944,13 @@ http.Response _emptyConstatsResponse() {
 }
 
 FleetApiService _serviceWithMockClient(
-  Future<http.Response> Function(http.Request request) handler,
-) {
+  Future<http.Response> Function(http.Request request) handler, {
+  AuthSessionService sessionService = const AuthSessionService(),
+}) {
   return FleetApiService(
     apiClient: ApiClient(
       httpClient: MockClient(handler),
+      sessionService: sessionService,
       baseUri: Uri.parse('https://example.test/api'),
     ),
   );

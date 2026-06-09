@@ -125,6 +125,7 @@ class ApiClient {
     required String filePath,
     Map<String, String> fields = const {},
     bool authenticated = true,
+    bool retryOnExpiredToken = true,
   }) async {
     final request = http.MultipartRequest('POST', _uri(path, null));
     final headers = await _headers(authenticated: authenticated);
@@ -145,7 +146,25 @@ class ApiClient {
         .timeout(const Duration(minutes: 2));
     final response = await http.Response.fromStream(streamedResponse);
 
-    return _decodeResponse(response);
+    try {
+      return _decodeResponse(response);
+    } on ApiException catch (error) {
+      if (authenticated &&
+          retryOnExpiredToken &&
+          error.isExpiredAuthentication &&
+          await _refreshStoredSession()) {
+        return postMultipart(
+          path,
+          fileField: fileField,
+          filePath: filePath,
+          fields: fields,
+          authenticated: authenticated,
+          retryOnExpiredToken: false,
+        );
+      }
+
+      rethrow;
+    }
   }
 
   Future<Object?> _sendJson({
@@ -154,6 +173,7 @@ class ApiClient {
     Map<String, String>? queryParameters,
     Map<String, dynamic>? body,
     required bool authenticated,
+    bool retryOnExpiredToken = true,
   }) async {
     final request = http.Request(method, _uri(path, queryParameters));
     request.headers.addAll(await _headers(authenticated: authenticated));
@@ -167,7 +187,25 @@ class ApiClient {
         .timeout(const Duration(seconds: 20));
     final response = await http.Response.fromStream(streamedResponse);
 
-    return _decodeResponse(response);
+    try {
+      return _decodeResponse(response);
+    } on ApiException catch (error) {
+      if (authenticated &&
+          retryOnExpiredToken &&
+          error.isExpiredAuthentication &&
+          await _refreshStoredSession()) {
+        return _sendJson(
+          method: method,
+          path: path,
+          queryParameters: queryParameters,
+          body: body,
+          authenticated: authenticated,
+          retryOnExpiredToken: false,
+        );
+      }
+
+      rethrow;
+    }
   }
 
   Object? _decodeResponse(http.Response response) {
@@ -203,6 +241,79 @@ class ApiClient {
     }
 
     return headers;
+  }
+
+  Future<bool> _refreshStoredSession() async {
+    try {
+      final currentSession = await _sessionService.readSession();
+      if (currentSession == null ||
+          currentSession.email.trim().isEmpty ||
+          currentSession.isMockSession) {
+        return false;
+      }
+
+      final request = http.Request('POST', _uri('/mobile/session', null));
+      request.headers.addAll(const {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      });
+      request.body = jsonEncode({'identifier': currentSession.email});
+
+      final streamedResponse = await _httpClient
+          .send(request)
+          .timeout(const Duration(seconds: 20));
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return false;
+      }
+
+      final decoded = response.body.trim().isEmpty
+          ? null
+          : jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        return false;
+      }
+
+      final token = (decoded['token'] ?? '').toString();
+      final user = decoded['user'];
+      if (token.isEmpty || user is! Map<String, dynamic>) {
+        return false;
+      }
+
+      await _sessionService.saveSession(
+        AccountSession(
+          token: token,
+          userId: (user['id'] ?? currentSession.userId).toString(),
+          email: (user['email'] ?? currentSession.email).toString(),
+          firstName: (user['prenom'] ?? currentSession.firstName).toString(),
+          lastName: (user['nom'] ?? currentSession.lastName).toString(),
+          role: _roleFromApi(user['roles'], fallback: currentSession.role),
+          pole: (user['pole'] ?? currentSession.pole).toString(),
+        ),
+      );
+
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  String _roleFromApi(Object? rolesValue, {required String fallback}) {
+    final roles = rolesValue is List
+        ? rolesValue.map((role) => '$role').toList()
+        : <String>[];
+
+    if (roles.contains('ROLE_ADMIN')) {
+      return 'admin';
+    }
+    if (roles.contains('ROLE_MANAGER')) {
+      return 'manager';
+    }
+    if (roles.contains('ROLE_USER')) {
+      return 'user';
+    }
+    return fallback;
   }
 
   Uri _uri(String path, Map<String, String>? queryParameters) {

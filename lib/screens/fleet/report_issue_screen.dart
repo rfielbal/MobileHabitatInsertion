@@ -61,10 +61,11 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
       final message = _descriptionController.text.trim();
       var videoUploaded = false;
       String? videoWarning;
+      ReservationVideoUpload? uploadedVideo;
 
       if (video != null) {
         try {
-          await _fleetApiService.uploadReservationVideo(
+          uploadedVideo = await _fleetApiService.uploadReservationVideo(
             video.copyWith(description: message),
           );
           videoUploaded = true;
@@ -88,6 +89,7 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
           videoUploaded: videoUploaded,
           videoWarning: videoWarning,
         ),
+        video: uploadedVideo,
       );
 
       if (!mounted) {

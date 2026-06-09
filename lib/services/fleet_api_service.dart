@@ -488,6 +488,7 @@ class FleetApiService {
     required FleetReservation reservation,
     required String type,
     required String message,
+    ReservationVideoUpload? video,
   }) async {
     await _apiClient.postMap(
       '/metier/signalements',
@@ -496,6 +497,7 @@ class FleetApiService {
             int.tryParse(reservation.vehicle.id) ?? reservation.vehicle.id,
         'type': type,
         'message': message,
+        if (video != null) 'video': video.toSignalementPayload(),
       },
     );
   }
@@ -562,6 +564,9 @@ class FleetApiService {
     final taille = _textFromApiValue(
       json['taille'] ?? json['size'] ?? json['fileSize'],
     );
+    final mimeType = _textFromApiValue(
+      json['mimeType'] ?? json['mime_type'] ?? json['contentType'],
+    );
     final capturedAt =
         _dateFromApiValue(json['capturedAt'] ?? json['dateCapture']) ??
         video.capturedAt;
@@ -576,6 +581,7 @@ class FleetApiService {
           : _textFromApiValue(json['description']),
       nomFichier: nomFichier.isEmpty ? p.basename(video.file.path) : nomFichier,
       taille: taille.isEmpty ? fileSize.toString() : taille,
+      mimeType: mimeType.isEmpty ? 'video/mp4' : mimeType,
       id: id,
       chemin: _nullableText(json['chemin'] ?? json['path']),
       url: _nullableText(json['url'] ?? json['publicUrl']),

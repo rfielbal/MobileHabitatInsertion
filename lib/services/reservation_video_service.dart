@@ -78,6 +78,7 @@ class ReservationVideoUpload {
     required this.description,
     required this.nomFichier,
     required this.taille,
+    required this.mimeType,
     this.id,
     this.chemin,
     this.url,
@@ -89,6 +90,7 @@ class ReservationVideoUpload {
   final String description;
   final String nomFichier;
   final String taille;
+  final String mimeType;
   final String? id;
   final String? chemin;
   final String? url;
@@ -98,8 +100,20 @@ class ReservationVideoUpload {
     return {
       'nomFichier': nomFichier,
       'taille': taille,
+      'mimeType': mimeType,
       'type': type,
       'description': description,
+    };
+  }
+
+  Map<String, dynamic> toSignalementPayload() {
+    return {
+      'nomFichier': nomFichier,
+      'taille': taille,
+      'mimeType': mimeType,
+      'type': type,
+      'description': description,
+      'context': kind.apiValue,
     };
   }
 }

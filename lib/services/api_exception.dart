@@ -7,6 +7,13 @@ class ApiException implements Exception {
   final int? statusCode;
   final Object? details;
 
+  bool get isExpiredAuthentication {
+    final normalizedMessage = message.toLowerCase();
+    return statusCode == 401 &&
+        (normalizedMessage.contains('expired jwt token') ||
+            normalizedMessage.contains('session expirée'));
+  }
+
   factory ApiException.fromResponse({
     required int statusCode,
     required String body,
@@ -68,6 +75,12 @@ class ApiException implements Exception {
   }
 
   static String _normalizeMessage(String message) {
+    final lowerMessage = message.toLowerCase();
+    if (lowerMessage.contains('expired jwt token') ||
+        (lowerMessage.contains('jwt') && lowerMessage.contains('expired'))) {
+      return 'Session expirée. Reconnexion en cours, réessayez si nécessaire.';
+    }
+
     if (message.contains('trying to encode the JWT token') ||
         message.contains('private key/passphrase') ||
         message.contains('Signature key') ||
