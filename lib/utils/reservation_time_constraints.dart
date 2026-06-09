@@ -5,14 +5,20 @@ import 'reservation_calendar_days.dart';
 DateTime suggestedReservationStartAt({
   required DateTime date,
   required Map<int, VehicleAvailabilitySuggestion> suggestionsByDay,
+  List<FleetReservation> userReservations = const [],
+  String? excludedReservationId,
   DateTime? now,
 }) {
   final dayStart = _dayStart(date);
   final currentTime = now ?? DateTime.now();
   final nowPlusTurnaround = currentTime.add(reservationTurnaroundDuration);
-  var suggestion = earliestReservationStartAt(
-    date: date,
-    suggestionsByDay: suggestionsByDay,
+  var suggestion = _latestDate(
+    earliestReservationStartAt(date: date, suggestionsByDay: suggestionsByDay),
+    earliestUserReservationStartAt(
+      date: date,
+      userReservations: userReservations,
+      excludedReservationId: excludedReservationId,
+    ),
   );
 
   suggestion ??= _sameDay(dayStart, currentTime) ? nowPlusTurnaround : dayStart;
@@ -97,10 +103,19 @@ DateTime? latestReservationEndAt({
 bool reservationStartViolatesEarliestStart({
   required DateTime startAt,
   required Map<int, VehicleAvailabilitySuggestion> suggestionsByDay,
+  List<FleetReservation> userReservations = const [],
+  String? excludedReservationId,
 }) {
-  final earliestStartAt = earliestReservationStartAt(
-    date: startAt,
-    suggestionsByDay: suggestionsByDay,
+  final earliestStartAt = _latestDate(
+    earliestReservationStartAt(
+      date: startAt,
+      suggestionsByDay: suggestionsByDay,
+    ),
+    earliestUserReservationStartAt(
+      date: startAt,
+      userReservations: userReservations,
+      excludedReservationId: excludedReservationId,
+    ),
   );
 
   return earliestStartAt != null && startAt.isBefore(earliestStartAt);
@@ -120,6 +135,42 @@ bool reservationEndViolatesLatestEnd({
   );
 
   return latestEndAt != null && endAt.isAfter(latestEndAt);
+}
+
+DateTime? earliestUserReservationStartAt({
+  required DateTime date,
+  List<FleetReservation> userReservations = const [],
+  String? excludedReservationId,
+}) {
+  DateTime? earliestStartAt;
+
+  for (final reservation in userReservations) {
+    if (reservation.id == excludedReservationId || reservation.isInHistory) {
+      continue;
+    }
+
+    final nextUserStartAt = reservation.effectiveEndAt.add(
+      reservationTurnaroundDuration,
+    );
+    if (!_sameDay(nextUserStartAt, date)) {
+      continue;
+    }
+
+    earliestStartAt = _latestDate(earliestStartAt, nextUserStartAt);
+  }
+
+  return earliestStartAt;
+}
+
+DateTime? _latestDate(DateTime? first, DateTime? second) {
+  if (first == null) {
+    return second;
+  }
+  if (second == null) {
+    return first;
+  }
+
+  return second.isAfter(first) ? second : first;
 }
 
 DateTime _dayStart(DateTime date) {

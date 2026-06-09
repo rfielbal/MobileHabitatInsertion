@@ -42,6 +42,46 @@ void main() {
       );
     });
 
+    test('uses the previous user return plus one hour on return days', () {
+      expect(
+        suggestedReservationStartAt(
+          date: DateTime(2026, 6, 5),
+          suggestionsByDay: const {},
+          userReservations: [
+            _reservation(
+              id: 'previous-user-trip',
+              startAt: DateTime(2026, 6, 4, 9),
+              endAt: DateTime(2026, 6, 5, 13),
+            ),
+          ],
+          now: DateTime(2026, 6, 1, 10),
+        ),
+        DateTime(2026, 6, 5, 14),
+      );
+    });
+
+    test('keeps the latest start between vehicle and user constraints', () {
+      expect(
+        suggestedReservationStartAt(
+          date: DateTime(2026, 6, 5),
+          suggestionsByDay: {
+            5: VehicleAvailabilitySuggestion(
+              earliestStartAt: DateTime(2026, 6, 5, 16),
+            ),
+          },
+          userReservations: [
+            _reservation(
+              id: 'previous-user-trip',
+              startAt: DateTime(2026, 6, 4, 9),
+              endAt: DateTime(2026, 6, 5, 13),
+            ),
+          ],
+          now: DateTime(2026, 6, 1, 10),
+        ),
+        DateTime(2026, 6, 5, 16),
+      );
+    });
+
     test('does not suggest an hour before now plus one hour for today', () {
       expect(
         suggestedReservationStartAt(
@@ -200,6 +240,33 @@ void main() {
         reservationStartViolatesEarliestStart(
           startAt: DateTime(2026, 6, 4, 18),
           suggestionsByDay: suggestionsByDay,
+        ),
+        isFalse,
+      );
+    });
+
+    test('rejects a departure less than one hour after a user return', () {
+      final userReservations = [
+        _reservation(
+          id: 'previous-user-trip',
+          startAt: DateTime(2026, 6, 3, 9),
+          endAt: DateTime(2026, 6, 4, 13),
+        ),
+      ];
+
+      expect(
+        reservationStartViolatesEarliestStart(
+          startAt: DateTime(2026, 6, 4, 13, 30),
+          suggestionsByDay: const {},
+          userReservations: userReservations,
+        ),
+        isTrue,
+      );
+      expect(
+        reservationStartViolatesEarliestStart(
+          startAt: DateTime(2026, 6, 4, 14),
+          suggestionsByDay: const {},
+          userReservations: userReservations,
         ),
         isFalse,
       );

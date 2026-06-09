@@ -521,6 +521,8 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
     if (reservationStartViolatesEarliestStart(
       startAt: startAt,
       suggestionsByDay: _availabilitySuggestionsForDate(startAt),
+      userReservations: _userReservations,
+      excludedReservationId: widget.reservation.id,
     )) {
       return 'Le départ doit être au moins 1 h après le retour précédent';
     }
@@ -761,6 +763,8 @@ class _ReservationEditScreenState extends State<ReservationEditScreen> {
       suggestedReservationStartAt(
         date: date,
         suggestionsByDay: _availabilitySuggestionsForDate(date),
+        userReservations: _userReservations,
+        excludedReservationId: widget.reservation.id,
       ),
     );
   }

@@ -287,6 +287,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     if (reservationStartViolatesEarliestStart(
       startAt: startAt,
       suggestionsByDay: _availabilitySuggestionsForDate(startAt),
+      userReservations: _userReservations,
     )) {
       return 'Le départ doit être au moins 1 h après le retour précédent';
     }
@@ -648,6 +649,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
       suggestedReservationStartAt(
         date: date,
         suggestionsByDay: _availabilitySuggestionsForDate(date),
+        userReservations: _userReservations,
       ),
     );
   }
