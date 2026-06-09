@@ -20,9 +20,16 @@ void main() {
     'startConstat sends reservation start when confirmed after end',
     () async {
       Map<String, dynamic>? sentBody;
+      Map<String, dynamic>? statusBody;
       final service = _serviceWithMockClient((request) async {
         if (request.method == 'GET') {
           return _emptyConstatsResponse();
+        }
+
+        if (request.method == 'PATCH') {
+          expect(request.url.path, '/api/metier/reservations/10');
+          statusBody = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response('{}', 200);
         }
 
         expect(request.method, 'POST');
@@ -41,6 +48,7 @@ void main() {
       );
 
       expect(sentBody?['datePrise'], FleetApiMappers.iso(reservation.startAt));
+      expect(statusBody, {'demarre': true, 'termine': false});
     },
   );
 
@@ -53,6 +61,11 @@ void main() {
           return _emptyConstatsResponse();
         }
 
+        if (request.method == 'PATCH') {
+          return http.Response('{}', 200);
+        }
+
+        expect(request.method, 'POST');
         sentBody = jsonDecode(request.body) as Map<String, dynamic>;
         return http.Response('{}', 200);
       });
@@ -79,6 +92,11 @@ void main() {
           return _emptyConstatsResponse();
         }
 
+        if (request.method == 'PATCH') {
+          return http.Response('{}', 200);
+        }
+
+        expect(request.method, 'POST');
         sentBody = jsonDecode(request.body) as Map<String, dynamic>;
         return http.Response('{}', 200);
       });
@@ -142,9 +160,10 @@ void main() {
   );
 
   test(
-    'startConstat ignores unrelated closed vehicle constats without reservation id',
+    'startConstat starts an unstarted reservation without constat lookup',
     () async {
       var startRequests = 0;
+      var statusRequests = 0;
       final service = _serviceWithMockClient((request) async {
         if (request.method == 'GET') {
           return http.Response(
@@ -161,7 +180,12 @@ void main() {
           );
         }
 
-        startRequests++;
+        if (request.method == 'POST') {
+          startRequests++;
+        }
+        if (request.method == 'PATCH') {
+          statusRequests++;
+        }
         return http.Response('{}', 200);
       });
       final reservation = _reservation(
@@ -175,6 +199,7 @@ void main() {
       );
 
       expect(startRequests, 1);
+      expect(statusRequests, 1);
     },
   );
 
@@ -227,7 +252,7 @@ void main() {
         sentBody?['dateRendu'],
         FleetApiMappers.iso(DateTime(2026, 6, 18, 8, 39, 59)),
       );
-      expect(statusBody, {'termine': true});
+      expect(statusBody, {'termine': true, 'demarre': false});
     },
   );
 
@@ -362,6 +387,7 @@ void main() {
 
     String? uploadBody;
     Map<String, dynamic>? startBody;
+    Map<String, dynamic>? statusBody;
     final service = _serviceWithMockClient((request) async {
       if (request.method == 'GET') {
         return _emptyConstatsResponse();
@@ -379,6 +405,12 @@ void main() {
           }),
           201,
         );
+      }
+
+      if (request.method == 'PATCH') {
+        expect(request.url.path, '/api/metier/reservations/10');
+        statusBody = jsonDecode(request.body) as Map<String, dynamic>;
+        return http.Response('{}', 200);
       }
 
       expect(request.method, 'POST');
@@ -411,6 +443,7 @@ void main() {
       'type': 'depart',
       'description': 'État départ OK',
     });
+    expect(statusBody, {'demarre': true, 'termine': false});
   });
 
   test('finishConstat uploads return video into arrive payload', () async {
@@ -498,7 +531,7 @@ void main() {
       'type': 'arrive',
       'description': 'État retour OK',
     });
-    expect(statusBody, {'termine': true});
+    expect(statusBody, {'termine': true, 'demarre': false});
   });
 
   test(

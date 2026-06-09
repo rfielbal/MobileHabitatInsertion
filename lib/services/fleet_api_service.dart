@@ -419,6 +419,8 @@ class FleetApiService {
             _missingVideoPayload(ReservationVideoKind.departure),
       },
     );
+
+    await _markReservationStarted(reservation);
   }
 
   Future<void> finishConstat({
@@ -604,7 +606,14 @@ class FleetApiService {
   Future<void> _markReservationTerminated(FleetReservation reservation) async {
     await _apiClient.patch(
       '/metier/reservations/${reservation.id}',
-      body: {'termine': true},
+      body: {'termine': true, 'demarre': false},
+    );
+  }
+
+  Future<void> _markReservationStarted(FleetReservation reservation) async {
+    await _apiClient.patch(
+      '/metier/reservations/${reservation.id}',
+      body: {'demarre': true, 'termine': false},
     );
   }
 
