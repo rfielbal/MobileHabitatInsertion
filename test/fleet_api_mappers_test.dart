@@ -20,6 +20,36 @@ void main() {
     },
   );
 
+  test('vehicle mapper reads current mileage from API', () {
+    final vehicle = FleetApiMappers.vehicleFromJson({
+      'id': 10,
+      'marque': 'Citroën',
+      'modele': 'C3',
+      'immatriculation': 'AA-123-AA',
+      'numVehicule': 114,
+      'kilometrage': 45210,
+    });
+
+    expect(vehicle.internalNumber, 'V-114');
+    expect(vehicle.currentMileage, 45210);
+  });
+
+  test('reservation mapper uses vehicle mileage as expected start mileage', () {
+    final reservation = FleetApiMappers.reservationFromJson({
+      'id': 1,
+      'dateDebut': '2026-06-18T09:00:00Z',
+      'dateFin': '2026-06-18T17:00:00Z',
+      'vehicule': {
+        'id': 10,
+        'marque': 'Citroën',
+        'modele': 'C3',
+        'kilometrage': 45210,
+      },
+    });
+
+    expect(reservation.expectedStartMileage, 45210);
+  });
+
   test('reservation mapper detects started reservations from demarre', () {
     final reservation = FleetApiMappers.reservationFromJson({
       'id': 1,

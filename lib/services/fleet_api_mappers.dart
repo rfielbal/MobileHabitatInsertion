@@ -40,6 +40,15 @@ class FleetApiMappers {
       fallback: 'Stationnement non renseigné',
     );
     final energyType = _energyType('$brand $model $description');
+    final currentMileage =
+        _int(
+          json['kilometrage'] ??
+              json['kilométrage'] ??
+              json['currentMileage'] ??
+              json['current_mileage'] ??
+              json['kmActuel'],
+        ) ??
+        0;
 
     return Vehicle(
       id: id,
@@ -59,7 +68,7 @@ class FleetApiMappers {
       transmission: 'Non renseignée',
       energyType: energyType,
       energyInfo: energyType.label,
-      currentMileage: 0,
+      currentMileage: currentMileage,
       fuelLevelLabel: energyType == VehicleEnergyType.electric
           ? 'Batterie non renseignée'
           : 'Non renseigné',
@@ -410,6 +419,22 @@ class FleetApiMappers {
   static String _text(Object? value, {String fallback = ''}) {
     final text = value?.toString().trim() ?? '';
     return text.isEmpty ? fallback : text;
+  }
+
+  static int? _int(Object? value) {
+    if (value is int) {
+      return value;
+    }
+    if (value is num) {
+      return value.round();
+    }
+
+    final text = value?.toString().trim();
+    if (text == null || text.isEmpty) {
+      return null;
+    }
+
+    return int.tryParse(text) ?? double.tryParse(text)?.round();
   }
 
   static String? _id(Object? value) {
