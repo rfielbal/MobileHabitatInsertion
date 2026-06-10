@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_habitat_insertion/main.dart';
 import 'package:mobile_habitat_insertion/models/reservation.dart';
 import 'package:mobile_habitat_insertion/models/vehicle.dart';
+import 'package:mobile_habitat_insertion/screens/fleet/report_issue_screen.dart';
 import 'package:mobile_habitat_insertion/screens/fleet/vehicles_screen.dart';
+import 'package:mobile_habitat_insertion/services/reservation_video_service.dart';
 import 'package:mobile_habitat_insertion/theme/app_colors.dart';
 import 'package:mobile_habitat_insertion/theme/app_theme.dart';
 import 'package:mobile_habitat_insertion/widgets/availability_calendar.dart';
@@ -171,6 +175,58 @@ void main() {
     expect(pastDay.style?.color, AppColors.outline);
     expect(currentDay.style?.color, AppColors.onSurface);
   });
+
+  testWidgets('Report issue disables submit while video is preparing', (
+    tester,
+  ) async {
+    final pendingVideo = Completer<ReservationVideoDraft?>();
+    addTearDown(() {
+      if (!pendingVideo.isCompleted) {
+        pendingVideo.complete(null);
+      }
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: ReportIssueScreen(
+          reservation: _calendarReservation(
+            id: 'reservation-signalement',
+            startAt: DateTime(2026, 6, 18, 8, 30),
+            endAt: DateTime(2026, 6, 18, 17),
+          ),
+          phaseLabel: 'Départ',
+          videoService: _PendingReservationVideoService(pendingVideo),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Ajouter une vidéo si nécessaire'));
+    await tester.pump();
+
+    final button = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Préparation vidéo...'),
+    );
+    expect(button.onPressed, isNull);
+  });
+}
+
+class _PendingReservationVideoService extends ReservationVideoService {
+  _PendingReservationVideoService(this.pendingVideo);
+
+  final Completer<ReservationVideoDraft?> pendingVideo;
+
+  @override
+  Future<ReservationVideoDraft?> recordReservationVideo({
+    required String reservationId,
+    required ReservationVideoKind kind,
+    String description = '',
+    Duration maxDuration = ReservationVideoService.defaultMaxDuration,
+    void Function(double progress)? onCompressionProgress,
+  }) {
+    onCompressionProgress?.call(0.25);
+    return pendingVideo.future;
+  }
 }
 
 FleetReservation _calendarReservation({

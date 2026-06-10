@@ -14,10 +14,14 @@ class ReportIssueScreen extends StatefulWidget {
     super.key,
     required this.reservation,
     required this.phaseLabel,
+    this.videoService,
+    this.fleetApiService,
   });
 
   final FleetReservation reservation;
   final String phaseLabel;
+  final ReservationVideoService? videoService;
+  final FleetApiService? fleetApiService;
 
   @override
   State<ReportIssueScreen> createState() => _ReportIssueScreenState();
@@ -26,8 +30,8 @@ class ReportIssueScreen extends StatefulWidget {
 class _ReportIssueScreenState extends State<ReportIssueScreen> {
   final _formKey = GlobalKey<FormState>();
   final _descriptionController = TextEditingController();
-  final _videoService = ReservationVideoService();
-  final _fleetApiService = FleetApiService();
+  late final ReservationVideoService _videoService;
+  late final FleetApiService _fleetApiService;
 
   ReservationVideoDraft? _issueVideo;
   bool _isPreparingVideo = false;
@@ -38,6 +42,15 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
   String _issueType = 'Problème véhicule';
 
   bool get _hasVideo => _issueVideo != null;
+  bool get _isVideoBusy => _isPreparingVideo || _isUploadingVideo;
+  bool get _canSubmit => !_isSubmitting && !_isVideoBusy;
+
+  @override
+  void initState() {
+    super.initState();
+    _videoService = widget.videoService ?? ReservationVideoService();
+    _fleetApiService = widget.fleetApiService ?? FleetApiService();
+  }
 
   @override
   void dispose() {
@@ -46,6 +59,15 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
   }
 
   Future<void> _sendAlert() async {
+    if (_isVideoBusy) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Patientez jusqu’à ce que la vidéo soit prête.'),
+        ),
+      );
+      return;
+    }
+
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -230,6 +252,22 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
         : ReservationVideoKind.departure;
   }
 
+  String get _submitButtonLabel {
+    if (_isSubmitting) {
+      return 'Envoi...';
+    }
+
+    if (_isUploadingVideo) {
+      return 'Envoi vidéo...';
+    }
+
+    if (_isPreparingVideo) {
+      return 'Préparation vidéo...';
+    }
+
+    return 'Envoyer le signalement';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -238,9 +276,11 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
         children: [
           Expanded(
             child: BottomActionButton(
-              label: _isSubmitting ? 'Envoi...' : 'Envoyer le signalement',
-              icon: Icons.report_problem_outlined,
-              onPressed: _isSubmitting ? null : _sendAlert,
+              label: _submitButtonLabel,
+              icon: _isVideoBusy
+                  ? Icons.hourglass_top
+                  : Icons.report_problem_outlined,
+              onPressed: _canSubmit ? _sendAlert : null,
             ),
           ),
         ],
