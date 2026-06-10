@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_habitat_insertion/main.dart';
 import 'package:mobile_habitat_insertion/models/reservation.dart';
@@ -14,6 +15,12 @@ import 'package:mobile_habitat_insertion/widgets/reservation_band_calendar.dart'
 import 'package:flutter/material.dart';
 
 void main() {
+  setUpAll(() {
+    dotenv.loadFromString(
+      envString: 'API_BASE_URL=https://example.test/HabitatInsertion/api\n',
+    );
+  });
+
   testWidgets('Wheello login screen is displayed', (tester) async {
     await tester.pumpWidget(const WheelloApp(forceLogin: true));
 

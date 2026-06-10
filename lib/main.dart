@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'navigation/app_routes.dart';
 import 'screens/fleet/auth_gate.dart';
 import 'screens/fleet/fleet_home_shell.dart';
 import 'screens/fleet/login_screen.dart';
+import 'services/api_config.dart';
 import 'theme/app_brand.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-  await dotenv.load(fileName: 'assets/.env.local');
+  await ApiConfig.loadEnvironment();
   runApp(const WheelloApp());
 }
 
