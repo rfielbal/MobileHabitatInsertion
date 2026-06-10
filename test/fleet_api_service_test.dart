@@ -18,6 +18,19 @@ import 'package:mobile_habitat_insertion/services/reservation_video_service.dart
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('ApiException normalizes oversized PHP upload responses', () {
+    final exception = ApiException.fromResponse(
+      statusCode: 400,
+      body:
+          'Warning : POST Content-Length of 37042993 bytes exceeds the limit of 8388608 bytes in Unknown on line 0',
+    );
+
+    expect(
+      exception.message,
+      'La vidéo dépasse la limite actuellement acceptée par le serveur (8 Mo).',
+    );
+  });
+
   test(
     'startConstat sends reservation start when confirmed after end',
     () async {

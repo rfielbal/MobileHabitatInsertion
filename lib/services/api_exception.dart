@@ -81,6 +81,15 @@ class ApiException implements Exception {
       return 'Session expirée. Reconnexion en cours, réessayez si nécessaire.';
     }
 
+    if (_isUploadLimitMessage(lowerMessage)) {
+      final serverLimit = _uploadLimitFromMessage(message);
+      if (serverLimit != null) {
+        return 'La vidéo dépasse la limite actuellement acceptée par le serveur (${_formatBytes(serverLimit)}).';
+      }
+
+      return 'La vidéo dépasse la limite actuellement acceptée par le serveur.';
+    }
+
     if (message.contains('trying to encode the JWT token') ||
         message.contains('private key/passphrase') ||
         message.contains('Signature key') ||
@@ -94,5 +103,43 @@ class ApiException implements Exception {
     }
 
     return message;
+  }
+
+  static bool _isUploadLimitMessage(String message) {
+    return (message.contains('post content-length') &&
+            message.contains('exceeds the limit')) ||
+        message.contains('post_max_size') ||
+        message.contains('upload_max_filesize') ||
+        message.contains('allowed memory size') ||
+        (message.contains('content-length') &&
+            message.contains('vidéo') &&
+            message.contains('limite'));
+  }
+
+  static int? _uploadLimitFromMessage(String message) {
+    final match = RegExp(
+      r'exceeds the limit of (\d+) bytes',
+      caseSensitive: false,
+    ).firstMatch(message);
+
+    if (match == null) {
+      return null;
+    }
+
+    return int.tryParse(match.group(1) ?? '');
+  }
+
+  static String _formatBytes(int bytes) {
+    const megaByte = 1024 * 1024;
+
+    if (bytes >= megaByte) {
+      final value = bytes / megaByte;
+      final formatted = value == value.roundToDouble()
+          ? value.toStringAsFixed(0)
+          : value.toStringAsFixed(1).replaceAll('.', ',');
+      return '$formatted Mo';
+    }
+
+    return '$bytes octets';
   }
 }

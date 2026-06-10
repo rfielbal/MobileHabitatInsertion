@@ -100,7 +100,7 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
           content: Text(
             videoWarning == null
                 ? 'Signalement envoyé à l’administrateur'
-                : 'Signalement envoyé, vidéo non transmise',
+                : 'Signalement envoyé, vidéo non transmise : $videoWarning',
           ),
         ),
       );
@@ -207,7 +207,7 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
     }
 
     if (videoWarning != null) {
-      return '$message\n\nVidéo non transmise : $videoWarning';
+      return '$message\n\nVidéo non transmise depuis l’application mobile.';
     }
 
     return message;
