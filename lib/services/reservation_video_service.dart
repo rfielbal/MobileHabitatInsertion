@@ -59,7 +59,8 @@ class ReservationVideoTooLargeException implements Exception {
 
   String get message {
     return 'La vidéo est trop lourde (${_formatBytes(actualBytes)}). '
-        'La limite mobile est de ${_formatBytes(maxBytes)} pour rester sous la limite serveur.';
+        'La limite mobile est de ${_formatBytes(maxBytes)} pour rester sous la limite serveur. '
+        'Réduisez la durée de la vidéo puis réessayez.';
   }
 
   @override
@@ -122,9 +123,13 @@ class ReservationVideoService {
   ReservationVideoService({ImagePicker? picker})
     : _picker = picker ?? ImagePicker();
 
-  static const maxUploadBytes = 200 * 1024 * 1024;
-  static const compressionThresholdBytes = 50 * 1024 * 1024;
-  static const defaultMaxDuration = Duration(minutes: 1);
+  // The production PHP server currently rejects multipart bodies above 8 MB.
+  // Keep 1 MB of headroom for fields and multipart boundaries.
+  static const serverPostLimitBytes = 8 * 1024 * 1024;
+  static const uploadSafetyMarginBytes = 1 * 1024 * 1024;
+  static const maxUploadBytes = serverPostLimitBytes - uploadSafetyMarginBytes;
+  static const compressionThresholdBytes = maxUploadBytes;
+  static const defaultMaxDuration = Duration(seconds: 30);
 
   final ImagePicker _picker;
 

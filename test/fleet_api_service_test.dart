@@ -31,6 +31,21 @@ void main() {
     );
   });
 
+  test('mobile video limit stays below the active PHP multipart limit', () {
+    expect(
+      ReservationVideoService.maxUploadBytes,
+      lessThan(ReservationVideoService.serverPostLimitBytes),
+    );
+    expect(
+      ReservationVideoService.compressionThresholdBytes,
+      ReservationVideoService.maxUploadBytes,
+    );
+    expect(
+      ReservationVideoService.defaultMaxDuration,
+      const Duration(seconds: 30),
+    );
+  });
+
   test(
     'startConstat sends reservation start when confirmed after end',
     () async {
