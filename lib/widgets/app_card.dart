@@ -31,7 +31,7 @@ class AppCard extends StatelessWidget {
           border: Border.all(color: AppColors.surfaceVariant),
           boxShadow: const [
             BoxShadow(
-              color: Color(0x1A005BBF),
+              color: AppColors.primaryShadow,
               blurRadius: 4,
               offset: Offset(0, 2),
             ),
@@ -46,7 +46,7 @@ class AppCard extends StatelessWidget {
     }
 
     return Material(
-      color: Colors.transparent,
+      color: AppColors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: onTap,

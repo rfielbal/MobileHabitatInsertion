@@ -344,21 +344,21 @@ class _CalendarDay extends StatelessWidget {
         status.canStartReservation;
     final isHighlighted = isSelected || isRangeSelectable;
     final backgroundColor = disabled
-        ? Colors.transparent
+        ? AppColors.transparent
         : isHighlighted
         ? AppColors.primary
         : isUserUnavailable
         ? AppColors.userUnavailable.withValues(alpha: 0.18)
         : status.color.withValues(alpha: 0.18);
     final borderColor = disabled || isHighlighted
-        ? Colors.transparent
+        ? AppColors.transparent
         : isUserUnavailable
         ? AppColors.userUnavailable.withValues(alpha: 0.6)
         : status.color.withValues(alpha: 0.52);
     final textColor = disabled
         ? AppColors.outlineVariant
         : isHighlighted
-        ? Colors.white
+        ? AppColors.onPrimary
         : isUserUnavailable
         ? AppColors.userUnavailable
         : AppColors.onSurface;

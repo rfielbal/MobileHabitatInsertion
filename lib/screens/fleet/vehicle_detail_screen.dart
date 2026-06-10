@@ -833,11 +833,11 @@ class _VehicleHero extends StatelessWidget {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.92),
+                    color: AppColors.surfaceLowest.withValues(alpha: 0.92),
                     borderRadius: BorderRadius.circular(999),
                     boxShadow: const [
                       BoxShadow(
-                        color: Color(0x1A000000),
+                        color: AppColors.imageBadgeShadow,
                         blurRadius: 8,
                         offset: Offset(0, 2),
                       ),

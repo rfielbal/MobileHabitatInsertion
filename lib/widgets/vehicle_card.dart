@@ -164,7 +164,7 @@ class _VehicleThumbnail extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                color: Colors.white,
+                color: AppColors.onPrimary,
                 fontSize: 9,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 0.4,

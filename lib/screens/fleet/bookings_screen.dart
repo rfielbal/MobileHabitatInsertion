@@ -126,7 +126,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
                           selectedColor: AppColors.primary,
                           labelStyle: TextStyle(
                             color: !_showHistory
-                                ? Colors.white
+                                ? AppColors.onPrimary
                                 : AppColors.onSurfaceVariant,
                             fontWeight: FontWeight.w600,
                           ),
@@ -140,7 +140,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
                           selectedColor: AppColors.primary,
                           labelStyle: TextStyle(
                             color: _showHistory
-                                ? Colors.white
+                                ? AppColors.onPrimary
                                 : AppColors.onSurfaceVariant,
                             fontWeight: FontWeight.w600,
                           ),

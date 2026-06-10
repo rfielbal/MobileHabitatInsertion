@@ -24,7 +24,7 @@ class AppTheme {
         foregroundColor: AppColors.onSurface,
         centerTitle: false,
         elevation: 0,
-        surfaceTintColor: Colors.transparent,
+        surfaceTintColor: AppColors.transparent,
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,

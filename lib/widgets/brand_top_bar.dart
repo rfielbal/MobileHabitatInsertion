@@ -95,7 +95,7 @@ class _NotificationIcon extends StatelessWidget {
     return Badge(
       label: Text(count > 9 ? '9+' : '$count'),
       backgroundColor: AppColors.error,
-      textColor: Colors.white,
+      textColor: AppColors.onPrimary,
       child: const Icon(Icons.notifications_none),
     );
   }

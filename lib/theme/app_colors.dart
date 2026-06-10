@@ -33,4 +33,9 @@ class AppColors {
   static const available = Color(0xFF059669);
   static const partial = Color(0xFF0EA5E9);
   static const userUnavailable = Color(0xFF7C3AED);
+
+  static const transparent = Color(0x00000000);
+  static const primaryShadow = Color(0x1A005BBF);
+  static const elevationShadow = Color(0x14000000);
+  static const imageBadgeShadow = Color(0x1A000000);
 }

@@ -59,7 +59,9 @@ class UploadTile extends StatelessWidget {
                   : selected
                   ? Icons.check
                   : Icons.videocam,
-              color: selected ? Colors.white : AppColors.onSecondaryContainer,
+              color: selected
+                  ? AppColors.onPrimary
+                  : AppColors.onSecondaryContainer,
             ),
           ),
           const SizedBox(height: 10),
