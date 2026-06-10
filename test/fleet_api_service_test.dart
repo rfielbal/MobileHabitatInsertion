@@ -477,6 +477,7 @@ void main() {
       reservation: _reservation(
         startAt: DateTime(2026, 6, 18, 8, 30),
         endAt: DateTime(2026, 6, 18, 17),
+        constatId: '99',
       ),
       type: 'Problème véhicule',
       message: 'Rayure sur la porte.',
@@ -491,7 +492,9 @@ void main() {
     );
 
     expect(sentBody, {
+      'reservationId': 10,
       'vehiculeId': 1,
+      'constatId': 99,
       'type': 'Problème véhicule',
       'message': 'Rayure sur la porte.',
       'video': {

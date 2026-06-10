@@ -493,8 +493,13 @@ class FleetApiService {
     await _apiClient.postMap(
       '/metier/signalements',
       body: {
+        'reservationId': int.tryParse(reservation.id) ?? reservation.id,
         'vehiculeId':
             int.tryParse(reservation.vehicle.id) ?? reservation.vehicle.id,
+        if (reservation.constatId != null &&
+            reservation.constatId!.trim().isNotEmpty)
+          'constatId':
+              int.tryParse(reservation.constatId!) ?? reservation.constatId!,
         'type': type,
         'message': message,
         if (video != null) 'video': video.toSignalementPayload(),
