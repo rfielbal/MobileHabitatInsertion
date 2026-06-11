@@ -384,18 +384,11 @@ class FleetApiMappers {
     }
 
     final nom = _text(site['nom']);
-    final ville = _text(site['ville']);
 
-    if (nom.isEmpty && ville.isEmpty) {
+    if (nom.isEmpty) {
       return 'Affectation non renseignée';
     }
-    if (nom.isEmpty) {
-      return ville;
-    }
-    if (ville.isEmpty || nom == ville) {
-      return nom;
-    }
-    return '$nom - $ville';
+    return nom;
   }
 
   static List<Map<String, dynamic>> _listOfMaps(Object? value) {
