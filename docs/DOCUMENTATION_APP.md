@@ -41,8 +41,7 @@ Les points métier les plus sensibles sont :
 ├── assets/
 │   ├── .env.local
 │   └── images/branding/
-│       ├── wheello_app_logo.png
-│       └── wheello_home_logo.png
+│       └── Logo_Association_Habitat_Insertion.png
 ├── lib/
 │   ├── data/
 │   ├── models/
@@ -102,8 +101,7 @@ assets:
 Le projet charge :
 
 - `assets/.env.local` au démarrage ;
-- `wheello_app_logo.png` sur l'écran de connexion ;
-- `wheello_home_logo.png` dans la barre supérieure.
+- `Logo_Association_Habitat_Insertion.png` sur l'écran de connexion et dans la barre supérieure.
 
 ### 3.3 Configuration native Android
 
@@ -195,6 +193,8 @@ Fichiers :
 
 - `appLogo` : logo de connexion ;
 - `homeLogo` : logo de barre supérieure.
+
+Ces deux alias pointent vers le logo Habitat Insertion commun.
 
 ### 6.2 Couleurs
 
