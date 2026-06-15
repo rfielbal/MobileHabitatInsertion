@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_habitat_insertion/models/reservation.dart';
+import 'package:mobile_habitat_insertion/models/vehicle.dart';
 import 'package:mobile_habitat_insertion/services/fleet_api_mappers.dart';
 
 void main() {
@@ -32,6 +33,31 @@ void main() {
 
     expect(vehicle.internalNumber, 'V-114');
     expect(vehicle.currentMileage, 45210);
+  });
+
+  test('vehicle mapper reads energy type from API', () {
+    final electricVehicle = FleetApiMappers.vehicleFromJson({
+      'id': 10,
+      'marque': 'Citroën',
+      'modele': 'ë-C3',
+      'energie': 'electrique',
+    });
+    final hybridVehicle = FleetApiMappers.vehicleFromJson({
+      'id': 11,
+      'marque': 'Toyota',
+      'modele': 'Yaris',
+      'energie': 'hybride',
+    });
+    final thermalVehicle = FleetApiMappers.vehicleFromJson({
+      'id': 12,
+      'marque': 'Renault',
+      'modele': 'Clio',
+      'energie': 'thermique',
+    });
+
+    expect(electricVehicle.energyType, VehicleEnergyType.electric);
+    expect(hybridVehicle.energyType, VehicleEnergyType.hybrid);
+    expect(thermalVehicle.energyType, VehicleEnergyType.thermal);
   });
 
   test('reservation mapper uses vehicle mileage as expected start mileage', () {

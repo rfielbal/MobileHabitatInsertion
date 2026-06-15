@@ -39,7 +39,7 @@ class FleetApiMappers {
       json['descriptif'],
       fallback: 'Stationnement non renseigné',
     );
-    final energyType = _energyType('$brand $model $description');
+    final energyType = _vehicleEnergyType(json, '$brand $model $description');
     final currentMileage =
         _int(
           json['kilometrage'] ??
@@ -281,6 +281,21 @@ class FleetApiMappers {
     };
   }
 
+  static VehicleEnergyType _vehicleEnergyType(
+    Map<String, dynamic> json,
+    String fallbackText,
+  ) {
+    final apiValue = _text(
+      json['energie'] ??
+          json['energyType'] ??
+          json['energy_type'] ??
+          json['motorisation'],
+    );
+    final normalized = apiValue.isEmpty ? fallbackText : apiValue;
+
+    return _energyType(normalized);
+  }
+
   static VehicleEnergyType _energyType(String value) {
     final lower = value.toLowerCase();
     if (lower.contains('hybrid') || lower.contains('hybride')) {
@@ -290,6 +305,9 @@ class FleetApiMappers {
         lower.contains('essence') ||
         lower.contains('thermique')) {
       return VehicleEnergyType.thermal;
+    }
+    if (lower.contains('electrique') || lower.contains('électrique')) {
+      return VehicleEnergyType.electric;
     }
     return VehicleEnergyType.electric;
   }
