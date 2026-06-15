@@ -1074,6 +1074,144 @@ void main() {
     expect(reservation.id, '99');
   });
 
+  test(
+    'startImmediateDeparture creates a reservation and starts the constat',
+    () async {
+      final calls = <String>[];
+      Map<String, dynamic>? reservationBody;
+      Map<String, dynamic>? startBody;
+      Map<String, dynamic>? statusBody;
+      final startAt = DateTime(2026, 6, 18, 9, 15);
+      final endAt = DateTime(2026, 6, 18, 12, 30);
+      final service = _serviceWithMockClient((request) async {
+        calls.add('${request.method} ${request.url.path}');
+
+        if (request.method == 'GET' &&
+            request.url.path == '/api/metier/vehicules-disponibles') {
+          expect(request.url.queryParameters['dateDebut'], isNotNull);
+          expect(request.url.queryParameters['dateFin'], isNotNull);
+          return http.Response(
+            jsonEncode({
+              'items': [
+                {'id': 1},
+              ],
+            }),
+            200,
+          );
+        }
+
+        if (request.method == 'POST' &&
+            request.url.path == '/api/metier/reservations') {
+          reservationBody = jsonDecode(request.body) as Map<String, dynamic>;
+          final reservation = _reservationJson(
+            id: 88,
+            startAt: startAt,
+            endAt: endAt,
+          );
+          (reservation['vehicule'] as Map<String, dynamic>)['kilometrage'] =
+              100;
+          return http.Response(jsonEncode(reservation), 201);
+        }
+
+        if (request.method == 'POST' &&
+            request.url.path == '/api/metier/constats/demarrer') {
+          startBody = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(jsonEncode({'id': 42}), 201);
+        }
+
+        if (request.method == 'PATCH' &&
+            request.url.path == '/api/metier/reservations/88') {
+          statusBody = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response('{}', 200);
+        }
+
+        return http.Response('{}', 404);
+      });
+
+      final reservation = await service.startImmediateDeparture(
+        vehicle: _vehicle,
+        startedAt: startAt,
+        returnAt: endAt,
+      );
+
+      expect(calls, [
+        'GET /api/metier/vehicules-disponibles',
+        'POST /api/metier/reservations',
+        'POST /api/metier/constats/demarrer',
+        'PATCH /api/metier/reservations/88',
+      ]);
+      expect(reservationBody?['dateDebut'], FleetApiMappers.iso(startAt));
+      expect(reservationBody?['dateFin'], FleetApiMappers.iso(endAt));
+      expect(startBody?['reservationId'], 88);
+      expect(startBody?['vehiculeId'], 1);
+      expect(startBody?['datePrise'], FleetApiMappers.iso(startAt));
+      expect(startBody?['kmDebut'], 100);
+      expect(statusBody, {'demarre': true, 'termine': false});
+      expect(reservation.id, '88');
+      expect(reservation.isStarted, isTrue);
+      expect(reservation.constatId, '42');
+    },
+  );
+
+  test(
+    'startImmediateDeparture deletes the created reservation when start fails',
+    () async {
+      var deleteCalled = false;
+      final startAt = DateTime(2026, 6, 18, 9, 15);
+      final endAt = DateTime(2026, 6, 18, 12, 30);
+      final service = _serviceWithMockClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/api/metier/vehicules-disponibles') {
+          return http.Response(
+            jsonEncode({
+              'items': [
+                {'id': 1},
+              ],
+            }),
+            200,
+          );
+        }
+
+        if (request.method == 'POST' &&
+            request.url.path == '/api/metier/reservations') {
+          return http.Response(
+            jsonEncode(
+              _reservationJson(id: 88, startAt: startAt, endAt: endAt),
+            ),
+            201,
+          );
+        }
+
+        if (request.method == 'POST' &&
+            request.url.path == '/api/metier/constats/demarrer') {
+          return http.Response(
+            jsonEncode({'message': 'Ce véhicule est déjà en cours'}),
+            409,
+          );
+        }
+
+        if (request.method == 'DELETE' &&
+            request.url.path == '/api/metier/reservations/88') {
+          deleteCalled = true;
+          return http.Response('', 204);
+        }
+
+        return http.Response('{}', 404);
+      });
+
+      await expectLater(
+        service.startImmediateDeparture(
+          vehicle: _vehicle,
+          startedAt: startAt,
+          returnAt: endAt,
+        ),
+        throwsA(isA<ApiException>()),
+      );
+
+      expect(deleteCalled, isTrue);
+    },
+  );
+
   test('updateReservation patches the existing reservation period', () async {
     Map<String, dynamic>? sentBody;
     final startAt = DateTime(2026, 6, 19, 9);

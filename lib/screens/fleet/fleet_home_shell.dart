@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../data/notification_store.dart';
-import '../../models/vehicle.dart';
 import '../../navigation/app_routes.dart';
 import '../../services/auth_session_service.dart';
 import '../../widgets/fleet_bottom_navigation.dart';
 import 'bookings_screen.dart';
 import 'home_screen.dart';
+import 'immediate_departure_screen.dart';
 import 'profile_screen.dart';
 import 'vehicles_screen.dart';
 
@@ -23,7 +23,6 @@ class _FleetHomeShellState extends State<FleetHomeShell> {
   int _vehicleRefreshVersion = 0;
   int _reservationRefreshVersion = 0;
   int _vehicleFilterCommandVersion = 0;
-  VehicleStatus? _vehicleStatusFilter;
 
   @override
   void initState() {
@@ -44,7 +43,6 @@ class _FleetHomeShellState extends State<FleetHomeShell> {
           VehiclesScreen(
             refreshVersion: _vehicleRefreshVersion,
             filterCommandVersion: _vehicleFilterCommandVersion,
-            statusFilter: _vehicleStatusFilter,
             onReservationChanged: _refreshReservationData,
           ),
           BookingsScreen(
@@ -93,25 +91,29 @@ class _FleetHomeShellState extends State<FleetHomeShell> {
   }
 
   void _openImmediateDeparture() {
-    setState(() {
-      _currentIndex = 1;
-      _vehicleRefreshVersion++;
-      _vehicleFilterCommandVersion++;
-      _vehicleStatusFilter = VehicleStatus.available;
-    });
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (context) => const ImmediateDepartureScreen(),
+          ),
+        )
+        .then((startedReservation) {
+          if (startedReservation == null || !mounted) {
+            return;
+          }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Véhicules libres affichés pour un départ immédiat.'),
-      ),
-    );
+          setState(() {
+            _currentIndex = 2;
+            _vehicleRefreshVersion++;
+            _reservationRefreshVersion++;
+          });
+        });
   }
 
   void _openReservationPlanning() {
     setState(() {
       _currentIndex = 1;
       _vehicleFilterCommandVersion++;
-      _vehicleStatusFilter = null;
     });
 
     ScaffoldMessenger.of(context).showSnackBar(

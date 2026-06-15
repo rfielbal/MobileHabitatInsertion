@@ -381,6 +381,56 @@ class FleetApiService {
     await _apiClient.delete('/metier/reservations/${reservation.id}');
   }
 
+  Future<FleetReservation> startImmediateDeparture({
+    required Vehicle vehicle,
+    required DateTime returnAt,
+    DateTime? startedAt,
+  }) async {
+    final startAt = startedAt ?? DateTime.now();
+
+    if (!startAt.isBefore(returnAt)) {
+      throw const ApiException(
+        message: 'L’heure de retour doit être après l’heure actuelle.',
+      );
+    }
+
+    if (vehicle.status != VehicleStatus.available) {
+      throw const ApiException(
+        message: 'Ce véhicule n’est pas disponible pour un départ immédiat.',
+      );
+    }
+
+    final available = await isVehicleAvailableForPeriod(
+      vehicle: vehicle,
+      startAt: startAt,
+      endAt: returnAt,
+    );
+
+    if (!available) {
+      throw const ApiException(
+        message: 'Ce véhicule n’est plus disponible sur la période demandée.',
+      );
+    }
+
+    final reservation = await createReservation(
+      vehicle: vehicle,
+      startAt: startAt,
+      endAt: returnAt,
+    );
+
+    try {
+      return await startConstat(reservation, confirmedAt: startAt);
+    } catch (_) {
+      try {
+        await deleteReservation(reservation);
+      } catch (_) {
+        // Le départ immédiat doit rester cohérent côté mobile même si le
+        // nettoyage de la réservation échoue côté API.
+      }
+      rethrow;
+    }
+  }
+
   Future<FleetReservation> startConstat(
     FleetReservation reservation, {
     DateTime? confirmedAt,

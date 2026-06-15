@@ -1,0 +1,649 @@
+import 'package:flutter/material.dart';
+
+import '../../models/vehicle.dart';
+import '../../services/api_exception.dart';
+import '../../services/fleet_api_service.dart';
+import '../../theme/app_colors.dart';
+import '../../widgets/app_card.dart';
+import '../../widgets/bottom_action_bar.dart';
+import '../../widgets/status_chip.dart';
+
+class ImmediateDepartureScreen extends StatefulWidget {
+  const ImmediateDepartureScreen({
+    super.key,
+    FleetApiService? fleetApiService,
+    DateTime Function()? now,
+  }) : _fleetApiService = fleetApiService,
+       _now = now;
+
+  final FleetApiService? _fleetApiService;
+  final DateTime Function()? _now;
+
+  @override
+  State<ImmediateDepartureScreen> createState() =>
+      _ImmediateDepartureScreenState();
+}
+
+class _ImmediateDepartureScreenState extends State<ImmediateDepartureScreen> {
+  late final FleetApiService _fleetApiService;
+  late final DateTime Function() _now;
+  late Future<List<Vehicle>> _vehiclesFuture;
+  late TimeOfDay _returnTime;
+
+  String? _selectedSite;
+  Vehicle? _selectedVehicle;
+  String? _error;
+  bool _isSubmitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fleetApiService = widget._fleetApiService ?? FleetApiService();
+    _now = widget._now ?? DateTime.now;
+    _returnTime = _defaultReturnTime(_now());
+    _vehiclesFuture = _loadAvailableVehicles();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Départ immédiat')),
+      bottomNavigationBar: BottomActionBar(
+        children: [
+          Expanded(
+            child: BottomActionButton(
+              label: _isSubmitting ? 'Validation...' : 'Valider le départ',
+              icon: Icons.play_circle,
+              onPressed: _isSubmitting ? null : _startImmediateDeparture,
+            ),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: FutureBuilder<List<Vehicle>>(
+          future: _vehiclesFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            if (snapshot.hasError) {
+              return _ImmediateDepartureError(onRetry: _reloadVehicles);
+            }
+
+            final vehicles = snapshot.data ?? const [];
+            final sites = _sites(vehicles);
+            final vehiclesForSite = _selectedSite == null
+                ? const <Vehicle>[]
+                : vehicles
+                      .where((vehicle) => vehicle.site == _selectedSite)
+                      .toList();
+
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              children: [
+                const Text(
+                  'Départ maintenant',
+                  style: TextStyle(
+                    color: AppColors.onSurface,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Choisissez le lieu, le véhicule disponible, puis indiquez uniquement l’heure de retour prévue.',
+                  style: TextStyle(
+                    color: AppColors.onSurfaceVariant,
+                    fontSize: 14,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                if (_error != null) ...[
+                  _InlineError(message: _error!),
+                  const SizedBox(height: 14),
+                ],
+                _StepSection(
+                  number: 1,
+                  title: 'Lieu',
+                  child: sites.isEmpty
+                      ? const _EmptyState(
+                          icon: Icons.location_off_outlined,
+                          title: 'Aucun lieu disponible',
+                          message:
+                              'Aucun véhicule libre n’est rattaché à vos lieux pour le moment.',
+                        )
+                      : Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final site in sites)
+                              ChoiceChip(
+                                label: Text(site),
+                                selected: _selectedSite == site,
+                                onSelected: (_) => _selectSite(site),
+                                selectedColor: AppColors.primary,
+                                labelStyle: TextStyle(
+                                  color: _selectedSite == site
+                                      ? AppColors.onPrimary
+                                      : AppColors.onSurface,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                          ],
+                        ),
+                ),
+                const SizedBox(height: 16),
+                _StepSection(
+                  number: 2,
+                  title: 'Véhicule disponible',
+                  child: _selectedSite == null
+                      ? const _PendingChoice(
+                          message: 'Sélectionnez d’abord un lieu.',
+                        )
+                      : vehiclesForSite.isEmpty
+                      ? const _EmptyState(
+                          icon: Icons.directions_car_filled_outlined,
+                          title: 'Aucun véhicule libre',
+                          message:
+                              'Essayez un autre lieu ou faites une réservation classique.',
+                        )
+                      : Column(
+                          children: [
+                            for (final vehicle in vehiclesForSite) ...[
+                              _SelectableVehicle(
+                                vehicle: vehicle,
+                                selected: _selectedVehicle?.id == vehicle.id,
+                                onTap: () => _selectVehicle(vehicle),
+                              ),
+                              if (vehicle != vehiclesForSite.last)
+                                const SizedBox(height: 10),
+                            ],
+                          ],
+                        ),
+                ),
+                const SizedBox(height: 16),
+                _StepSection(
+                  number: 3,
+                  title: 'Retour prévu',
+                  child: AppCard(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      children: [
+                        Container(
+                          height: 46,
+                          width: 46,
+                          decoration: const BoxDecoration(
+                            color: AppColors.primaryFixed,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.schedule,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Aujourd’hui',
+                                style: TextStyle(
+                                  color: AppColors.onSurfaceVariant,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              Text(
+                                _returnTime.format(context),
+                                style: const TextStyle(
+                                  color: AppColors.onSurface,
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: _pickReturnTime,
+                          icon: const Icon(Icons.edit_calendar_outlined),
+                          label: const Text('Modifier'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<List<Vehicle>> _loadAvailableVehicles() async {
+    final vehicles = await _fleetApiService.fetchVehicles();
+    final availableVehicles = vehicles
+        .where((vehicle) => vehicle.status == VehicleStatus.available)
+        .toList();
+    availableVehicles.sort((first, second) {
+      final siteSort = first.site.compareTo(second.site);
+      if (siteSort != 0) {
+        return siteSort;
+      }
+      return first.name.compareTo(second.name);
+    });
+
+    final sites = _sites(availableVehicles);
+    if (mounted && _selectedSite == null && sites.length == 1) {
+      setState(() {
+        _selectedSite = sites.single;
+      });
+    }
+
+    return availableVehicles;
+  }
+
+  List<String> _sites(List<Vehicle> vehicles) {
+    final sites = vehicles
+        .map((vehicle) => vehicle.site.trim())
+        .where((site) => site.isNotEmpty)
+        .toSet()
+        .toList();
+    sites.sort();
+    return sites;
+  }
+
+  void _selectSite(String site) {
+    setState(() {
+      _selectedSite = site;
+      if (_selectedVehicle?.site != site) {
+        _selectedVehicle = null;
+      }
+      _error = null;
+    });
+  }
+
+  void _selectVehicle(Vehicle vehicle) {
+    setState(() {
+      _selectedVehicle = vehicle;
+      _error = null;
+    });
+  }
+
+  Future<void> _pickReturnTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _returnTime,
+    );
+
+    if (picked == null || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _returnTime = picked;
+      _error = null;
+    });
+  }
+
+  Future<void> _startImmediateDeparture() async {
+    final vehicle = _selectedVehicle;
+    if (_selectedSite == null) {
+      setState(() {
+        _error = 'Sélectionnez un lieu.';
+      });
+      return;
+    }
+    if (vehicle == null) {
+      setState(() {
+        _error = 'Sélectionnez un véhicule disponible.';
+      });
+      return;
+    }
+
+    final startAt = _now();
+    final returnAt = _returnDateTime(startAt);
+    if (!startAt.isBefore(returnAt)) {
+      setState(() {
+        _error = 'L’heure de retour doit être après l’heure actuelle.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+      _error = null;
+    });
+
+    try {
+      final startedReservation = await _fleetApiService.startImmediateDeparture(
+        vehicle: vehicle,
+        startedAt: startAt,
+        returnAt: returnAt,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${vehicle.name} réservé et démarré')),
+      );
+      Navigator.of(context).pop(startedReservation);
+    } on ApiException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isSubmitting = false;
+        _error = error.message;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isSubmitting = false;
+        _error = 'Départ immédiat impossible : $error';
+      });
+    }
+  }
+
+  DateTime _returnDateTime(DateTime startAt) {
+    return DateTime(
+      startAt.year,
+      startAt.month,
+      startAt.day,
+      _returnTime.hour,
+      _returnTime.minute,
+    );
+  }
+
+  TimeOfDay _defaultReturnTime(DateTime now) {
+    if (now.hour < 16) {
+      return const TimeOfDay(hour: 18, minute: 0);
+    }
+
+    final suggested = now.add(const Duration(hours: 2));
+    if (suggested.day != now.day) {
+      return const TimeOfDay(hour: 23, minute: 45);
+    }
+
+    final roundedMinute = suggested.minute <= 30 ? 30 : 0;
+    final roundedHour = roundedMinute == 0
+        ? suggested.hour + 1
+        : suggested.hour;
+    if (roundedHour >= 24) {
+      return const TimeOfDay(hour: 23, minute: 45);
+    }
+
+    return TimeOfDay(hour: roundedHour, minute: roundedMinute);
+  }
+
+  void _reloadVehicles() {
+    setState(() {
+      _selectedSite = null;
+      _selectedVehicle = null;
+      _error = null;
+      _vehiclesFuture = _loadAvailableVehicles();
+    });
+  }
+}
+
+class _StepSection extends StatelessWidget {
+  const _StepSection({
+    required this.number,
+    required this.title,
+    required this.child,
+  });
+
+  final int number;
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              height: 28,
+              width: 28,
+              alignment: Alignment.center,
+              decoration: const BoxDecoration(
+                color: AppColors.primary,
+                shape: BoxShape.circle,
+              ),
+              child: Text(
+                '$number',
+                style: const TextStyle(
+                  color: AppColors.onPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              title,
+              style: const TextStyle(
+                color: AppColors.onSurface,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        child,
+      ],
+    );
+  }
+}
+
+class _SelectableVehicle extends StatelessWidget {
+  const _SelectableVehicle({
+    required this.vehicle,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final Vehicle vehicle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      onTap: onTap,
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          Container(
+            height: 48,
+            width: 48,
+            decoration: BoxDecoration(
+              color: selected ? AppColors.primary : AppColors.surfaceContainer,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              selected ? Icons.check : Icons.directions_car_outlined,
+              color: selected ? AppColors.onPrimary : AppColors.primary,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${vehicle.internalNumber} • ${vehicle.name}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.onSurface,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${vehicle.plateNumber} • ${vehicle.currentMileage} km',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.onSurfaceVariant,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          StatusChip(
+            label: vehicle.status.label,
+            color: vehicle.status.color,
+            icon: vehicle.status.icon,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PendingChoice extends StatelessWidget {
+  const _PendingChoice({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      child: Text(
+        message,
+        style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 14),
+      ),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      child: Row(
+        children: [
+          Icon(icon, color: AppColors.outline),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: AppColors.onSurface,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  message,
+                  style: const TextStyle(
+                    color: AppColors.onSurfaceVariant,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InlineError extends StatelessWidget {
+  const _InlineError({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline, color: AppColors.error),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                color: AppColors.onErrorContainer,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ImmediateDepartureError extends StatelessWidget {
+  const _ImmediateDepartureError({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: AppCard(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.cloud_off, color: AppColors.error, size: 36),
+              const SizedBox(height: 12),
+              const Text(
+                'Impossible de charger les véhicules disponibles.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: AppColors.onSurface,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 14),
+              OutlinedButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Réessayer'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
