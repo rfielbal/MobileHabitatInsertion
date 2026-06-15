@@ -22,6 +22,11 @@ class FleetBottomNavigation extends StatelessWidget {
       indicatorColor: AppColors.primaryContainer,
       destinations: const [
         NavigationDestination(
+          icon: Icon(Icons.home_outlined),
+          selectedIcon: Icon(Icons.home),
+          label: 'Accueil',
+        ),
+        NavigationDestination(
           icon: Icon(Icons.directions_car_outlined),
           selectedIcon: Icon(Icons.directions_car),
           label: 'Véhicules',

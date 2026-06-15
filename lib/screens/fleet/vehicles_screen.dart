@@ -15,10 +15,14 @@ class VehiclesScreen extends StatefulWidget {
   const VehiclesScreen({
     super.key,
     this.refreshVersion = 0,
+    this.filterCommandVersion = 0,
+    this.statusFilter,
     this.onReservationChanged,
   });
 
   final int refreshVersion;
+  final int filterCommandVersion;
+  final VehicleStatus? statusFilter;
   final VoidCallback? onReservationChanged;
 
   @override
@@ -37,6 +41,7 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
   @override
   void initState() {
     super.initState();
+    _applyExternalFilter(widget.statusFilter);
     _vehiclesFuture = _fleetApiService.fetchVehicles();
   }
 
@@ -46,6 +51,10 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
 
     if (oldWidget.refreshVersion != widget.refreshVersion) {
       _vehiclesFuture = _fleetApiService.fetchVehicles();
+    }
+
+    if (oldWidget.filterCommandVersion != widget.filterCommandVersion) {
+      _applyExternalFilter(widget.statusFilter);
     }
   }
 
@@ -184,10 +193,16 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
 
   void _resetFilters() {
     setState(() {
-      _selectedSite = null;
-      _selectedBrand = null;
-      _selectedStatus = null;
+      _applyExternalFilter(null);
     });
+  }
+
+  void _applyExternalFilter(VehicleStatus? statusFilter) {
+    _searchController.clear();
+    _selectedSite = null;
+    _selectedBrand = null;
+    _selectedStatus = statusFilter;
+    _sortMode = VehicleSortMode.priority;
   }
 
   void _openVehicle(Vehicle vehicle) {

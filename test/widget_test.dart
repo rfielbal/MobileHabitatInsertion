@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_habitat_insertion/main.dart';
 import 'package:mobile_habitat_insertion/models/reservation.dart';
 import 'package:mobile_habitat_insertion/models/vehicle.dart';
+import 'package:mobile_habitat_insertion/screens/fleet/home_screen.dart';
 import 'package:mobile_habitat_insertion/screens/fleet/report_issue_screen.dart';
 import 'package:mobile_habitat_insertion/screens/fleet/vehicles_screen.dart';
 import 'package:mobile_habitat_insertion/services/reservation_video_service.dart';
@@ -27,6 +28,35 @@ void main() {
     expect(find.text('Wheello'), findsOneWidget);
     expect(find.text('E-mail ou identifiant'), findsOneWidget);
     expect(find.text('Mot de passe'), findsNothing);
+  });
+
+  testWidgets('Home screen actions are wired', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    var immediateDepartureCount = 0;
+    var planReservationCount = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: HomeScreen(
+          onImmediateDeparture: () => immediateDepartureCount++,
+          onPlanReservation: () => planReservationCount++,
+        ),
+      ),
+    );
+
+    expect(find.text('Départ immédiat'), findsOneWidget);
+    expect(find.text('Faire une réservation'), findsOneWidget);
+
+    await tester.tap(find.text('Départ immédiat'));
+    await tester.tap(find.text('Faire une réservation'));
+
+    expect(immediateDepartureCount, 1);
+    expect(planReservationCount, 1);
   });
 
   testWidgets('Vehicles screen has no overflow on narrow Android viewport', (
