@@ -103,7 +103,7 @@ class _FleetHomeShellState extends State<FleetHomeShell> {
           }
 
           setState(() {
-            _currentIndex = 2;
+            _currentIndex = 0;
             _vehicleRefreshVersion++;
             _reservationRefreshVersion++;
           });

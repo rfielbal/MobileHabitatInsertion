@@ -9,8 +9,6 @@ import '../../widgets/vehicle_card.dart';
 import 'notifications_screen.dart';
 import 'vehicle_detail_screen.dart';
 
-enum VehicleSortMode { priority, status, date }
-
 class VehiclesScreen extends StatefulWidget {
   const VehiclesScreen({
     super.key,
@@ -32,8 +30,7 @@ class VehiclesScreen extends StatefulWidget {
 class _VehiclesScreenState extends State<VehiclesScreen> {
   final _searchController = TextEditingController();
   final _fleetApiService = FleetApiService();
-  late Future<List<Vehicle>> _vehiclesFuture;
-  VehicleSortMode _sortMode = VehicleSortMode.priority;
+  late Future<_VehiclesData> _vehiclesFuture;
   String? _selectedSite;
   String? _selectedBrand;
   VehicleStatus? _selectedStatus;
@@ -42,7 +39,7 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
   void initState() {
     super.initState();
     _applyExternalFilter(widget.statusFilter);
-    _vehiclesFuture = _fleetApiService.fetchVehicles();
+    _vehiclesFuture = _loadVehicles();
   }
 
   @override
@@ -50,7 +47,7 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
     super.didUpdateWidget(oldWidget);
 
     if (oldWidget.refreshVersion != widget.refreshVersion) {
-      _vehiclesFuture = _fleetApiService.fetchVehicles();
+      _vehiclesFuture = _loadVehicles();
     }
 
     if (oldWidget.filterCommandVersion != widget.filterCommandVersion) {
@@ -86,19 +83,46 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
     }).toList();
 
     vehicles.sort((a, b) {
-      return switch (_sortMode) {
-        VehicleSortMode.priority => a.priorityRank.compareTo(b.priorityRank),
-        VehicleSortMode.status => a.status.sortRank.compareTo(
-          b.status.sortRank,
-        ),
-        VehicleSortMode.date => a.nextAvailableAt.compareTo(b.nextAvailableAt),
-      };
+      final statusSort = a.status.sortRank.compareTo(b.status.sortRank);
+      if (statusSort != 0) {
+        return statusSort;
+      }
+
+      final siteSort = a.site.compareTo(b.site);
+      if (siteSort != 0) {
+        return siteSort;
+      }
+
+      return a.name.compareTo(b.name);
     });
 
     return vehicles;
   }
 
-  List<String> _sites(List<Vehicle> vehicles) {
+  Future<_VehiclesData> _loadVehicles() async {
+    final vehicles = await _fleetApiService.fetchVehicles();
+    final siteLabels = await _loadAccessibleSitesFallback(vehicles);
+
+    return _VehiclesData(vehicles: vehicles, sites: siteLabels);
+  }
+
+  Future<List<String>> _loadAccessibleSitesFallback(
+    List<Vehicle> vehicles,
+  ) async {
+    try {
+      final sites = await _fleetApiService.fetchUserSiteLabels();
+      if (sites.isNotEmpty) {
+        return sites;
+      }
+    } catch (_) {
+      // Les véhicules restent affichables si la récupération dédiée des sites
+      // échoue ; on retombe alors sur les affectations présentes dans la liste.
+    }
+
+    return _sitesFromVehicles(vehicles);
+  }
+
+  List<String> _sitesFromVehicles(List<Vehicle> vehicles) {
     final values = vehicles.map((vehicle) => vehicle.site).toSet();
     return values.toList()..sort();
   }
@@ -136,7 +160,7 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            FutureBuilder<List<Vehicle>>(
+            FutureBuilder<_VehiclesData>(
               future: _vehiclesFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState != ConnectionState.done) {
@@ -154,19 +178,16 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
                   );
                 }
 
+                final data = snapshot.data ?? const _VehiclesData.empty();
+
                 return _VehiclesContent(
-                  vehicles: snapshot.data ?? const [],
-                  filteredVehicles: _filteredVehicles(
-                    snapshot.data ?? const [],
-                  ),
-                  sites: _sites(snapshot.data ?? const []),
-                  brands: _brands(snapshot.data ?? const []),
-                  sortMode: _sortMode,
+                  vehicles: data.vehicles,
+                  filteredVehicles: _filteredVehicles(data.vehicles),
+                  sites: data.sites,
+                  brands: _brands(data.vehicles),
                   selectedSite: _selectedSite,
                   selectedBrand: _selectedBrand,
                   selectedStatus: _selectedStatus,
-                  onSortModeChanged: (value) =>
-                      setState(() => _sortMode = value),
                   onSiteChanged: (value) =>
                       setState(() => _selectedSite = value),
                   onBrandChanged: (value) =>
@@ -187,7 +208,7 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
 
   void _reloadVehicles() {
     setState(() {
-      _vehiclesFuture = _fleetApiService.fetchVehicles();
+      _vehiclesFuture = _loadVehicles();
     });
   }
 
@@ -202,7 +223,6 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
     _selectedSite = null;
     _selectedBrand = null;
     _selectedStatus = statusFilter;
-    _sortMode = VehicleSortMode.priority;
   }
 
   void _openVehicle(Vehicle vehicle) {
@@ -229,17 +249,24 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
   }
 }
 
+class _VehiclesData {
+  const _VehiclesData({required this.vehicles, required this.sites});
+
+  const _VehiclesData.empty() : vehicles = const [], sites = const [];
+
+  final List<Vehicle> vehicles;
+  final List<String> sites;
+}
+
 class _VehiclesContent extends StatelessWidget {
   const _VehiclesContent({
     required this.vehicles,
     required this.filteredVehicles,
     required this.sites,
     required this.brands,
-    required this.sortMode,
     required this.selectedSite,
     required this.selectedBrand,
     required this.selectedStatus,
-    required this.onSortModeChanged,
     required this.onSiteChanged,
     required this.onBrandChanged,
     required this.onStatusChanged,
@@ -252,11 +279,9 @@ class _VehiclesContent extends StatelessWidget {
   final List<Vehicle> filteredVehicles;
   final List<String> sites;
   final List<String> brands;
-  final VehicleSortMode sortMode;
   final String? selectedSite;
   final String? selectedBrand;
   final VehicleStatus? selectedStatus;
-  final ValueChanged<VehicleSortMode> onSortModeChanged;
   final ValueChanged<String?> onSiteChanged;
   final ValueChanged<String?> onBrandChanged;
   final ValueChanged<VehicleStatus?> onStatusChanged;
@@ -276,36 +301,6 @@ class _VehiclesContent extends StatelessWidget {
 
     return Column(
       children: [
-        const Text(
-          'Trier par',
-          style: TextStyle(
-            color: AppColors.onSurfaceVariant,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 8),
-        SizedBox(
-          width: double.infinity,
-          child: SegmentedButton<VehicleSortMode>(
-            segments: const [
-              ButtonSegment(
-                value: VehicleSortMode.priority,
-                label: Text('Priorité'),
-              ),
-              ButtonSegment(
-                value: VehicleSortMode.status,
-                label: Text('Statut'),
-              ),
-              ButtonSegment(value: VehicleSortMode.date, label: Text('Date')),
-            ],
-            selected: {sortMode},
-            showSelectedIcon: false,
-            onSelectionChanged: (selection) {
-              onSortModeChanged(selection.first);
-            },
-          ),
-        ),
-        const SizedBox(height: 14),
         _VehicleFilters(
           sites: sites,
           brands: brands,

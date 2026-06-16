@@ -340,12 +340,17 @@ class FleetApiService {
       return false;
     }
 
-    final effectiveEnd = _effectiveAvailabilityRangeEnd(
-      startAt: rangeStart,
-      endAt: rangeEnd,
-      status: status,
-      reservationValue: value,
-    );
+    final isOpenStartedReservation =
+        FleetApiMappers.reservationIsStarted(value) &&
+        !FleetApiMappers.reservationIsTerminated(value);
+    final effectiveEnd = isOpenStartedReservation && rangeEnd.isBefore(endAt)
+        ? endAt
+        : _effectiveAvailabilityRangeEnd(
+            startAt: rangeStart,
+            endAt: rangeEnd,
+            status: status,
+            reservationValue: value,
+          );
     if (!rangeStart.isBefore(effectiveEnd)) {
       return false;
     }

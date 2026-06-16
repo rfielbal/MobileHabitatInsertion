@@ -67,14 +67,16 @@ class KnownIssuesCard extends StatelessWidget {
                           height: 1.35,
                         ),
                       ),
-                      const SizedBox(height: 3),
-                      Text(
-                        issue.reportedAtLabel,
-                        style: const TextStyle(
-                          color: AppColors.outline,
-                          fontSize: 12,
+                      if ((issue.reportedAtLabel ?? '').trim().isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          issue.reportedAtLabel!.trim(),
+                          style: const TextStyle(
+                            color: AppColors.outline,
+                            fontSize: 12,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),

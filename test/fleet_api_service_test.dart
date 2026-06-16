@@ -1345,6 +1345,45 @@ void main() {
   );
 
   test(
+    'isVehicleAvailableForPeriod blocks started reservations after expected end',
+    () async {
+      final service = _serviceWithMockClient((request) async {
+        if (request.url.path == '/api/metier/vehicules-disponibles') {
+          return http.Response(jsonEncode({'items': []}), 200);
+        }
+
+        if (request.url.path == '/api/metier/vehicules/1/disponibilites') {
+          return http.Response(
+            jsonEncode({
+              'reservations': [
+                {
+                  'id': 10,
+                  'dateDebut': '2026-06-04T08:30:00',
+                  'dateFin': '2026-06-04T09:00:00',
+                  'demarre': true,
+                  'termine': false,
+                },
+              ],
+            }),
+            200,
+          );
+        }
+
+        return http.Response(jsonEncode({'items': []}), 200);
+      });
+
+      expect(
+        await service.isVehicleAvailableForPeriod(
+          vehicle: _vehicle,
+          startAt: DateTime(2026, 6, 4, 10),
+          endAt: DateTime(2026, 6, 4, 11),
+        ),
+        isFalse,
+      );
+    },
+  );
+
+  test(
     'isVehicleAvailableForPeriod reads nested and IRI vehicle ids',
     () async {
       var requestCount = 0;

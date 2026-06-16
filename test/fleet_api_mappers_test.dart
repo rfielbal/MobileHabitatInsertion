@@ -60,6 +60,18 @@ void main() {
     expect(thermalVehicle.energyType, VehicleEnergyType.thermal);
   });
 
+  test('maintenance vehicle issue does not expose technical API wording', () {
+    final vehicle = FleetApiMappers.vehicleFromJson({
+      'id': 10,
+      'marque': 'Renault',
+      'modele': 'Zoé',
+      'status': 'maintenance',
+    });
+
+    expect(vehicle.knownIssues, hasLength(1));
+    expect(vehicle.knownIssues.single.reportedAtLabel, isNull);
+  });
+
   test('reservation mapper uses vehicle mileage as expected start mileage', () {
     final reservation = FleetApiMappers.reservationFromJson({
       'id': 1,

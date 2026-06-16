@@ -141,13 +141,13 @@ class VehicleIssue {
   const VehicleIssue({
     required this.title,
     required this.description,
-    required this.reportedAtLabel,
+    this.reportedAtLabel,
     this.requiresAttention = false,
   });
 
   final String title;
   final String description;
-  final String reportedAtLabel;
+  final String? reportedAtLabel;
   final bool requiresAttention;
 }
 

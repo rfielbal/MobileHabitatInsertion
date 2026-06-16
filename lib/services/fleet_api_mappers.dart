@@ -80,7 +80,6 @@ class FleetApiMappers {
               VehicleIssue(
                 title: 'Véhicule en maintenance',
                 description: 'Indisponibilité définie depuis l’administration.',
-                reportedAtLabel: 'Donnée API',
                 requiresAttention: true,
               ),
             ]
