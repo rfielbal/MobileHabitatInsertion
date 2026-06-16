@@ -19,7 +19,8 @@ class FleetHomeShell extends StatefulWidget {
   State<FleetHomeShell> createState() => _FleetHomeShellState();
 }
 
-class _FleetHomeShellState extends State<FleetHomeShell> {
+class _FleetHomeShellState extends State<FleetHomeShell>
+    with WidgetsBindingObserver {
   final _navigatorKey = GlobalKey<NavigatorState>();
   final _authSessionService = const AuthSessionService();
   final _fleetApiService = FleetApiService();
@@ -31,29 +32,48 @@ class _FleetHomeShellState extends State<FleetHomeShell> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     NotificationStore.refresh();
     _refreshActiveDepartureState();
   }
 
   @override
-  Widget build(BuildContext context) {
-    return PopScope<void>(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) {
-          return;
-        }
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
 
+  @override
+  Future<bool> didPopRoute() async {
+    _handleSystemBack();
+    return true;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return BackButtonListener(
+      onBackButtonPressed: () async {
         _handleSystemBack();
+        return true;
       },
-      child: Scaffold(
-        body: Navigator(
-          key: _navigatorKey,
-          onGenerateRoute: (_) => _routeForIndex(_currentIndex),
-        ),
-        bottomNavigationBar: FleetBottomNavigation(
-          currentIndex: _currentIndex,
-          onChanged: _selectTab,
+      child: PopScope<void>(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) {
+            return;
+          }
+
+          _handleSystemBack();
+        },
+        child: Scaffold(
+          body: Navigator(
+            key: _navigatorKey,
+            onGenerateRoute: (_) => _routeForIndex(_currentIndex),
+          ),
+          bottomNavigationBar: FleetBottomNavigation(
+            currentIndex: _currentIndex,
+            onChanged: _selectTab,
+          ),
         ),
       ),
     );
