@@ -4,6 +4,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../services/auth_session_service.dart';
 import '../../services/fleet_api_service.dart';
+import '../../services/native_notification_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/brand_top_bar.dart';
@@ -250,6 +251,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     PermissionStatus status;
     try {
       status = await Permission.notification.request();
+      if (status.isGranted) {
+        final nativeGranted = await NativeNotificationService.instance
+            .requestPermissions();
+        if (!nativeGranted) {
+          status = PermissionStatus.denied;
+        }
+      }
     } on MissingPluginException {
       _handleMissingPermissionPlugin();
       return;

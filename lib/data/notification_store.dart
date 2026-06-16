@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../models/app_notification.dart';
 import '../models/reservation.dart';
+import '../services/native_notification_service.dart';
 import '../services/notification_api_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/reservation_sync.dart';
@@ -26,15 +27,25 @@ class NotificationStore {
       'maintained_unstarted_reservation_ids';
   static const String _adminAlertedUnstartedReservationsStorageKey =
       'admin_alerted_unstarted_reservation_ids';
+  static const String _emittedNativeNotificationsStorageKey =
+      'emitted_native_notification_ids';
+  static const String _remoteNativeNotificationBaselineStorageKey =
+      'remote_native_notification_baseline_ready';
   static final Set<int> _dismissedLocalNotificationIds = <int>{};
   static final Set<int> _emittedLocalNotificationIds = <int>{};
+  static final Set<int> _emittedNativeNotificationIds = <int>{};
   static final Set<int> _managedReminderNotificationIds = <int>{};
   static final Set<String> _maintainedUnstartedReservationIds = <String>{};
   static final Set<String> _adminAlertedUnstartedReservationIds = <String>{};
+  static NativeNotificationSink _nativeNotifications =
+      NativeNotificationService.instance;
   static List<FleetReservation>? _lastServerReservations;
   static bool _dismissedLocalNotificationIdsLoaded = false;
   static bool _maintainedUnstartedReservationIdsLoaded = false;
   static bool _adminAlertedUnstartedReservationIdsLoaded = false;
+  static bool _emittedNativeNotificationIdsLoaded = false;
+  static bool _remoteNativeNotificationBaselineLoaded = false;
+  static bool _remoteNativeNotificationBaselineReady = false;
 
   static int get unreadCount {
     return items.value.where((item) => !readIds.value.contains(item.id)).length;
@@ -49,11 +60,24 @@ class NotificationStore {
         AppNotificationAction.resolveUnstartedReservation;
   }
 
+  @visibleForTesting
+  static void debugSetNativeNotificationSink(NativeNotificationSink sink) {
+    _nativeNotifications = sink;
+  }
+
+  @visibleForTesting
+  static void debugResetNativeNotificationSink() {
+    _nativeNotifications = NativeNotificationService.instance;
+  }
+
   static Future<void> refresh() async {
     loading.value = true;
     error.value = null;
 
     try {
+      await _ensureEmittedNativeNotificationIdsLoaded();
+      await _ensureRemoteNativeNotificationBaselineLoaded();
+
       final localNotifications = [
         for (final item in items.value)
           if (_isLocalNotification(item.id)) item,
@@ -62,7 +86,18 @@ class NotificationStore {
         for (final id in readIds.value)
           if (_isLocalNotification(id)) id,
       };
+      final knownRemoteNotificationIds = {
+        for (final item in items.value)
+          if (!_isLocalNotification(item.id)) item.id,
+      };
       final payloads = await _apiService.fetchNotifications();
+      final nativeNotifications = [
+        for (final payload in payloads)
+          if (!payload.read &&
+              !knownRemoteNotificationIds.contains(payload.notification.id))
+            payload.notification,
+      ];
+
       items.value = [
         ...payloads.map((payload) => payload.notification),
         ...localNotifications,
@@ -72,6 +107,17 @@ class NotificationStore {
           if (payload.read) payload.notification.id,
         ...localReadIds,
       };
+
+      if (_remoteNativeNotificationBaselineReady) {
+        await _deliverNativeNotifications(nativeNotifications);
+      } else {
+        _emittedNativeNotificationIds.addAll(
+          payloads.map((payload) => payload.notification.id),
+        );
+        _remoteNativeNotificationBaselineReady = true;
+        await _persistEmittedNativeNotificationIds();
+        await _persistRemoteNativeNotificationBaseline();
+      }
     } catch (e) {
       error.value = e.toString();
     } finally {
@@ -86,11 +132,13 @@ class NotificationStore {
 
     if (_isLocalNotification(id)) {
       readIds.value = {...readIds.value, id};
+      await _cancelNativeNotification(id, clearEmitted: false);
       return;
     }
 
     await _apiService.markAsRead(id);
     readIds.value = {...readIds.value, id};
+    await _cancelNativeNotification(id, clearEmitted: false);
   }
 
   static Future<void> delete(int id) async {
@@ -134,32 +182,14 @@ class NotificationStore {
               _departureReminderId(reservation),
               existingLocalIds,
             ))
-          AppNotification(
-            id: _departureReminderId(reservation),
-            title: 'Départ non confirmé',
-            body:
-                'Votre réservation de ${reservation.vehicle.name} devait commencer à ${_timeLabel(reservation.startAt)}. Annulez-la ou maintenez-la.',
-            timeLabel: 'Maintenant',
-            icon: Icons.assignment_late_outlined,
-            color: AppColors.maintenance,
-            action: AppNotificationAction.resolveUnstartedReservation,
-            reservationId: reservation.id,
-          ),
+          _departureReminderNotification(reservation),
       for (final reservation in reservations)
         if (reservation.shouldCreateReturnReminderAt(now) &&
             _shouldEmitLocalNotification(
               _returnReminderId(reservation),
               existingLocalIds,
             ))
-          AppNotification(
-            id: _returnReminderId(reservation),
-            title: 'Retour à confirmer',
-            body:
-                'Le formulaire de retour de ${reservation.vehicle.name} devait être envoyé à ${_timeLabel(reservation.endAt)}. Pensez à remettre le véhicule en place.',
-            timeLabel: 'Maintenant',
-            icon: Icons.assignment_return_outlined,
-            color: AppColors.maintenance,
-          ),
+          _returnReminderNotification(reservation),
     ];
 
     for (final reminder in reminders) {
@@ -183,6 +213,8 @@ class NotificationStore {
       ..clear()
       ..addAll(currentReminderIds);
 
+    await _deliverNativeNotifications(reminders);
+    await _syncScheduledNativeReservationReminders(reservations, now);
     await _notifyAdminsForUnhandledDepartures(reservations, now);
   }
 
@@ -225,12 +257,16 @@ class NotificationStore {
     _lastServerReservations = null;
     _dismissedLocalNotificationIds.clear();
     _emittedLocalNotificationIds.clear();
+    _emittedNativeNotificationIds.clear();
     _managedReminderNotificationIds.clear();
     _maintainedUnstartedReservationIds.clear();
     _adminAlertedUnstartedReservationIds.clear();
     _dismissedLocalNotificationIdsLoaded = false;
     _maintainedUnstartedReservationIdsLoaded = false;
     _adminAlertedUnstartedReservationIdsLoaded = false;
+    _emittedNativeNotificationIdsLoaded = false;
+    _remoteNativeNotificationBaselineLoaded = false;
+    _remoteNativeNotificationBaselineReady = false;
   }
 
   static Future<void> upsertDeletedReservationNotifications(
@@ -273,6 +309,8 @@ class NotificationStore {
         if (!items.value.any((item) => item.id == notification.id))
           notification,
     ];
+
+    await _deliverNativeNotifications(notifications);
   }
 
   static bool _isLocalNotification(int id) {
@@ -283,12 +321,42 @@ class NotificationStore {
     return _departureReminderIdFromReservationId(reservation.id);
   }
 
+  static AppNotification _departureReminderNotification(
+    FleetReservation reservation,
+  ) {
+    return AppNotification(
+      id: _departureReminderId(reservation),
+      title: 'Départ non confirmé',
+      body:
+          'Votre réservation de ${reservation.vehicle.name} devait commencer à ${_timeLabel(reservation.startAt)}. Annulez-la ou maintenez-la.',
+      timeLabel: 'Maintenant',
+      icon: Icons.assignment_late_outlined,
+      color: AppColors.maintenance,
+      action: AppNotificationAction.resolveUnstartedReservation,
+      reservationId: reservation.id,
+    );
+  }
+
   static int _departureReminderIdFromReservationId(String reservationId) {
     return -1000000 - reservationId.hashCode.abs();
   }
 
   static int _returnReminderId(FleetReservation reservation) {
     return -2000000 - reservation.id.hashCode.abs();
+  }
+
+  static AppNotification _returnReminderNotification(
+    FleetReservation reservation,
+  ) {
+    return AppNotification(
+      id: _returnReminderId(reservation),
+      title: 'Retour à confirmer',
+      body:
+          'Le formulaire de retour de ${reservation.vehicle.name} devait être envoyé à ${_timeLabel(reservation.endAt)}. Pensez à remettre le véhicule en place.',
+      timeLabel: 'Maintenant',
+      icon: Icons.assignment_return_outlined,
+      color: AppColors.maintenance,
+    );
   }
 
   static int _deletedReservationId(FleetReservation reservation) {
@@ -311,6 +379,8 @@ class NotificationStore {
       await _persistDismissedLocalNotificationIds();
     }
 
+    await _cancelNativeNotification(id, clearEmitted: false);
+
     items.value = [
       for (final item in items.value)
         if (item.id != id) item,
@@ -321,6 +391,199 @@ class NotificationStore {
         for (final readId in readIds.value)
           if (readId != id) readId,
       };
+    }
+  }
+
+  static Future<void> _deliverNativeNotifications(
+    Iterable<AppNotification> notifications,
+  ) async {
+    await _ensureEmittedNativeNotificationIdsLoaded();
+
+    var changed = false;
+    for (final notification in notifications) {
+      if (_emittedNativeNotificationIds.contains(notification.id)) {
+        continue;
+      }
+
+      final delivered = await _nativeNotifications.show(
+        notification,
+        badgeCount: unreadCount,
+      );
+      if (!delivered) {
+        continue;
+      }
+
+      _emittedNativeNotificationIds.add(notification.id);
+      changed = true;
+    }
+
+    if (changed) {
+      await _persistEmittedNativeNotificationIds();
+    }
+  }
+
+  static Future<void> _syncScheduledNativeReservationReminders(
+    List<FleetReservation> reservations,
+    DateTime now,
+  ) async {
+    await _ensureEmittedNativeNotificationIdsLoaded();
+
+    for (final reservation in reservations) {
+      await _syncScheduledDepartureReminder(reservation, now);
+      await _syncScheduledReturnReminder(reservation, now);
+    }
+  }
+
+  static Future<void> _syncScheduledDepartureReminder(
+    FleetReservation reservation,
+    DateTime now,
+  ) async {
+    final notification = _departureReminderNotification(reservation);
+    final scheduledAt = reservation.startAt.add(
+      FleetReservation.departureReminderDelay,
+    );
+    final shouldSchedule =
+        !reservation.isInHistory &&
+        !reservation.hasOpenConstat &&
+        !reservation.hasClosedConstat &&
+        !_maintainedUnstartedReservationIds.contains(reservation.id) &&
+        !_dismissedLocalNotificationIds.contains(notification.id);
+
+    if (!shouldSchedule) {
+      await _cancelNativeNotification(notification.id);
+      return;
+    }
+
+    if (!scheduledAt.isAfter(now)) {
+      return;
+    }
+
+    await _scheduleNativeNotification(notification, scheduledAt);
+  }
+
+  static Future<void> _syncScheduledReturnReminder(
+    FleetReservation reservation,
+    DateTime now,
+  ) async {
+    final notification = _returnReminderNotification(reservation);
+    final scheduledAt = reservation.endAt.add(
+      FleetReservation.returnReminderDelay,
+    );
+    final shouldSchedule =
+        !reservation.isInHistory &&
+        reservation.hasOpenConstat &&
+        !reservation.hasClosedConstat &&
+        !_dismissedLocalNotificationIds.contains(notification.id);
+
+    if (!shouldSchedule) {
+      await _cancelNativeNotification(notification.id);
+      return;
+    }
+
+    if (!scheduledAt.isAfter(now)) {
+      return;
+    }
+
+    await _scheduleNativeNotification(notification, scheduledAt);
+  }
+
+  static Future<void> _scheduleNativeNotification(
+    AppNotification notification,
+    DateTime scheduledAt,
+  ) async {
+    if (_emittedNativeNotificationIds.contains(notification.id)) {
+      return;
+    }
+
+    final scheduled = await _nativeNotifications.schedule(
+      notification,
+      scheduledAt: scheduledAt,
+      badgeCount: unreadCount + 1,
+    );
+    if (!scheduled) {
+      return;
+    }
+
+    _emittedNativeNotificationIds.add(notification.id);
+    await _persistEmittedNativeNotificationIds();
+  }
+
+  static Future<void> _cancelNativeNotification(
+    int id, {
+    bool clearEmitted = true,
+  }) async {
+    await _ensureEmittedNativeNotificationIdsLoaded();
+    await _nativeNotifications.cancel(id);
+
+    if (clearEmitted && _emittedNativeNotificationIds.remove(id)) {
+      await _persistEmittedNativeNotificationIds();
+    }
+  }
+
+  static Future<void> _ensureEmittedNativeNotificationIdsLoaded() async {
+    if (_emittedNativeNotificationIdsLoaded) {
+      return;
+    }
+
+    try {
+      final storedIds = await _storage.read(
+        key: _emittedNativeNotificationsStorageKey,
+      );
+
+      if (storedIds != null && storedIds.isNotEmpty) {
+        final decodedIds = jsonDecode(storedIds);
+
+        if (decodedIds is List) {
+          _emittedNativeNotificationIds.addAll(
+            decodedIds.whereType<num>().map((id) => id.toInt()),
+          );
+        }
+      }
+    } catch (_) {
+      // Une erreur de stockage local ne doit pas empêcher les notifications.
+    } finally {
+      _emittedNativeNotificationIdsLoaded = true;
+    }
+  }
+
+  static Future<void> _ensureRemoteNativeNotificationBaselineLoaded() async {
+    if (_remoteNativeNotificationBaselineLoaded) {
+      return;
+    }
+
+    try {
+      final storedBaseline = await _storage.read(
+        key: _remoteNativeNotificationBaselineStorageKey,
+      );
+      _remoteNativeNotificationBaselineReady = storedBaseline == 'true';
+    } catch (_) {
+      _remoteNativeNotificationBaselineReady = false;
+    } finally {
+      _remoteNativeNotificationBaselineLoaded = true;
+    }
+  }
+
+  static Future<void> _persistEmittedNativeNotificationIds() async {
+    final sortedIds = _emittedNativeNotificationIds.toList()..sort();
+
+    try {
+      await _storage.write(
+        key: _emittedNativeNotificationsStorageKey,
+        value: jsonEncode(sortedIds),
+      );
+    } catch (_) {
+      // L'état reste appliqué en mémoire même si la persistance échoue.
+    }
+  }
+
+  static Future<void> _persistRemoteNativeNotificationBaseline() async {
+    try {
+      await _storage.write(
+        key: _remoteNativeNotificationBaselineStorageKey,
+        value: 'true',
+      );
+    } catch (_) {
+      // Le prochain lancement pourra reprendre sans bloquer l'utilisateur.
     }
   }
 

@@ -6,12 +6,14 @@ import 'screens/fleet/auth_gate.dart';
 import 'screens/fleet/fleet_home_shell.dart';
 import 'screens/fleet/login_screen.dart';
 import 'services/api_config.dart';
+import 'services/native_notification_service.dart';
 import 'theme/app_brand.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  await NativeNotificationService.instance.initialize();
   await ApiConfig.loadEnvironment();
   runApp(const WheelloApp());
 }

@@ -154,6 +154,10 @@ class _FleetHomeShellState extends State<FleetHomeShell>
   Future<void> _refreshActiveDepartureState() async {
     try {
       final reservations = await _fleetApiService.fetchReservations();
+      await NotificationStore.upsertDepartureReminders(
+        reservations,
+        DateTime.now(),
+      );
       final hasActiveDeparture = reservations.any(
         (reservation) => reservation.isStarted && !reservation.isTerminated,
       );

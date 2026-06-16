@@ -4,16 +4,23 @@ import 'package:mobile_habitat_insertion/data/notification_store.dart';
 import 'package:mobile_habitat_insertion/models/app_notification.dart';
 import 'package:mobile_habitat_insertion/models/reservation.dart';
 import 'package:mobile_habitat_insertion/models/vehicle.dart';
+import 'package:mobile_habitat_insertion/services/native_notification_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  late _FakeNativeNotificationSink nativeNotifications;
+
   setUp(() {
     FlutterSecureStorage.setMockInitialValues({});
+    nativeNotifications = _FakeNativeNotificationSink();
+    NotificationStore.debugSetNativeNotificationSink(nativeNotifications);
     NotificationStore.items.value = [];
     NotificationStore.readIds.value = {};
     NotificationStore.resetReservationSyncState();
   });
+
+  tearDown(NotificationStore.debugResetNativeNotificationSink);
 
   test(
     'creates a local notification when a reservation is deleted server-side',
@@ -32,6 +39,8 @@ void main() {
         contains('Renault Clio'),
       );
       expect(NotificationStore.unreadCount, 1);
+      expect(nativeNotifications.shown, hasLength(1));
+      expect(nativeNotifications.shown.single.title, 'Réservation supprimée');
     },
   );
 
@@ -76,6 +85,11 @@ void main() {
         reservation,
       ], DateTime(2026, 6, 18, 8, 14));
       expect(NotificationStore.items.value, isEmpty);
+      expect(nativeNotifications.scheduled, hasLength(1));
+      expect(
+        nativeNotifications.scheduled.single.scheduledAt,
+        DateTime(2026, 6, 18, 8, 15),
+      );
 
       await NotificationStore.upsertDepartureReminders([
         reservation,
@@ -91,6 +105,7 @@ void main() {
         NotificationStore.items.value.single.reservationId,
         reservation.id,
       );
+      expect(nativeNotifications.shown, isEmpty);
     },
   );
 
@@ -116,6 +131,57 @@ void main() {
       expect(NotificationStore.items.value, isEmpty);
     },
   );
+}
+
+class _FakeNativeNotificationSink implements NativeNotificationSink {
+  final List<AppNotification> shown = [];
+  final List<_ScheduledNativeNotification> scheduled = [];
+  final List<int> cancelled = [];
+
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  Future<bool> requestPermissions() async => true;
+
+  @override
+  Future<bool> show(
+    AppNotification notification, {
+    required int badgeCount,
+  }) async {
+    shown.add(notification);
+    return true;
+  }
+
+  @override
+  Future<bool> schedule(
+    AppNotification notification, {
+    required DateTime scheduledAt,
+    required int badgeCount,
+  }) async {
+    scheduled.add(
+      _ScheduledNativeNotification(
+        notification: notification,
+        scheduledAt: scheduledAt,
+      ),
+    );
+    return true;
+  }
+
+  @override
+  Future<void> cancel(int notificationId) async {
+    cancelled.add(notificationId);
+  }
+}
+
+class _ScheduledNativeNotification {
+  const _ScheduledNativeNotification({
+    required this.notification,
+    required this.scheduledAt,
+  });
+
+  final AppNotification notification;
+  final DateTime scheduledAt;
 }
 
 FleetReservation _reservation({required String id, DateTime? startAt}) {
