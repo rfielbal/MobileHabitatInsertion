@@ -27,11 +27,6 @@ class FleetBottomNavigation extends StatelessWidget {
           label: 'Accueil',
         ),
         NavigationDestination(
-          icon: Icon(Icons.directions_car_outlined),
-          selectedIcon: Icon(Icons.directions_car),
-          label: 'Véhicules',
-        ),
-        NavigationDestination(
           icon: Icon(Icons.event_note_outlined),
           selectedIcon: Icon(Icons.event_note),
           label: 'Réservations',

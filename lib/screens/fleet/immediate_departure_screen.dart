@@ -27,7 +27,7 @@ class ImmediateDepartureScreen extends StatefulWidget {
 class _ImmediateDepartureScreenState extends State<ImmediateDepartureScreen> {
   late final FleetApiService _fleetApiService;
   late final DateTime Function() _now;
-  late Future<List<Vehicle>> _vehiclesFuture;
+  late Future<_ImmediateDepartureData> _departureDataFuture;
   late TimeOfDay _returnTime;
 
   String? _selectedSite;
@@ -41,7 +41,7 @@ class _ImmediateDepartureScreenState extends State<ImmediateDepartureScreen> {
     _fleetApiService = widget._fleetApiService ?? FleetApiService();
     _now = widget._now ?? DateTime.now;
     _returnTime = _defaultReturnTime(_now());
-    _vehiclesFuture = _loadAvailableVehicles();
+    _departureDataFuture = _loadDepartureData();
   }
 
   @override
@@ -60,8 +60,8 @@ class _ImmediateDepartureScreenState extends State<ImmediateDepartureScreen> {
         ],
       ),
       body: SafeArea(
-        child: FutureBuilder<List<Vehicle>>(
-          future: _vehiclesFuture,
+        child: FutureBuilder<_ImmediateDepartureData>(
+          future: _departureDataFuture,
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
               return const Center(child: CircularProgressIndicator());
@@ -71,8 +71,9 @@ class _ImmediateDepartureScreenState extends State<ImmediateDepartureScreen> {
               return _ImmediateDepartureError(onRetry: _reloadVehicles);
             }
 
-            final vehicles = snapshot.data ?? const [];
-            final sites = _sites(vehicles);
+            final data = snapshot.data ?? const _ImmediateDepartureData.empty();
+            final vehicles = data.availableVehicles;
+            final sites = data.sites;
             final vehiclesForSite = _selectedSite == null
                 ? const <Vehicle>[]
                 : vehicles
@@ -92,7 +93,7 @@ class _ImmediateDepartureScreenState extends State<ImmediateDepartureScreen> {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Choisissez le lieu, le véhicule disponible, puis indiquez uniquement l’heure de retour prévue.',
+                  'Choisissez le site de départ, le véhicule disponible, puis indiquez uniquement l’heure de retour prévue.',
                   style: TextStyle(
                     color: AppColors.onSurfaceVariant,
                     fontSize: 14,
@@ -106,13 +107,13 @@ class _ImmediateDepartureScreenState extends State<ImmediateDepartureScreen> {
                 ],
                 _StepSection(
                   number: 1,
-                  title: 'Lieu',
+                  title: 'Site de départ',
                   child: sites.isEmpty
                       ? const _EmptyState(
                           icon: Icons.location_off_outlined,
-                          title: 'Aucun lieu disponible',
+                          title: 'Aucun site disponible',
                           message:
-                              'Aucun véhicule libre n’est rattaché à vos lieux pour le moment.',
+                              'Aucun site n’est rattaché à votre compte pour le moment.',
                         )
                       : Wrap(
                           spacing: 8,
@@ -140,14 +141,14 @@ class _ImmediateDepartureScreenState extends State<ImmediateDepartureScreen> {
                   title: 'Véhicule disponible',
                   child: _selectedSite == null
                       ? const _PendingChoice(
-                          message: 'Sélectionnez d’abord un lieu.',
+                          message: 'Sélectionnez d’abord un site de départ.',
                         )
                       : vehiclesForSite.isEmpty
                       ? const _EmptyState(
                           icon: Icons.directions_car_filled_outlined,
                           title: 'Aucun véhicule libre',
                           message:
-                              'Essayez un autre lieu ou faites une réservation classique.',
+                              'Essayez un autre site ou faites une réservation classique.',
                         )
                       : Column(
                           children: [
@@ -224,7 +225,7 @@ class _ImmediateDepartureScreenState extends State<ImmediateDepartureScreen> {
     );
   }
 
-  Future<List<Vehicle>> _loadAvailableVehicles() async {
+  Future<_ImmediateDepartureData> _loadDepartureData() async {
     final vehicles = await _fleetApiService.fetchVehicles();
     final availableVehicles = vehicles
         .where((vehicle) => vehicle.status == VehicleStatus.available)
@@ -237,14 +238,33 @@ class _ImmediateDepartureScreenState extends State<ImmediateDepartureScreen> {
       return first.name.compareTo(second.name);
     });
 
-    final sites = _sites(availableVehicles);
+    final sites = await _loadAccessibleSitesFallback(availableVehicles);
     if (mounted && _selectedSite == null && sites.length == 1) {
       setState(() {
         _selectedSite = sites.single;
       });
     }
 
-    return availableVehicles;
+    return _ImmediateDepartureData(
+      sites: sites,
+      availableVehicles: availableVehicles,
+    );
+  }
+
+  Future<List<String>> _loadAccessibleSitesFallback(
+    List<Vehicle> vehicles,
+  ) async {
+    try {
+      final sites = await _fleetApiService.fetchUserSiteLabels();
+      if (sites.isNotEmpty) {
+        return sites;
+      }
+    } catch (_) {
+      // Le parcours reste utilisable même si l'endpoint des sites échoue :
+      // on retombe sur les sites portés par les véhicules disponibles.
+    }
+
+    return _sites(vehicles);
   }
 
   List<String> _sites(List<Vehicle> vehicles) {
@@ -272,6 +292,48 @@ class _ImmediateDepartureScreenState extends State<ImmediateDepartureScreen> {
       _selectedVehicle = vehicle;
       _error = null;
     });
+    _adjustReturnTimeBeforeNextDeparture(vehicle);
+  }
+
+  Future<void> _adjustReturnTimeBeforeNextDeparture(Vehicle vehicle) async {
+    final selectedVehicleId = vehicle.id;
+    final now = _now();
+
+    try {
+      final startTimes = await _fleetApiService
+          .fetchVehicleReservationStartTimesForMonth(
+            vehicle: vehicle,
+            month: now,
+          );
+      DateTime? nextDepartureToday;
+      for (final startAt in startTimes) {
+        if (DateUtils.isSameDay(startAt, now) && startAt.isAfter(now)) {
+          nextDepartureToday = startAt;
+          break;
+        }
+      }
+
+      if (nextDepartureToday == null) {
+        return;
+      }
+
+      final suggestedReturn = nextDepartureToday.subtract(
+        const Duration(hours: 1),
+      );
+      if (!suggestedReturn.isAfter(now)) {
+        return;
+      }
+
+      if (!mounted || _selectedVehicle?.id != selectedVehicleId) {
+        return;
+      }
+
+      setState(() {
+        _returnTime = TimeOfDay.fromDateTime(suggestedReturn);
+      });
+    } catch (_) {
+      // L'heure par défaut reste valable ; la validation API protège le créneau.
+    }
   }
 
   Future<void> _pickReturnTime() async {
@@ -294,7 +356,7 @@ class _ImmediateDepartureScreenState extends State<ImmediateDepartureScreen> {
     final vehicle = _selectedVehicle;
     if (_selectedSite == null) {
       setState(() {
-        _error = 'Sélectionnez un lieu.';
+        _error = 'Sélectionnez un site de départ.';
       });
       return;
     }
@@ -389,9 +451,23 @@ class _ImmediateDepartureScreenState extends State<ImmediateDepartureScreen> {
       _selectedSite = null;
       _selectedVehicle = null;
       _error = null;
-      _vehiclesFuture = _loadAvailableVehicles();
+      _departureDataFuture = _loadDepartureData();
     });
   }
+}
+
+class _ImmediateDepartureData {
+  const _ImmediateDepartureData({
+    required this.sites,
+    required this.availableVehicles,
+  });
+
+  const _ImmediateDepartureData.empty()
+    : sites = const [],
+      availableVehicles = const [];
+
+  final List<String> sites;
+  final List<Vehicle> availableVehicles;
 }
 
 class _StepSection extends StatelessWidget {

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../data/notification_store.dart';
 import '../../navigation/app_routes.dart';
 import '../../services/auth_session_service.dart';
+import '../../services/fleet_api_service.dart';
 import '../../widgets/fleet_bottom_navigation.dart';
 import 'bookings_screen.dart';
 import 'home_screen.dart';
@@ -19,15 +20,17 @@ class FleetHomeShell extends StatefulWidget {
 
 class _FleetHomeShellState extends State<FleetHomeShell> {
   final _authSessionService = const AuthSessionService();
+  final _fleetApiService = FleetApiService();
   int _currentIndex = 0;
   int _vehicleRefreshVersion = 0;
   int _reservationRefreshVersion = 0;
-  int _vehicleFilterCommandVersion = 0;
+  bool _hasActiveDeparture = true;
 
   @override
   void initState() {
     super.initState();
     NotificationStore.refresh();
+    _refreshActiveDepartureState();
   }
 
   @override
@@ -39,11 +42,7 @@ class _FleetHomeShellState extends State<FleetHomeShell> {
           HomeScreen(
             onImmediateDeparture: _openImmediateDeparture,
             onPlanReservation: _openReservationPlanning,
-          ),
-          VehiclesScreen(
-            refreshVersion: _vehicleRefreshVersion,
-            filterCommandVersion: _vehicleFilterCommandVersion,
-            onReservationChanged: _refreshReservationData,
+            showImmediateDeparture: !_hasActiveDeparture,
           ),
           BookingsScreen(
             key: ValueKey('bookings-$_reservationRefreshVersion'),
@@ -58,10 +57,13 @@ class _FleetHomeShellState extends State<FleetHomeShell> {
         onChanged: (index) {
           setState(() {
             _currentIndex = index;
-            if (index == 2) {
+            if (index == 1) {
               _reservationRefreshVersion++;
             }
           });
+          if (index == 0) {
+            _refreshActiveDepartureState();
+          }
         },
       ),
     );
@@ -82,12 +84,39 @@ class _FleetHomeShellState extends State<FleetHomeShell> {
     setState(() {
       _vehicleRefreshVersion++;
     });
+    _refreshActiveDepartureState();
   }
 
   void _refreshReservationData() {
     setState(() {
       _reservationRefreshVersion++;
     });
+    _refreshActiveDepartureState();
+  }
+
+  Future<void> _refreshActiveDepartureState() async {
+    try {
+      final reservations = await _fleetApiService.fetchReservations();
+      final hasActiveDeparture = reservations.any(
+        (reservation) => reservation.isStarted && !reservation.isTerminated,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _hasActiveDeparture = hasActiveDeparture;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _hasActiveDeparture = false;
+      });
+    }
   }
 
   void _openImmediateDeparture() {
@@ -106,20 +135,32 @@ class _FleetHomeShellState extends State<FleetHomeShell> {
             _currentIndex = 0;
             _vehicleRefreshVersion++;
             _reservationRefreshVersion++;
+            _hasActiveDeparture = true;
           });
         });
   }
 
   void _openReservationPlanning() {
-    setState(() {
-      _currentIndex = 1;
-      _vehicleFilterCommandVersion++;
-    });
-
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Choisissez un véhicule pour planifier la réservation.'),
       ),
     );
+
+    Navigator.of(context)
+        .push<bool>(
+          MaterialPageRoute<bool>(
+            builder: (context) => VehiclesScreen(
+              refreshVersion: _vehicleRefreshVersion,
+              showBackButton: true,
+              onReservationChanged: _refreshReservationData,
+            ),
+          ),
+        )
+        .then((updated) {
+          if ((updated ?? false) && mounted) {
+            _refreshReservationData();
+          }
+        });
   }
 }

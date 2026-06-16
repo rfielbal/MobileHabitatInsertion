@@ -59,6 +59,24 @@ void main() {
     expect(planReservationCount, 1);
   });
 
+  testWidgets('Home screen hides immediate departure during active trip', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: HomeScreen(
+          showImmediateDeparture: false,
+          onImmediateDeparture: () {},
+          onPlanReservation: () {},
+        ),
+      ),
+    );
+
+    expect(find.text('Départ immédiat'), findsNothing);
+    expect(find.text('Faire une réservation'), findsOneWidget);
+  });
+
   testWidgets('Vehicles screen has no overflow on narrow Android viewport', (
     tester,
   ) async {

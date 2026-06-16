@@ -16,12 +16,14 @@ class VehiclesScreen extends StatefulWidget {
     this.filterCommandVersion = 0,
     this.statusFilter,
     this.onReservationChanged,
+    this.showBackButton = false,
   });
 
   final int refreshVersion;
   final int filterCommandVersion;
   final VehicleStatus? statusFilter;
   final VoidCallback? onReservationChanged;
+  final bool showBackButton;
 
   @override
   State<VehiclesScreen> createState() => _VehiclesScreenState();
@@ -137,6 +139,7 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
     return Scaffold(
       appBar: BrandTopBar(
         onNotificationsPressed: () => _openNotifications(context),
+        showBackButton: widget.showBackButton,
       ),
       body: SafeArea(
         child: ListView(

@@ -1416,6 +1416,50 @@ void main() {
   );
 
   test(
+    'fetchVehicleReservationStartTimesForMonth reads planned starts only',
+    () async {
+      final service = _serviceWithMockClient((request) async {
+        expect(request.url.path, '/api/metier/vehicules/1/disponibilites');
+        return http.Response(
+          jsonEncode({
+            'vehicule': {'id': 1},
+            'dateDebut': '2026-06-01',
+            'dateFin': '2026-07-01',
+            'jours': [
+              {
+                'date': '2026-06-18',
+                'statut': 'reserve',
+                'reservations': [
+                  {
+                    'id': 10,
+                    'dateDebut': '2026-06-18T15:00:00',
+                    'dateFin': '2026-06-18T17:00:00',
+                    'termine': false,
+                  },
+                  {
+                    'id': 11,
+                    'dateDebut': '2026-06-18T09:00:00',
+                    'dateFin': '2026-06-18T10:00:00',
+                    'termine': true,
+                  },
+                ],
+              },
+            ],
+          }),
+          200,
+        );
+      });
+
+      final starts = await service.fetchVehicleReservationStartTimesForMonth(
+        vehicle: _vehicle,
+        month: DateTime(2026, 6),
+      );
+
+      expect(starts, [DateTime(2026, 6, 18, 15)]);
+    },
+  );
+
+  test(
     'fetchVehicleAvailabilityForMonth maps API statuses by day and range',
     () async {
       var fallbackRequests = 0;

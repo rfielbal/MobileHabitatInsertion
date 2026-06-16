@@ -11,10 +11,12 @@ class HomeScreen extends StatefulWidget {
     super.key,
     required this.onImmediateDeparture,
     required this.onPlanReservation,
+    this.showImmediateDeparture = true,
   });
 
   final VoidCallback onImmediateDeparture;
   final VoidCallback onPlanReservation;
+  final bool showImmediateDeparture;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -51,23 +53,25 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         _WelcomeHeader(session: _session),
                         const SizedBox(height: 48),
-                        _HomeActionCard(
-                          title: 'Départ immédiat',
-                          subtitle: 'Récupérer un véhicule maintenant',
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: AppColors.onPrimary,
-                          subtitleColor: AppColors.primaryFixed,
-                          borderColor: AppColors.primaryContainer,
-                          shadowColor: AppColors.primaryShadow,
-                          onTap: widget.onImmediateDeparture,
-                          icon: Image.asset(
-                            AppAssets.wheelloMascot,
-                            height: 82,
-                            fit: BoxFit.contain,
-                            semanticLabel: 'Wheello',
+                        if (widget.showImmediateDeparture) ...[
+                          _HomeActionCard(
+                            title: 'Départ immédiat',
+                            subtitle: 'Récupérer un véhicule maintenant',
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: AppColors.onPrimary,
+                            subtitleColor: AppColors.primaryFixed,
+                            borderColor: AppColors.primaryContainer,
+                            shadowColor: AppColors.primaryShadow,
+                            onTap: widget.onImmediateDeparture,
+                            icon: Image.asset(
+                              AppAssets.wheelloMascot,
+                              height: 82,
+                              fit: BoxFit.contain,
+                              semanticLabel: 'Wheello',
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 20),
+                          const SizedBox(height: 20),
+                        ],
                         _HomeActionCard(
                           title: 'Faire une réservation',
                           subtitle: 'Planifier un déplacement futur',

@@ -6,9 +6,14 @@ import '../theme/app_brand.dart';
 import '../theme/app_colors.dart';
 
 class BrandTopBar extends StatelessWidget implements PreferredSizeWidget {
-  const BrandTopBar({super.key, required this.onNotificationsPressed});
+  const BrandTopBar({
+    super.key,
+    required this.onNotificationsPressed,
+    this.showBackButton = false,
+  });
 
   final VoidCallback onNotificationsPressed;
+  final bool showBackButton;
 
   @override
   Size get preferredSize => const Size.fromHeight(68);
@@ -16,7 +21,7 @@ class BrandTopBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     return AppBar(
-      automaticallyImplyLeading: false,
+      automaticallyImplyLeading: showBackButton,
       toolbarHeight: 68,
       backgroundColor: AppColors.surface,
       titleSpacing: 16,

@@ -145,6 +145,21 @@ class FleetApiService {
     return VehicleAvailabilityMonth(availabilityByDay: availabilityByDay);
   }
 
+  Future<List<DateTime>> fetchVehicleReservationStartTimesForMonth({
+    required Vehicle vehicle,
+    required DateTime month,
+  }) async {
+    final response = await _apiClient.getJson(
+      '/metier/vehicules/${vehicle.id}/disponibilites',
+      queryParameters: {
+        'mois': _monthParameter(month),
+        ..._refreshQueryParameters(),
+      },
+    );
+
+    return _reservationStartTimesFromAvailabilityResponse(response);
+  }
+
   Future<FleetReservation> createReservation({
     required Vehicle vehicle,
     required DateTime startAt,
@@ -793,6 +808,67 @@ class FleetApiService {
     }
 
     return ids;
+  }
+
+  List<DateTime> _reservationStartTimesFromAvailabilityResponse(
+    Object? response,
+  ) {
+    final startsByTimestamp = <int, DateTime>{};
+
+    void addStart(DateTime start) {
+      startsByTimestamp[start.millisecondsSinceEpoch] = start;
+    }
+
+    bool isReservationLike(Map<String, dynamic> value) {
+      return value.containsKey('id') ||
+          value.containsKey('reservationId') ||
+          value.containsKey('demarre') ||
+          value.containsKey('démarre') ||
+          value.containsKey('termine') ||
+          value.containsKey('statut') ||
+          value.containsKey('status') ||
+          value.containsKey('type');
+    }
+
+    void collect(Object? value) {
+      if (value is List) {
+        for (final item in value) {
+          collect(item);
+        }
+        return;
+      }
+
+      if (value is! Map<String, dynamic>) {
+        return;
+      }
+
+      final start = _dateFromApiValue(value['dateDebut'] ?? value['startAt']);
+      final end = _dateFromApiValue(value['dateFin'] ?? value['endAt']);
+      if (isReservationLike(value) &&
+          start != null &&
+          end != null &&
+          start.isBefore(end) &&
+          !FleetApiMappers.reservationIsTerminated(value)) {
+        addStart(start);
+      }
+
+      for (final key in [
+        'items',
+        'hydra:member',
+        'member',
+        'data',
+        'results',
+        'jours',
+        'reservations',
+      ]) {
+        collect(value[key]);
+      }
+    }
+
+    collect(response);
+
+    final starts = startsByTimestamp.values.toList()..sort();
+    return starts;
   }
 
   bool _vehicleIdsMatch(Set<String> candidateIds, String vehicleId) {
