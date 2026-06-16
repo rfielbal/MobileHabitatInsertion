@@ -51,29 +51,23 @@ class _FleetHomeShellState extends State<FleetHomeShell>
 
   @override
   Widget build(BuildContext context) {
-    return BackButtonListener(
-      onBackButtonPressed: () async {
-        _handleSystemBack();
-        return true;
-      },
-      child: PopScope<void>(
-        canPop: false,
-        onPopInvokedWithResult: (didPop, _) {
-          if (didPop) {
-            return;
-          }
+    return PopScope<void>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) {
+          return;
+        }
 
-          _handleSystemBack();
-        },
-        child: Scaffold(
-          body: Navigator(
-            key: _navigatorKey,
-            onGenerateRoute: (_) => _routeForIndex(_currentIndex),
-          ),
-          bottomNavigationBar: FleetBottomNavigation(
-            currentIndex: _currentIndex,
-            onChanged: _selectTab,
-          ),
+        _handleSystemBack();
+      },
+      child: Scaffold(
+        body: Navigator(
+          key: _navigatorKey,
+          onGenerateRoute: (_) => _routeForIndex(_currentIndex),
+        ),
+        bottomNavigationBar: FleetBottomNavigation(
+          currentIndex: _currentIndex,
+          onChanged: _selectTab,
         ),
       ),
     );
