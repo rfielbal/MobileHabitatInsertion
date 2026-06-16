@@ -17,6 +17,7 @@ class VehiclesScreen extends StatefulWidget {
     this.statusFilter,
     this.onReservationChanged,
     this.showBackButton = false,
+    this.closeAfterReservation = false,
   });
 
   final int refreshVersion;
@@ -24,6 +25,7 @@ class VehiclesScreen extends StatefulWidget {
   final VehicleStatus? statusFilter;
   final VoidCallback? onReservationChanged;
   final bool showBackButton;
+  final bool closeAfterReservation;
 
   @override
   State<VehiclesScreen> createState() => _VehiclesScreenState();
@@ -237,8 +239,14 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
         )
         .then((updated) {
           if (updated ?? false) {
-            _reloadVehicles();
             widget.onReservationChanged?.call();
+
+            if (widget.closeAfterReservation && mounted) {
+              Navigator.of(context).pop(true);
+              return;
+            }
+
+            _reloadVehicles();
           }
         });
   }

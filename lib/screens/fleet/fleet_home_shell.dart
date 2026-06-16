@@ -153,6 +153,7 @@ class _FleetHomeShellState extends State<FleetHomeShell> {
             builder: (context) => VehiclesScreen(
               refreshVersion: _vehicleRefreshVersion,
               showBackButton: true,
+              closeAfterReservation: true,
               onReservationChanged: _refreshReservationData,
             ),
           ),
