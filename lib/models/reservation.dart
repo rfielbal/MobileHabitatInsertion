@@ -121,31 +121,12 @@ class FleetReservation {
     return now.isBefore(startAt.subtract(editLockDelay));
   }
 
-  bool canBeCancelledAt(DateTime now) {
+  bool canBeCancelledAt(DateTime _) {
     if (isInHistory || hasOpenConstat || hasClosedConstat) {
       return false;
     }
 
-    if (!now.isBefore(startAt)) {
-      return false;
-    }
-
-    if (canBeEditedAt(now)) {
-      return true;
-    }
-
-    final creationDate = createdAt;
-    if (creationDate == null) {
-      return false;
-    }
-
-    final shortNoticeReservation =
-        startAt.difference(creationDate) < editLockDelay;
-    final stillInGracePeriod = !now.isAfter(
-      creationDate.add(shortNoticeCancelDelay),
-    );
-
-    return shortNoticeReservation && stillInGracePeriod;
+    return true;
   }
 
   bool shouldShowDepartureActionAt(DateTime now) {

@@ -14,42 +14,29 @@ void main() {
     expect(reservation.canBeEditedAt(DateTime(2026, 6, 18, 8)), isFalse);
   });
 
-  test(
-    'short notice reservations can be cancelled during grace period only',
-    () {
-      final reservation = _reservation(
-        startAt: DateTime(2026, 6, 18, 9),
-        endAt: DateTime(2026, 6, 18, 17),
-        createdAt: DateTime(2026, 6, 18, 7, 30),
-      );
+  test('unstarted reservations can be cancelled without time limit', () {
+    final reservation = _reservation(
+      startAt: DateTime(2026, 6, 18, 9),
+      endAt: DateTime(2026, 6, 18, 17),
+      createdAt: DateTime(2026, 6, 18, 7, 30),
+    );
 
-      expect(
-        reservation.canBeCancelledAt(DateTime(2026, 6, 18, 7, 59)),
-        isTrue,
-      );
-      expect(
-        reservation.canBeCancelledAt(DateTime(2026, 6, 18, 8, 30)),
-        isTrue,
-      );
-      expect(
-        reservation.canBeCancelledAt(DateTime(2026, 6, 18, 8, 30, 1)),
-        isFalse,
-      );
-      expect(reservation.canBeCancelledAt(DateTime(2026, 6, 18, 9)), isFalse);
-    },
-  );
+    expect(
+      reservation.canBeCancelledAt(DateTime(2026, 6, 18, 8, 59, 55)),
+      isTrue,
+    );
+    expect(reservation.canBeCancelledAt(DateTime(2026, 6, 18, 9)), isTrue);
+    expect(reservation.canBeCancelledAt(DateTime(2026, 6, 18, 10)), isTrue);
+  });
 
-  test(
-    'short notice reservations without creation date cannot be cancelled',
-    () {
-      final reservation = _reservation(
-        startAt: DateTime(2026, 6, 18, 9),
-        endAt: DateTime(2026, 6, 18, 17),
-      );
+  test('unstarted reservations without creation date can be cancelled', () {
+    final reservation = _reservation(
+      startAt: DateTime(2026, 6, 18, 9),
+      endAt: DateTime(2026, 6, 18, 17),
+    );
 
-      expect(reservation.canBeCancelledAt(DateTime(2026, 6, 18, 8)), isFalse);
-    },
-  );
+    expect(reservation.canBeCancelledAt(DateTime(2026, 6, 18, 8)), isTrue);
+  });
 
   test('started reservations cannot be cancelled during grace period', () {
     final reservation = _reservation(
@@ -70,7 +57,7 @@ void main() {
     );
 
     expect(reservation.canBeCancelledAt(DateTime(2026, 6, 17, 8, 59)), isTrue);
-    expect(reservation.canBeCancelledAt(DateTime(2026, 6, 17, 9)), isFalse);
+    expect(reservation.canBeCancelledAt(DateTime(2026, 6, 17, 9)), isTrue);
   });
 
   test('departure action is shown only from one hour before start', () {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../data/notification_store.dart';
+import '../../models/reservation.dart';
 import '../../navigation/app_routes.dart';
 import '../../services/auth_session_service.dart';
 import '../../services/fleet_api_service.dart';
@@ -19,6 +20,7 @@ class FleetHomeShell extends StatefulWidget {
 }
 
 class _FleetHomeShellState extends State<FleetHomeShell> {
+  final _navigatorKey = GlobalKey<NavigatorState>();
   final _authSessionService = const AuthSessionService();
   final _fleetApiService = FleetApiService();
   int _currentIndex = 0;
@@ -36,35 +38,13 @@ class _FleetHomeShellState extends State<FleetHomeShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: [
-          HomeScreen(
-            onImmediateDeparture: _openImmediateDeparture,
-            onPlanReservation: _openReservationPlanning,
-            showImmediateDeparture: !_hasActiveDeparture,
-          ),
-          BookingsScreen(
-            key: ValueKey('bookings-$_reservationRefreshVersion'),
-            refreshVersion: _reservationRefreshVersion,
-            onReservationChanged: _refreshVehicleData,
-          ),
-          ProfileScreen(onLogout: _logout),
-        ],
+      body: Navigator(
+        key: _navigatorKey,
+        onGenerateRoute: (_) => _routeForIndex(_currentIndex),
       ),
       bottomNavigationBar: FleetBottomNavigation(
         currentIndex: _currentIndex,
-        onChanged: (index) {
-          setState(() {
-            _currentIndex = index;
-            if (index == 1) {
-              _reservationRefreshVersion++;
-            }
-          });
-          if (index == 0) {
-            _refreshActiveDepartureState();
-          }
-        },
+        onChanged: _selectTab,
       ),
     );
   }
@@ -78,6 +58,47 @@ class _FleetHomeShellState extends State<FleetHomeShell> {
     Navigator.of(
       context,
     ).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
+  }
+
+  Route<void> _routeForIndex(int index) {
+    return MaterialPageRoute<void>(
+      builder: (context) => _screenForIndex(index),
+    );
+  }
+
+  Widget _screenForIndex(int index) {
+    return switch (index) {
+      0 => HomeScreen(
+        onImmediateDeparture: _openImmediateDeparture,
+        onPlanReservation: _openReservationPlanning,
+        showImmediateDeparture: !_hasActiveDeparture,
+      ),
+      1 => BookingsScreen(
+        key: ValueKey('bookings-$_reservationRefreshVersion'),
+        refreshVersion: _reservationRefreshVersion,
+        onReservationChanged: _refreshVehicleData,
+      ),
+      _ => ProfileScreen(onLogout: _logout),
+    };
+  }
+
+  void _selectTab(int index) {
+    if (index == 1) {
+      _reservationRefreshVersion++;
+    }
+
+    setState(() {
+      _currentIndex = index;
+    });
+
+    _navigatorKey.currentState?.pushAndRemoveUntil(
+      _routeForIndex(index),
+      (route) => false,
+    );
+
+    if (index == 0) {
+      _refreshActiveDepartureState();
+    }
   }
 
   void _refreshVehicleData() {
@@ -120,9 +141,9 @@ class _FleetHomeShellState extends State<FleetHomeShell> {
   }
 
   void _openImmediateDeparture() {
-    Navigator.of(context)
-        .push(
-          MaterialPageRoute(
+    _navigatorKey.currentState
+        ?.push(
+          MaterialPageRoute<FleetReservation>(
             builder: (context) => const ImmediateDepartureScreen(),
           ),
         )
@@ -147,8 +168,8 @@ class _FleetHomeShellState extends State<FleetHomeShell> {
       ),
     );
 
-    Navigator.of(context)
-        .push<bool>(
+    _navigatorKey.currentState
+        ?.push<bool>(
           MaterialPageRoute<bool>(
             builder: (context) => VehiclesScreen(
               refreshVersion: _vehicleRefreshVersion,
