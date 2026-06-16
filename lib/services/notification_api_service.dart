@@ -21,4 +21,10 @@ class NotificationApiService {
   Future<void> deleteNotification(int id) async {
     await _apiClient.delete('/metier/notifications/$id');
   }
+
+  Future<void> notifyUnstartedReservationAdmin(String reservationId) async {
+    await _apiClient.post(
+      '/metier/reservations/$reservationId/depart-non-confirme/admin',
+    );
+  }
 }

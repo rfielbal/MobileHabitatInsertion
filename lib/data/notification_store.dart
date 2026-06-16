@@ -22,11 +22,19 @@ class NotificationStore {
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
   static const String _dismissedLocalNotificationsStorageKey =
       'dismissed_local_notification_ids';
+  static const String _maintainedUnstartedReservationsStorageKey =
+      'maintained_unstarted_reservation_ids';
+  static const String _adminAlertedUnstartedReservationsStorageKey =
+      'admin_alerted_unstarted_reservation_ids';
   static final Set<int> _dismissedLocalNotificationIds = <int>{};
   static final Set<int> _emittedLocalNotificationIds = <int>{};
   static final Set<int> _managedReminderNotificationIds = <int>{};
+  static final Set<String> _maintainedUnstartedReservationIds = <String>{};
+  static final Set<String> _adminAlertedUnstartedReservationIds = <String>{};
   static List<FleetReservation>? _lastServerReservations;
   static bool _dismissedLocalNotificationIdsLoaded = false;
+  static bool _maintainedUnstartedReservationIdsLoaded = false;
+  static bool _adminAlertedUnstartedReservationIdsLoaded = false;
 
   static int get unreadCount {
     return items.value.where((item) => !readIds.value.contains(item.id)).length;
@@ -34,6 +42,11 @@ class NotificationStore {
 
   static bool isRead(int id) {
     return readIds.value.contains(id);
+  }
+
+  static bool isUnstartedReservationAction(AppNotification notification) {
+    return notification.action ==
+        AppNotificationAction.resolveUnstartedReservation;
   }
 
   static Future<void> refresh() async {
@@ -95,6 +108,9 @@ class NotificationStore {
     DateTime now,
   ) async {
     await _ensureDismissedLocalNotificationIdsLoaded();
+    await _ensureMaintainedUnstartedReservationIdsLoaded();
+    await _ensureAdminAlertedUnstartedReservationIdsLoaded();
+    await _discardResolvedUnstartedReservationState(reservations);
 
     final existingLocalIds = {
       for (final item in items.value)
@@ -113,18 +129,21 @@ class NotificationStore {
     final reminders = [
       for (final reservation in reservations)
         if (reservation.shouldCreateDepartureReminderAt(now) &&
+            !_maintainedUnstartedReservationIds.contains(reservation.id) &&
             _shouldEmitLocalNotification(
               _departureReminderId(reservation),
               existingLocalIds,
             ))
           AppNotification(
             id: _departureReminderId(reservation),
-            title: 'Départ à confirmer',
+            title: 'Départ non confirmé',
             body:
-                'Le formulaire de départ de ${reservation.vehicle.name} devait être envoyé à ${_timeLabel(reservation.startAt)}.',
+                'Votre réservation de ${reservation.vehicle.name} devait commencer à ${_timeLabel(reservation.startAt)}. Annulez-la ou maintenez-la.',
             timeLabel: 'Maintenant',
             icon: Icons.assignment_late_outlined,
             color: AppColors.maintenance,
+            action: AppNotificationAction.resolveUnstartedReservation,
+            reservationId: reservation.id,
           ),
       for (final reservation in reservations)
         if (reservation.shouldCreateReturnReminderAt(now) &&
@@ -163,6 +182,26 @@ class NotificationStore {
     _managedReminderNotificationIds
       ..clear()
       ..addAll(currentReminderIds);
+
+    await _notifyAdminsForUnhandledDepartures(reservations, now);
+  }
+
+  static Future<void> maintainUnstartedReservation(String reservationId) async {
+    await _ensureMaintainedUnstartedReservationIdsLoaded();
+    _maintainedUnstartedReservationIds.add(reservationId);
+    await _persistStringIds(
+      _maintainedUnstartedReservationsStorageKey,
+      _maintainedUnstartedReservationIds,
+    );
+    await clearUnstartedReservationReminder(reservationId);
+  }
+
+  static Future<void> clearUnstartedReservationReminder(
+    String reservationId,
+  ) async {
+    await _deleteFromLocalState(
+      _departureReminderIdFromReservationId(reservationId),
+    );
   }
 
   static Future<void> syncServerReservations(
@@ -184,6 +223,14 @@ class NotificationStore {
 
   static void resetReservationSyncState() {
     _lastServerReservations = null;
+    _dismissedLocalNotificationIds.clear();
+    _emittedLocalNotificationIds.clear();
+    _managedReminderNotificationIds.clear();
+    _maintainedUnstartedReservationIds.clear();
+    _adminAlertedUnstartedReservationIds.clear();
+    _dismissedLocalNotificationIdsLoaded = false;
+    _maintainedUnstartedReservationIdsLoaded = false;
+    _adminAlertedUnstartedReservationIdsLoaded = false;
   }
 
   static Future<void> upsertDeletedReservationNotifications(
@@ -233,7 +280,11 @@ class NotificationStore {
   }
 
   static int _departureReminderId(FleetReservation reservation) {
-    return -1000000 - reservation.id.hashCode.abs();
+    return _departureReminderIdFromReservationId(reservation.id);
+  }
+
+  static int _departureReminderIdFromReservationId(String reservationId) {
+    return -1000000 - reservationId.hashCode.abs();
   }
 
   static int _returnReminderId(FleetReservation reservation) {
@@ -296,6 +347,132 @@ class NotificationStore {
       // Une erreur de stockage local ne doit pas empêcher l'affichage des données API.
     } finally {
       _dismissedLocalNotificationIdsLoaded = true;
+    }
+  }
+
+  static Future<void> _ensureMaintainedUnstartedReservationIdsLoaded() async {
+    if (_maintainedUnstartedReservationIdsLoaded) {
+      return;
+    }
+
+    _maintainedUnstartedReservationIds.addAll(
+      await _readStoredStringIds(_maintainedUnstartedReservationsStorageKey),
+    );
+    _maintainedUnstartedReservationIdsLoaded = true;
+  }
+
+  static Future<void> _ensureAdminAlertedUnstartedReservationIdsLoaded() async {
+    if (_adminAlertedUnstartedReservationIdsLoaded) {
+      return;
+    }
+
+    _adminAlertedUnstartedReservationIds.addAll(
+      await _readStoredStringIds(_adminAlertedUnstartedReservationsStorageKey),
+    );
+    _adminAlertedUnstartedReservationIdsLoaded = true;
+  }
+
+  static Future<Set<String>> _readStoredStringIds(String key) async {
+    try {
+      final storedIds = await _storage.read(key: key);
+
+      if (storedIds == null || storedIds.isEmpty) {
+        return <String>{};
+      }
+
+      final decodedIds = jsonDecode(storedIds);
+
+      if (decodedIds is List) {
+        return decodedIds
+            .whereType<Object>()
+            .map((id) => id.toString())
+            .where((id) => id.trim().isNotEmpty)
+            .toSet();
+      }
+    } catch (_) {
+      // Une erreur de stockage local ne doit pas bloquer les notifications.
+    }
+
+    return <String>{};
+  }
+
+  static Future<void> _persistStringIds(String key, Set<String> ids) async {
+    final sortedIds = ids.toList()..sort();
+
+    try {
+      await _storage.write(key: key, value: jsonEncode(sortedIds));
+    } catch (_) {
+      // L'état reste appliqué en mémoire même si la persistance échoue.
+    }
+  }
+
+  static Future<void> _discardResolvedUnstartedReservationState(
+    List<FleetReservation> reservations,
+  ) async {
+    final unresolvedReservationIds = {
+      for (final reservation in reservations)
+        if (!reservation.isInHistory &&
+            !reservation.hasOpenConstat &&
+            !reservation.hasClosedConstat)
+          reservation.id,
+    };
+
+    final maintainedCountBefore = _maintainedUnstartedReservationIds.length;
+    _maintainedUnstartedReservationIds.removeWhere(
+      (reservationId) => !unresolvedReservationIds.contains(reservationId),
+    );
+    final maintainedChanged =
+        maintainedCountBefore != _maintainedUnstartedReservationIds.length;
+
+    final adminAlertedCountBefore = _adminAlertedUnstartedReservationIds.length;
+    _adminAlertedUnstartedReservationIds.removeWhere(
+      (reservationId) => !unresolvedReservationIds.contains(reservationId),
+    );
+    final adminAlertedChanged =
+        adminAlertedCountBefore != _adminAlertedUnstartedReservationIds.length;
+
+    if (maintainedChanged) {
+      await _persistStringIds(
+        _maintainedUnstartedReservationsStorageKey,
+        _maintainedUnstartedReservationIds,
+      );
+    }
+
+    if (adminAlertedChanged) {
+      await _persistStringIds(
+        _adminAlertedUnstartedReservationsStorageKey,
+        _adminAlertedUnstartedReservationIds,
+      );
+    }
+  }
+
+  static Future<void> _notifyAdminsForUnhandledDepartures(
+    List<FleetReservation> reservations,
+    DateTime now,
+  ) async {
+    var changed = false;
+
+    for (final reservation in reservations) {
+      if (!reservation.shouldNotifyAdminForUnstartedDepartureAt(now) ||
+          _maintainedUnstartedReservationIds.contains(reservation.id) ||
+          _adminAlertedUnstartedReservationIds.contains(reservation.id)) {
+        continue;
+      }
+
+      try {
+        await _apiService.notifyUnstartedReservationAdmin(reservation.id);
+        _adminAlertedUnstartedReservationIds.add(reservation.id);
+        changed = true;
+      } catch (_) {
+        // Le rappel local doit rester utilisable même si l'alerte admin échoue.
+      }
+    }
+
+    if (changed) {
+      await _persistStringIds(
+        _adminAlertedUnstartedReservationsStorageKey,
+        _adminAlertedUnstartedReservationIds,
+      );
     }
   }
 

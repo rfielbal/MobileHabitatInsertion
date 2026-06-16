@@ -50,7 +50,8 @@ class FleetReservation {
   static const pickupFormLeadTime = Duration(hours: 1);
   static const returnFormLeadTime = Duration(hours: 1);
   static const shortNoticeCancelDelay = Duration(hours: 1);
-  static const departureReminderDelay = Duration(minutes: 30);
+  static const departureReminderDelay = Duration(minutes: 15);
+  static const departureAdminAlertDelay = Duration(minutes: 30);
   static const returnReminderDelay = Duration(minutes: 30);
 
   final String id;
@@ -163,6 +164,13 @@ class FleetReservation {
         !hasOpenConstat &&
         !hasClosedConstat &&
         !now.isBefore(startAt.add(departureReminderDelay));
+  }
+
+  bool shouldNotifyAdminForUnstartedDepartureAt(DateTime now) {
+    return !isInHistory &&
+        !hasOpenConstat &&
+        !hasClosedConstat &&
+        !now.isBefore(startAt.add(departureAdminAlertDelay));
   }
 
   bool shouldShowReturnActionAt(DateTime _) {

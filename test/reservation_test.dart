@@ -115,11 +115,31 @@ void main() {
     );
 
     expect(
-      reservation.shouldCreateDepartureReminderAt(DateTime(2026, 6, 18, 8, 59)),
+      reservation.shouldCreateDepartureReminderAt(DateTime(2026, 6, 18, 8, 44)),
       isFalse,
     );
     expect(
-      reservation.shouldCreateDepartureReminderAt(DateTime(2026, 6, 18, 9)),
+      reservation.shouldCreateDepartureReminderAt(DateTime(2026, 6, 18, 8, 45)),
+      isTrue,
+    );
+  });
+
+  test('admin alert for unstarted departure waits thirty minutes', () {
+    final reservation = _reservation(
+      startAt: DateTime(2026, 6, 18, 8, 30),
+      endAt: DateTime(2026, 6, 18, 17),
+    );
+
+    expect(
+      reservation.shouldNotifyAdminForUnstartedDepartureAt(
+        DateTime(2026, 6, 18, 8, 59),
+      ),
+      isFalse,
+    );
+    expect(
+      reservation.shouldNotifyAdminForUnstartedDepartureAt(
+        DateTime(2026, 6, 18, 9),
+      ),
       isTrue,
     );
   });
@@ -272,6 +292,12 @@ void main() {
     );
     expect(
       reservation.shouldCreateDepartureReminderAt(DateTime(2026, 6, 18, 9, 30)),
+      isFalse,
+    );
+    expect(
+      reservation.shouldNotifyAdminForUnstartedDepartureAt(
+        DateTime(2026, 6, 18, 9, 30),
+      ),
       isFalse,
     );
     expect(

@@ -27,6 +27,7 @@ class _ReturnVehicleScreenState extends State<ReturnVehicleScreen> {
 
   bool _keysReturned = false;
   bool _vehicleClean = false;
+  bool _vehicleCharged = false;
   bool _isSubmitting = false;
 
   @override
@@ -42,6 +43,10 @@ class _ReturnVehicleScreenState extends State<ReturnVehicleScreen> {
       return;
     }
 
+    if (!_validateReturnChecklist()) {
+      return;
+    }
+
     setState(() {
       _isSubmitting = true;
     });
@@ -50,6 +55,7 @@ class _ReturnVehicleScreenState extends State<ReturnVehicleScreen> {
       await _fleetApiService.finishConstat(
         reservation: widget.reservation,
         mileage: int.parse(_mileageController.text.trim()),
+        vehicleCharged: _requiresCharging ? _vehicleCharged : null,
       );
 
       if (!mounted) {
@@ -93,6 +99,31 @@ class _ReturnVehicleScreenState extends State<ReturnVehicleScreen> {
       return 'Le kilométrage ne peut pas être inférieur au départ';
     }
     return null;
+  }
+
+  bool get _requiresCharging {
+    return widget.reservation.vehicle.energyType.requiresCharging;
+  }
+
+  bool _validateReturnChecklist() {
+    String? missingMessage;
+
+    if (!_keysReturned) {
+      missingMessage = 'Confirmez que les clés ont été remises à leur place.';
+    } else if (!_vehicleClean) {
+      missingMessage = 'Confirmez que le véhicule est propre.';
+    } else if (_requiresCharging && !_vehicleCharged) {
+      missingMessage = 'Confirmez que le véhicule a été mis en charge.';
+    }
+
+    if (missingMessage != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(missingMessage)));
+      return false;
+    }
+
+    return true;
   }
 
   String? _requiredFuelLevel(String? value) {
@@ -230,10 +261,22 @@ class _ReturnVehicleScreenState extends State<ReturnVehicleScreen> {
                           _vehicleClean = value ?? false;
                         });
                       },
-                      title: const Text('Le véhicule est propre et branché'),
+                      title: const Text('Le véhicule est propre'),
                       controlAffinity: ListTileControlAffinity.leading,
                       contentPadding: EdgeInsets.zero,
                     ),
+                    if (_requiresCharging)
+                      CheckboxListTile(
+                        value: _vehicleCharged,
+                        onChanged: (value) {
+                          setState(() {
+                            _vehicleCharged = value ?? false;
+                          });
+                        },
+                        title: const Text('Le véhicule a été mis en charge'),
+                        controlAffinity: ListTileControlAffinity.leading,
+                        contentPadding: EdgeInsets.zero,
+                      ),
                   ],
                 ),
               ),

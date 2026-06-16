@@ -1,6 +1,7 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_habitat_insertion/data/notification_store.dart';
+import 'package:mobile_habitat_insertion/models/app_notification.dart';
 import 'package:mobile_habitat_insertion/models/reservation.dart';
 import 'package:mobile_habitat_insertion/models/vehicle.dart';
 
@@ -62,14 +63,67 @@ void main() {
 
     expect(NotificationStore.items.value, isEmpty);
   });
+
+  test(
+    'creates an actionable notification fifteen minutes after unstarted departure',
+    () async {
+      final reservation = _reservation(
+        id: 'unstarted-reservation',
+        startAt: DateTime(2026, 6, 18, 8),
+      );
+
+      await NotificationStore.upsertDepartureReminders([
+        reservation,
+      ], DateTime(2026, 6, 18, 8, 14));
+      expect(NotificationStore.items.value, isEmpty);
+
+      await NotificationStore.upsertDepartureReminders([
+        reservation,
+      ], DateTime(2026, 6, 18, 8, 15));
+
+      expect(NotificationStore.items.value, hasLength(1));
+      expect(NotificationStore.items.value.single.title, 'Départ non confirmé');
+      expect(
+        NotificationStore.items.value.single.action,
+        AppNotificationAction.resolveUnstartedReservation,
+      );
+      expect(
+        NotificationStore.items.value.single.reservationId,
+        reservation.id,
+      );
+    },
+  );
+
+  test(
+    'maintained unstarted reservations do not recreate the local reminder',
+    () async {
+      final reservation = _reservation(
+        id: 'maintained-unstarted-reservation',
+        startAt: DateTime(2026, 6, 18, 8),
+      );
+
+      await NotificationStore.upsertDepartureReminders([
+        reservation,
+      ], DateTime(2026, 6, 18, 8, 15));
+      expect(NotificationStore.items.value, hasLength(1));
+
+      await NotificationStore.maintainUnstartedReservation(reservation.id);
+      expect(NotificationStore.items.value, isEmpty);
+
+      await NotificationStore.upsertDepartureReminders([
+        reservation,
+      ], DateTime(2026, 6, 18, 8, 45));
+      expect(NotificationStore.items.value, isEmpty);
+    },
+  );
 }
 
-FleetReservation _reservation({required String id}) {
+FleetReservation _reservation({required String id, DateTime? startAt}) {
   return FleetReservation(
     id: id,
     vehicle: _vehicle,
     location: 'Site',
-    startAt: DateTime(2026, 6, 18, 8),
+    startAt: startAt ?? DateTime(2026, 6, 18, 8),
     endAt: DateTime(2026, 6, 18, 17),
     startLabel: 'Jeu 18 Juin, 08:00',
     endLabel: 'Jeu 18 Juin, 17:00',

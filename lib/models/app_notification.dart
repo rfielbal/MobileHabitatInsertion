@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+enum AppNotificationAction { none, resolveUnstartedReservation }
+
 class AppNotification {
   const AppNotification({
     required this.id,
@@ -8,6 +10,8 @@ class AppNotification {
     required this.timeLabel,
     required this.icon,
     required this.color,
+    this.action = AppNotificationAction.none,
+    this.reservationId,
   });
 
   final int id;
@@ -16,4 +20,6 @@ class AppNotification {
   final String timeLabel;
   final IconData icon;
   final Color color;
+  final AppNotificationAction action;
+  final String? reservationId;
 }

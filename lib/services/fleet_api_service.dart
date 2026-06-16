@@ -488,17 +488,23 @@ class FleetApiService {
     required FleetReservation reservation,
     required int mileage,
     DateTime? confirmedAt,
+    bool? vehicleCharged,
   }) async {
     final constatId = _constatIdForReturn(reservation);
     final dateRendu = _returnTimestampInsideReservation(
       reservation,
       confirmedAt ?? DateTime.now(),
     );
+    final body = <String, dynamic>{
+      'dateRendu': FleetApiMappers.iso(dateRendu),
+      'kmFin': mileage,
+    };
 
-    await _apiClient.post(
-      '/metier/constats/$constatId/terminer',
-      body: {'dateRendu': FleetApiMappers.iso(dateRendu), 'kmFin': mileage},
-    );
+    if (vehicleCharged != null) {
+      body['misEnCharge'] = vehicleCharged;
+    }
+
+    await _apiClient.post('/metier/constats/$constatId/terminer', body: body);
 
     await _markReservationTerminated(reservation);
   }

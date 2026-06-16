@@ -805,24 +805,67 @@ class _InformationRow extends StatelessWidget {
   }
 }
 
-class _VehicleHero extends StatelessWidget {
+class _VehicleHero extends StatefulWidget {
   const _VehicleHero({required this.vehicle});
 
   final Vehicle vehicle;
 
   @override
+  State<_VehicleHero> createState() => _VehicleHeroState();
+}
+
+class _VehicleHeroState extends State<_VehicleHero> {
+  int _currentImageIndex = 0;
+
+  List<String> get _imageUrls {
+    final urls = widget.vehicle.imageUrls.isEmpty
+        ? [widget.vehicle.imageUrl]
+        : widget.vehicle.imageUrls;
+
+    return {
+      for (final url in urls)
+        if (url.trim().isNotEmpty) url,
+    }.toList();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final imageUrls = _imageUrls;
+
     return AppCard(
       padding: EdgeInsets.zero,
       child: Column(
         children: [
           Stack(
             children: [
-              RemoteVehicleImage(
-                imageUrl: vehicle.imageUrl,
+              SizedBox(
                 height: 190,
                 width: double.infinity,
-                borderRadius: 16,
+                child: imageUrls.length <= 1
+                    ? RemoteVehicleImage(
+                        imageUrl: imageUrls.isEmpty
+                            ? widget.vehicle.imageUrl
+                            : imageUrls.first,
+                        height: 190,
+                        width: double.infinity,
+                        borderRadius: 16,
+                      )
+                    : PageView.builder(
+                        itemCount: imageUrls.length,
+                        onPageChanged: (index) {
+                          setState(() {
+                            _currentImageIndex = index;
+                          });
+                        },
+                        itemBuilder: (context, index) {
+                          return RemoteVehicleImage(
+                            imageUrl: imageUrls[index],
+                            height: 190,
+                            width: double.infinity,
+                            borderRadius: 16,
+                          );
+                        },
+                      ),
               ),
               Positioned(
                 top: 14,
@@ -853,7 +896,7 @@ class _VehicleHero extends StatelessWidget {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        vehicle.energyType.label.toUpperCase(),
+                        widget.vehicle.energyType.label.toUpperCase(),
                         style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
@@ -863,6 +906,30 @@ class _VehicleHero extends StatelessWidget {
                   ),
                 ),
               ),
+              if (imageUrls.length > 1)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 12,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      for (var index = 0; index < imageUrls.length; index++)
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          margin: const EdgeInsets.symmetric(horizontal: 3),
+                          width: index == _currentImageIndex ? 18 : 7,
+                          height: 7,
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceLowest.withValues(
+                              alpha: index == _currentImageIndex ? 0.95 : 0.58,
+                            ),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
             ],
           ),
           Padding(
@@ -872,12 +939,12 @@ class _VehicleHero extends StatelessWidget {
               children: [
                 _Spec(
                   icon: Icons.airline_seat_recline_normal,
-                  label: vehicle.seats,
+                  label: widget.vehicle.seats,
                 ),
                 const _Divider(),
-                _Spec(icon: Icons.settings, label: vehicle.transmission),
+                _Spec(icon: Icons.settings, label: widget.vehicle.transmission),
                 const _Divider(),
-                _Spec(icon: Icons.speed, label: vehicle.energyInfo),
+                _Spec(icon: Icons.speed, label: widget.vehicle.energyInfo),
               ],
             ),
           ),

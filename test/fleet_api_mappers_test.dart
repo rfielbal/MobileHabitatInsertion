@@ -48,6 +48,24 @@ void main() {
     expect(vehicle.imageUrl, 'https://example.test/c3.png');
   });
 
+  test('vehicle mapper reads vehicle image gallery from API', () {
+    final vehicle = FleetApiMappers.vehicleFromJson({
+      'id': 10,
+      'marque': 'Citroën',
+      'modele': 'C3',
+      'images': [
+        {'url': 'https://example.test/c3-1.jpg'},
+        {'url': 'https://example.test/c3-2.jpg'},
+      ],
+    });
+
+    expect(vehicle.imageUrl, 'https://example.test/c3-1.jpg');
+    expect(vehicle.imageUrls, [
+      'https://example.test/c3-1.jpg',
+      'https://example.test/c3-2.jpg',
+    ]);
+  });
+
   test('vehicle mapper reads energy type from API', () {
     final electricVehicle = FleetApiMappers.vehicleFromJson({
       'id': 10,

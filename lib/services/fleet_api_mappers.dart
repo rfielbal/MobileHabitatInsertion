@@ -41,6 +41,11 @@ class FleetApiMappers {
       json['descriptif'],
       fallback: 'Stationnement non renseigné',
     );
+    final apiImageUrls = _imageUrlsFromApi(json);
+    final primaryImageUrl =
+        _imageFromApi(json) ??
+        (apiImageUrls.isEmpty ? null : apiImageUrls.first) ??
+        _imageForBrand(brand);
     final energyType = _vehicleEnergyType(json, '$brand $model $description');
     final currentMileage =
         _int(
@@ -62,7 +67,8 @@ class FleetApiMappers {
       category: 'Flotte',
       status: status,
       subtitle: status.label,
-      imageUrl: _imageFromApi(json) ?? _imageForBrand(brand),
+      imageUrl: primaryImageUrl,
+      imageUrls: apiImageUrls,
       location: siteName,
       site: siteName,
       parkingDescription: description,
@@ -423,10 +429,11 @@ class FleetApiMappers {
 
   static String? _imageFromApi(Map<String, dynamic> json) {
     final image = _text(
-      json['cheminImage'] ??
-          json['chemin_image'] ??
-          json['imageUrl'] ??
+      json['imageUrl'] ??
           json['image_url'] ??
+          json['url'] ??
+          json['cheminImage'] ??
+          json['chemin_image'] ??
           json['photo'] ??
           json['image'],
     );
@@ -434,6 +441,40 @@ class FleetApiMappers {
       return image;
     }
     return null;
+  }
+
+  static List<String> _imageUrlsFromApi(Map<String, dynamic> json) {
+    final urls = <String>[];
+
+    void add(Object? value) {
+      final text = _text(value);
+      if (text.startsWith('http://') || text.startsWith('https://')) {
+        urls.add(text);
+      }
+    }
+
+    add(_imageFromApi(json));
+
+    final images = json['images'] ?? json['photos'] ?? json['galerie'];
+    if (images is List) {
+      for (final image in images) {
+        if (image is Map<String, dynamic>) {
+          add(
+            image['url'] ??
+                image['imageUrl'] ??
+                image['image_url'] ??
+                image['cheminImage'] ??
+                image['chemin_image'] ??
+                image['chemin'] ??
+                image['path'],
+          );
+        } else {
+          add(image);
+        }
+      }
+    }
+
+    return urls.toSet().toList();
   }
 
   static String _siteLabel(Map<String, dynamic>? site) {

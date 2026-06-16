@@ -135,6 +135,10 @@ extension VehicleEnergyTypeX on VehicleEnergyType {
       VehicleEnergyType.hybrid || VehicleEnergyType.thermal => true,
     };
   }
+
+  bool get requiresCharging {
+    return this == VehicleEnergyType.electric;
+  }
 }
 
 class VehicleIssue {
@@ -175,6 +179,7 @@ class Vehicle {
     required this.priorityRank,
     required this.nextAvailableAt,
     required this.availabilityByDay,
+    this.imageUrls = const [],
     this.knownIssues = const [],
   });
 
@@ -188,6 +193,7 @@ class Vehicle {
   final VehicleStatus status;
   final String subtitle;
   final String imageUrl;
+  final List<String> imageUrls;
   final String location;
   final String site;
   final String parkingDescription;
@@ -219,6 +225,7 @@ class Vehicle {
       status: status ?? this.status,
       subtitle: subtitle ?? this.subtitle,
       imageUrl: imageUrl,
+      imageUrls: imageUrls,
       location: location,
       site: site,
       parkingDescription: parkingDescription,

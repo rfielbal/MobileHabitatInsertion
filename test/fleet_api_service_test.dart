@@ -680,6 +680,33 @@ void main() {
     expect(statusBody, {'termine': true, 'demarre': false});
   });
 
+  test('finishConstat sends charging confirmation when provided', () async {
+    Map<String, dynamic>? returnBody;
+    final service = _serviceWithMockClient((request) async {
+      if (request.url.path == '/api/metier/constats/99/terminer') {
+        returnBody = jsonDecode(request.body) as Map<String, dynamic>;
+        return http.Response('{}', 200);
+      }
+
+      return http.Response('{}', 200);
+    });
+    final reservation = _reservation(
+      startAt: DateTime(2026, 6, 18, 8, 30),
+      endAt: DateTime(2026, 6, 18, 17),
+      isStarted: true,
+      constatId: '99',
+    );
+
+    await service.finishConstat(
+      reservation: reservation,
+      mileage: 120,
+      confirmedAt: DateTime(2026, 6, 18, 16, 30),
+      vehicleCharged: true,
+    );
+
+    expect(returnBody?['misEnCharge'], isTrue);
+  });
+
   test(
     'fetchReservations uses termine and dateRendu from reservation',
     () async {
