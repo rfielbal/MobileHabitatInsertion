@@ -30,7 +30,9 @@ class FleetApiMappers {
     final brand = _text(json['marque'], fallback: 'Véhicule');
     final model = _text(json['modele'], fallback: 'Non renseigné');
     final plateNumber = _text(json['immatriculation'], fallback: 'N/A');
-    final status = _vehicleStatus(json['status']);
+    final status = _vehicleStatus(
+      json['statut'] ?? json['status'] ?? json['vehiculeStatut'],
+    );
     final sites = _listOfMaps(json['sites']);
     final firstSite = sites.isEmpty ? null : sites.first;
     final siteName = _siteLabel(firstSite);
@@ -60,7 +62,7 @@ class FleetApiMappers {
       category: 'Flotte',
       status: status,
       subtitle: status.label,
-      imageUrl: _imageForBrand(brand),
+      imageUrl: _imageFromApi(json) ?? _imageForBrand(brand),
       location: siteName,
       site: siteName,
       parkingDescription: description,
@@ -92,9 +94,24 @@ class FleetApiMappers {
     final vehicle = vehicleJson is Map<String, dynamic>
         ? vehicleFromJson(vehicleJson)
         : vehicleFromJson(const {});
-    final startAt = _date(json['dateDebut']) ?? DateTime.now();
+    final startAt =
+        _date(
+          json['dateDebutPrevue'] ??
+              json['date_debut_prevue'] ??
+              json['dateDebut'] ??
+              json['date_debut'] ??
+              json['startAt'],
+        ) ??
+        DateTime.now();
     final endAt =
-        _date(json['dateFin']) ?? startAt.add(const Duration(hours: 1));
+        _date(
+          json['dateFinPrevue'] ??
+              json['date_fin_prevue'] ??
+              json['dateFin'] ??
+              json['date_fin'] ??
+              json['endAt'],
+        ) ??
+        startAt.add(const Duration(hours: 1));
     final returnedAt = reservationReturnedAt(json);
     final isTerminated = reservationIsTerminated(json);
     final isStarted = reservationIsStarted(json) && !isTerminated;
@@ -196,6 +213,8 @@ class FleetApiMappers {
 
   static DateTime? reservationReturnedAt(Map<String, dynamic> json) {
     return _date(json['dateRendu']) ??
+        _date(json['dateRetourEffectif']) ??
+        _date(json['date_retour_effectif']) ??
         _date(json['dateRetour']) ??
         _date(json['dateFinReelle']) ??
         _date(json['dateFinEffective']) ??
@@ -225,7 +244,14 @@ class FleetApiMappers {
         id: int.tryParse(_text(json['id'], fallback: '0')) ?? 0,
         title: _text(json['objet'], fallback: 'Notification'),
         body: _text(json['message'], fallback: ''),
-        timeLabel: _relativeDateLabel(_date(json['date'])),
+        timeLabel: _relativeDateLabel(
+          _date(
+            json['date'] ??
+                json['dateCreation'] ??
+                json['date_creation'] ??
+                json['createdAt'],
+          ),
+        ),
         icon: _notificationIcon(type),
         color: _notificationColor(type),
       ),
@@ -393,6 +419,21 @@ class FleetApiMappers {
       return _renaultImage;
     }
     return _defaultImage;
+  }
+
+  static String? _imageFromApi(Map<String, dynamic> json) {
+    final image = _text(
+      json['cheminImage'] ??
+          json['chemin_image'] ??
+          json['imageUrl'] ??
+          json['image_url'] ??
+          json['photo'] ??
+          json['image'],
+    );
+    if (image.startsWith('http://') || image.startsWith('https://')) {
+      return image;
+    }
+    return null;
   }
 
   static String _siteLabel(Map<String, dynamic>? site) {

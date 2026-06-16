@@ -328,10 +328,8 @@ class FleetApiService {
     required DateTime startAt,
     required DateTime endAt,
   }) {
-    final rangeStart = _dateFromApiValue(
-      value['dateDebut'] ?? value['startAt'],
-    );
-    final rangeEnd = _dateFromApiValue(value['dateFin'] ?? value['endAt']);
+    final rangeStart = _dateFromApiValue(_rangeStartValue(value));
+    final rangeEnd = _dateFromApiValue(_rangeEndValue(value));
     if (rangeStart == null ||
         rangeEnd == null ||
         !rangeStart.isBefore(rangeEnd)) {
@@ -464,17 +462,6 @@ class FleetApiService {
       reservation,
       confirmedAt ?? DateTime.now(),
     );
-    final uploadedVideo = departureVideo == null
-        ? null
-        : await uploadReservationVideo(
-            departureVideo.copyWith(
-              description: _videoDescription(
-                reservation: reservation,
-                kind: ReservationVideoKind.departure,
-                fallback: departureVideo.description,
-              ),
-            ),
-          );
 
     final response = await _apiClient.postMap(
       '/metier/constats/demarrer',
@@ -484,9 +471,6 @@ class FleetApiService {
             int.tryParse(reservation.vehicle.id) ?? reservation.vehicle.id,
         'datePrise': FleetApiMappers.iso(datePrise),
         'kmDebut': reservation.expectedStartMileage,
-        'depart':
-            uploadedVideo?.toConstatPayload() ??
-            _missingVideoPayload(ReservationVideoKind.departure),
       },
     );
     final constatId = _constatIdFromStartResponse(response);
@@ -513,11 +497,7 @@ class FleetApiService {
 
     await _apiClient.post(
       '/metier/constats/$constatId/terminer',
-      body: {
-        'dateRendu': FleetApiMappers.iso(dateRendu),
-        'kmFin': mileage,
-        'arrive': _missingVideoPayload(ReservationVideoKind.returnVehicle),
-      },
+      body: {'dateRendu': FleetApiMappers.iso(dateRendu), 'kmFin': mileage},
     );
 
     await _markReservationTerminated(reservation);
@@ -571,6 +551,7 @@ class FleetApiService {
           'constatId':
               int.tryParse(reservation.constatId!) ?? reservation.constatId!,
         'type': type,
+        'description': message,
         'message': message,
         if (video != null) 'video': video.toSignalementPayload(),
       },
@@ -596,29 +577,6 @@ class FleetApiService {
     );
 
     return _videoUploadFromResponse(response, video, fileSize: fileSize);
-  }
-
-  Map<String, dynamic> _missingVideoPayload(ReservationVideoKind kind) {
-    return {
-      'nomFichier': 'video-non-requise',
-      'taille': '0',
-      'type': kind.apiValue,
-      'description': 'Aucune vidéo transmise depuis l’application mobile.',
-    };
-  }
-
-  String _videoDescription({
-    required FleetReservation reservation,
-    required ReservationVideoKind kind,
-    required String fallback,
-  }) {
-    final trimmedFallback = fallback.trim();
-    if (trimmedFallback.isNotEmpty) {
-      return trimmedFallback;
-    }
-
-    final phase = kind == ReservationVideoKind.departure ? 'départ' : 'retour';
-    return 'Vidéo de $phase du véhicule ${reservation.vehicle.internalNumber} pour la réservation ${reservation.id}.';
   }
 
   ReservationVideoUpload _videoUploadFromResponse(
@@ -842,8 +800,8 @@ class FleetApiService {
         return;
       }
 
-      final start = _dateFromApiValue(value['dateDebut'] ?? value['startAt']);
-      final end = _dateFromApiValue(value['dateFin'] ?? value['endAt']);
+      final start = _dateFromApiValue(_rangeStartValue(value));
+      final end = _dateFromApiValue(_rangeEndValue(value));
       if (isReservationLike(value) &&
           start != null &&
           end != null &&
@@ -1013,7 +971,7 @@ class FleetApiService {
             entry['jour'] ??
             entry['day'] ??
             entry['date'] ??
-            entry['dateDebut'] ??
+            _rangeStartValue(entry) ??
             entry['startAt'];
         final statusValue =
             entry['statut'] ??
@@ -1033,8 +991,8 @@ class FleetApiService {
         for (final reservation in nestedReservations) {
           parsedNestedReservationRange =
               addRangeStatus(
-                reservation['dateDebut'] ?? reservation['startAt'],
-                reservation['dateFin'] ?? reservation['endAt'],
+                _rangeStartValue(reservation),
+                _rangeEndValue(reservation),
                 AvailabilityStatus.reserved.name,
                 reservationValue: reservation,
               ) ||
@@ -1044,10 +1002,10 @@ class FleetApiService {
           return;
         }
 
-        if (entry['dateDebut'] != null && entry['dateFin'] != null) {
+        if (_rangeStartValue(entry) != null && _rangeEndValue(entry) != null) {
           addRangeStatus(
-            entry['dateDebut'],
-            entry['dateFin'],
+            _rangeStartValue(entry),
+            _rangeEndValue(entry),
             statusValue ?? AvailabilityStatus.reserved.name,
             reservationValue: entry,
           );
@@ -1074,8 +1032,8 @@ class FleetApiService {
           for (final reservation in nestedReservations) {
             parsedNestedReservationRange =
                 addRangeStatus(
-                  reservation['dateDebut'] ?? reservation['startAt'],
-                  reservation['dateFin'] ?? reservation['endAt'],
+                  _rangeStartValue(reservation),
+                  _rangeEndValue(reservation),
                   AvailabilityStatus.reserved.name,
                   reservationValue: reservation,
                 ) ||
@@ -1085,10 +1043,11 @@ class FleetApiService {
             continue;
           }
 
-          if (value['dateDebut'] != null && value['dateFin'] != null) {
+          if (_rangeStartValue(value) != null &&
+              _rangeEndValue(value) != null) {
             addRangeStatus(
-              value['dateDebut'],
-              value['dateFin'],
+              _rangeStartValue(value),
+              _rangeEndValue(value),
               value['statut'] ??
                   value['status'] ??
                   value['etat'] ??
@@ -1338,6 +1297,24 @@ class FleetApiService {
     return DateTime.tryParse(text)?.toLocal();
   }
 
+  Object? _rangeStartValue(Map<String, dynamic> value) {
+    return value['dateDebutPrevue'] ??
+        value['date_debut_prevue'] ??
+        value['dateDebut'] ??
+        value['date_debut'] ??
+        value['startAt'] ??
+        value['start_at'];
+  }
+
+  Object? _rangeEndValue(Map<String, dynamic> value) {
+    return value['dateFinPrevue'] ??
+        value['date_fin_prevue'] ??
+        value['dateFin'] ??
+        value['date_fin'] ??
+        value['endAt'] ??
+        value['end_at'];
+  }
+
   int? _validDay(int day, DateTime month) {
     final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
     if (day < 1 || day > daysInMonth) {
@@ -1356,7 +1333,9 @@ class FleetApiService {
       return null;
     }
 
-    if (status.contains('maintenance') || status.contains('garage')) {
+    if (status.contains('maintenance') ||
+        status.contains('immobilisation') ||
+        status.contains('garage')) {
       return AvailabilityStatus.maintenance;
     }
     if (status.contains('partiel') || status.contains('partial')) {

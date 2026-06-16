@@ -35,6 +35,19 @@ void main() {
     expect(vehicle.currentMileage, 45210);
   });
 
+  test('vehicle mapper reads new statut and image fields from API', () {
+    final vehicle = FleetApiMappers.vehicleFromJson({
+      'id': 10,
+      'marque': 'Citroën',
+      'modele': 'C3',
+      'statut': 'en_utilisation',
+      'cheminImage': 'https://example.test/c3.png',
+    });
+
+    expect(vehicle.status, VehicleStatus.inUse);
+    expect(vehicle.imageUrl, 'https://example.test/c3.png');
+  });
+
   test('vehicle mapper reads energy type from API', () {
     final electricVehicle = FleetApiMappers.vehicleFromJson({
       'id': 10,
@@ -87,6 +100,32 @@ void main() {
 
     expect(reservation.expectedStartMileage, 45210);
   });
+
+  test(
+    'reservation mapper reads planned and effective dates from new fields',
+    () {
+      final returnedAt = DateTime.parse('2026-06-18T14:30:00Z').toLocal();
+      final reservation = FleetApiMappers.reservationFromJson({
+        'id': 1,
+        'dateDebutPrevue': '2026-06-18T09:00:00Z',
+        'dateFinPrevue': '2026-06-18T17:00:00Z',
+        'dateRetourEffectif': returnedAt.toUtc().toIso8601String(),
+        'termine': true,
+        'vehicule': {'id': 10, 'marque': 'Citroën', 'modele': 'C3'},
+      });
+
+      expect(
+        reservation.startAt,
+        DateTime.parse('2026-06-18T09:00:00Z').toLocal(),
+      );
+      expect(
+        reservation.endAt,
+        DateTime.parse('2026-06-18T17:00:00Z').toLocal(),
+      );
+      expect(reservation.returnedAt, returnedAt);
+      expect(reservation.effectiveEndAt, returnedAt);
+    },
+  );
 
   test('reservation mapper detects started reservations from demarre', () {
     final reservation = FleetApiMappers.reservationFromJson({

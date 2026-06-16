@@ -496,6 +496,7 @@ void main() {
       'vehiculeId': 1,
       'constatId': 99,
       'type': 'Problème véhicule',
+      'description': 'Rayure sur la porte.',
       'message': 'Rayure sur la porte.',
       'video': {
         'nomFichier': 'signalement.mp4',
@@ -567,83 +568,67 @@ void main() {
       'POST /api/mobile/session',
       'POST /api/metier/signalements',
     ]);
+    expect(sentBody?['description'], 'Voyant moteur allumé.');
     expect(sentBody?['message'], 'Voyant moteur allumé.');
   });
 
-  test('startConstat uploads departure video into depart payload', () async {
-    final tempDir = await Directory.systemTemp.createTemp(
-      'wheello_departure_video_test_',
-    );
-    addTearDown(() async {
-      if (await tempDir.exists()) {
-        await tempDir.delete(recursive: true);
-      }
-    });
+  test(
+    'startConstat ignores departure video because videos belong to reports',
+    () async {
+      final tempDir = await Directory.systemTemp.createTemp(
+        'wheello_departure_video_test_',
+      );
+      addTearDown(() async {
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+      });
 
-    final videoFile = File('${tempDir.path}/depart.mp4');
-    await videoFile.writeAsBytes([0, 1, 2, 3, 4]);
+      final videoFile = File('${tempDir.path}/depart.mp4');
+      await videoFile.writeAsBytes([0, 1, 2, 3, 4]);
 
-    String? uploadBody;
-    Map<String, dynamic>? startBody;
-    Map<String, dynamic>? statusBody;
-    final service = _serviceWithMockClient((request) async {
-      if (request.method == 'GET') {
-        return _emptyConstatsResponse();
-      }
+      Map<String, dynamic>? startBody;
+      Map<String, dynamic>? statusBody;
+      final service = _serviceWithMockClient((request) async {
+        if (request.method == 'GET') {
+          return _emptyConstatsResponse();
+        }
 
-      if (request.url.path == '/api/metier/videos') {
-        uploadBody = request.body;
-        return http.Response(
-          jsonEncode({
-            'id': 33,
-            'nomFichier': 'depart-stocke.mp4',
-            'taille': '5',
-            'type': 'depart',
-            'description': 'État départ OK',
-          }),
-          201,
-        );
-      }
+        if (request.url.path == '/api/metier/videos') {
+          fail('A departure constat should not upload a video.');
+        }
 
-      if (request.method == 'PATCH') {
-        expect(request.url.path, '/api/metier/reservations/10');
-        statusBody = jsonDecode(request.body) as Map<String, dynamic>;
+        if (request.method == 'PATCH') {
+          expect(request.url.path, '/api/metier/reservations/10');
+          statusBody = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response('{}', 200);
+        }
+
+        expect(request.method, 'POST');
+        expect(request.url.path, '/api/metier/constats/demarrer');
+        startBody = jsonDecode(request.body) as Map<String, dynamic>;
         return http.Response('{}', 200);
-      }
+      });
+      final reservation = _reservation(
+        startAt: DateTime(2026, 6, 18, 8, 30),
+        endAt: DateTime(2026, 6, 18, 17),
+      );
 
-      expect(request.method, 'POST');
-      expect(request.url.path, '/api/metier/constats/demarrer');
-      startBody = jsonDecode(request.body) as Map<String, dynamic>;
-      return http.Response('{}', 200);
-    });
-    final reservation = _reservation(
-      startAt: DateTime(2026, 6, 18, 8, 30),
-      endAt: DateTime(2026, 6, 18, 17),
-    );
+      await service.startConstat(
+        reservation,
+        departureVideo: ReservationVideoDraft(
+          reservationId: reservation.id,
+          kind: ReservationVideoKind.departure,
+          file: XFile(videoFile.path),
+          capturedAt: DateTime(2026, 6, 18, 8, 25),
+          description: 'État départ OK',
+        ),
+      );
 
-    await service.startConstat(
-      reservation,
-      departureVideo: ReservationVideoDraft(
-        reservationId: reservation.id,
-        kind: ReservationVideoKind.departure,
-        file: XFile(videoFile.path),
-        capturedAt: DateTime(2026, 6, 18, 8, 25),
-        description: 'État départ OK',
-      ),
-    );
-
-    expect(uploadBody, contains('name="type"'));
-    expect(uploadBody, contains('depart'));
-    expect(uploadBody, contains('État départ OK'));
-    expect(startBody?['depart'], {
-      'nomFichier': 'depart-stocke.mp4',
-      'taille': '5',
-      'mimeType': 'video/mp4',
-      'type': 'depart',
-      'description': 'État départ OK',
-    });
-    expect(statusBody, {'demarre': true, 'termine': false});
-  });
+      expect(startBody?.containsKey('depart'), isFalse);
+      expect(statusBody, {'demarre': true, 'termine': false});
+    },
+  );
 
   test('finishConstat sends return without uploading video', () async {
     Map<String, dynamic>? returnBody;
@@ -691,12 +676,7 @@ void main() {
       confirmedAt: DateTime(2026, 6, 18, 16, 30),
     );
 
-    expect(returnBody?['arrive'], {
-      'nomFichier': 'video-non-requise',
-      'taille': '0',
-      'type': 'arrive',
-      'description': 'Aucune vidéo transmise depuis l’application mobile.',
-    });
+    expect(returnBody?.containsKey('arrive'), isFalse);
     expect(statusBody, {'termine': true, 'demarre': false});
   });
 
