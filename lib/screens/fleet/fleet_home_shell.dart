@@ -37,14 +37,24 @@ class _FleetHomeShellState extends State<FleetHomeShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Navigator(
-        key: _navigatorKey,
-        onGenerateRoute: (_) => _routeForIndex(_currentIndex),
-      ),
-      bottomNavigationBar: FleetBottomNavigation(
-        currentIndex: _currentIndex,
-        onChanged: _selectTab,
+    return PopScope<void>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) {
+          return;
+        }
+
+        _handleSystemBack();
+      },
+      child: Scaffold(
+        body: Navigator(
+          key: _navigatorKey,
+          onGenerateRoute: (_) => _routeForIndex(_currentIndex),
+        ),
+        bottomNavigationBar: FleetBottomNavigation(
+          currentIndex: _currentIndex,
+          onChanged: _selectTab,
+        ),
       ),
     );
   }
@@ -98,6 +108,18 @@ class _FleetHomeShellState extends State<FleetHomeShell> {
 
     if (index == 0) {
       _refreshActiveDepartureState();
+    }
+  }
+
+  void _handleSystemBack() {
+    final navigator = _navigatorKey.currentState;
+    if (navigator != null && navigator.canPop()) {
+      navigator.pop();
+      return;
+    }
+
+    if (_currentIndex != 0) {
+      _selectTab(0);
     }
   }
 
