@@ -82,6 +82,25 @@ void main() {
       );
     });
 
+    test('ignores completed user reservations for start suggestions', () {
+      expect(
+        suggestedReservationStartAt(
+          date: DateTime(2026, 6, 5),
+          suggestionsByDay: const {},
+          userReservations: [
+            _reservation(
+              id: 'finished-user-trip',
+              startAt: DateTime(2026, 6, 4, 9),
+              endAt: DateTime(2026, 6, 5, 13),
+              status: ReservationStatus.completed,
+            ),
+          ],
+          now: DateTime(2026, 6, 1, 10),
+        ),
+        DateTime(2026, 6, 5),
+      );
+    });
+
     test('does not suggest an hour before now plus one hour for today', () {
       expect(
         suggestedReservationStartAt(
@@ -288,6 +307,33 @@ void main() {
         reservationEndViolatesLatestEnd(
           endAt: DateTime(2026, 6, 4, 12),
           suggestionsByDay: suggestionsByDay,
+        ),
+        isFalse,
+      );
+    });
+
+    test('rejects a return less than one hour before a user departure', () {
+      final userReservations = [
+        _reservation(
+          id: 'next-user-trip',
+          startAt: DateTime(2026, 6, 4, 13),
+          endAt: DateTime(2026, 6, 4, 18),
+        ),
+      ];
+
+      expect(
+        reservationEndViolatesLatestEnd(
+          endAt: DateTime(2026, 6, 4, 12, 30),
+          suggestionsByDay: const {},
+          userReservations: userReservations,
+        ),
+        isTrue,
+      );
+      expect(
+        reservationEndViolatesLatestEnd(
+          endAt: DateTime(2026, 6, 4, 12),
+          suggestionsByDay: const {},
+          userReservations: userReservations,
         ),
         isFalse,
       );

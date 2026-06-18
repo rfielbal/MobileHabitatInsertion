@@ -509,6 +509,32 @@ void main() {
     });
   });
 
+  test('createSignalement can send a report without video', () async {
+    Map<String, dynamic>? sentBody;
+    final service = _serviceWithMockClient((request) async {
+      expect(request.method, 'POST');
+      expect(request.url.path, '/api/metier/signalements');
+      sentBody = jsonDecode(request.body) as Map<String, dynamic>;
+      return http.Response('{}', 201);
+    });
+
+    await service.createSignalement(
+      reservation: _reservation(
+        startAt: DateTime(2026, 6, 18, 8, 30),
+        endAt: DateTime(2026, 6, 18, 17),
+      ),
+      type: 'Problème véhicule',
+      message: 'Voyant moteur allumé.',
+    );
+
+    expect(sentBody?['reservationId'], 10);
+    expect(sentBody?['vehiculeId'], 1);
+    expect(sentBody?['type'], 'Problème véhicule');
+    expect(sentBody?['description'], 'Voyant moteur allumé.');
+    expect(sentBody?['message'], 'Voyant moteur allumé.');
+    expect(sentBody?.containsKey('video'), isFalse);
+  });
+
   test('createSignalement refreshes expired JWT and retries once', () async {
     FlutterSecureStorage.setMockInitialValues({
       AuthSessionService.tokenKey: 'expired-token',
@@ -1467,6 +1493,47 @@ void main() {
   );
 
   test(
+    'fetchVehicleReservationStartTimesForMonth reads new planned date fields',
+    () async {
+      final service = _serviceWithMockClient((request) async {
+        expect(request.url.path, '/api/metier/vehicules/1/disponibilites');
+        return http.Response(
+          jsonEncode({
+            'jours': [
+              {
+                'date': '2026-06-18',
+                'statut': 'reserve',
+                'reservations': [
+                  {
+                    'id': 10,
+                    'dateDebutPrevue': '2026-06-18T15:00:00',
+                    'dateFinPrevue': '2026-06-18T17:00:00',
+                    'termine': false,
+                  },
+                  {
+                    'id': 11,
+                    'date_debut_prevue': '2026-06-18T09:00:00',
+                    'date_fin_prevue': '2026-06-18T10:00:00',
+                    'termine': true,
+                  },
+                ],
+              },
+            ],
+          }),
+          200,
+        );
+      });
+
+      final starts = await service.fetchVehicleReservationStartTimesForMonth(
+        vehicle: _vehicle,
+        month: DateTime(2026, 6),
+      );
+
+      expect(starts, [DateTime(2026, 6, 18, 15)]);
+    },
+  );
+
+  test(
     'fetchVehicleAvailabilityForMonth maps API statuses by day and range',
     () async {
       var fallbackRequests = 0;
@@ -1508,6 +1575,39 @@ void main() {
       expect(availability[23], AvailabilityStatus.free);
       expect(availability[24], AvailabilityStatus.reserved);
       expect(fallbackRequests, 0);
+    },
+  );
+
+  test(
+    'fetchVehicleAvailabilityForMonth maps immobilisation as maintenance',
+    () async {
+      final service = _serviceWithMockClient((request) async {
+        if (request.url.path == '/api/metier/vehicules/1/disponibilites') {
+          return http.Response(
+            jsonEncode({
+              'items': [
+                {
+                  'dateDebutPrevue': '2026-06-20T08:00:00Z',
+                  'dateFinPrevue': '2026-06-22T18:00:00Z',
+                  'type': 'immobilisation',
+                },
+              ],
+            }),
+            200,
+          );
+        }
+
+        return http.Response('{}', 404);
+      });
+
+      final availability = await service.fetchVehicleAvailabilityForMonth(
+        vehicle: _vehicle,
+        month: DateTime(2026, 6),
+      );
+
+      expect(availability[20], AvailabilityStatus.maintenance);
+      expect(availability[21], AvailabilityStatus.maintenance);
+      expect(availability[22], AvailabilityStatus.maintenance);
     },
   );
 
@@ -1729,6 +1829,54 @@ void main() {
       expect(availability.availabilityByDay[8], isNull);
       expect(availability.availabilityByDay[9], isNull);
       expect(availability.availabilityByDay[10], isNull);
+      expect(availability.availabilityByDay[11], isNull);
+      expect(availability.hasEffectiveReturnAdjustments, isTrue);
+      expect(
+        availability.suggestionsByDay[7]?.earliestStartAt,
+        DateTime(2026, 6, 7, 11, 30),
+      );
+    },
+  );
+
+  test(
+    'fetchVehicleAvailabilityForMonth truncates reservation using new effective return field',
+    () async {
+      final service = _serviceWithMockClient((request) async {
+        if (request.url.path == '/api/metier/vehicules/1/disponibilites') {
+          return http.Response(
+            jsonEncode({
+              'jours': [
+                {
+                  'date': '2026-06-06',
+                  'statut': 'réservé',
+                  'reservations': [
+                    {
+                      'id': 10,
+                      'date_debut_prevue': '2026-06-06T10:00:00',
+                      'date_fin_prevue': '2026-06-11T10:00:00',
+                      'termine': true,
+                      'date_retour_effectif': '2026-06-07T10:30:00',
+                    },
+                  ],
+                },
+              ],
+            }),
+            200,
+          );
+        }
+
+        return http.Response('{}', 404);
+      });
+
+      final availability = await service
+          .fetchVehicleAvailabilityDetailsForMonth(
+            vehicle: _vehicle,
+            month: DateTime(2026, 6),
+          );
+
+      expect(availability.availabilityByDay[6], AvailabilityStatus.partial);
+      expect(availability.availabilityByDay[7], AvailabilityStatus.partial);
+      expect(availability.availabilityByDay[8], isNull);
       expect(availability.availabilityByDay[11], isNull);
       expect(availability.hasEffectiveReturnAdjustments, isTrue);
       expect(
