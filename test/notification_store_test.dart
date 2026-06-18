@@ -136,6 +136,25 @@ void main() {
     },
   );
 
+  test('parses native notification tap payloads', () {
+    final intent = NativeNotificationTapIntent.fromPayload(
+      'notification:-123:reservation:42',
+    );
+
+    expect(intent?.notificationId, -123);
+    expect(intent?.reservationId, '42');
+  });
+
+  test('parses native notification tap payload without reservation', () {
+    final intent = NativeNotificationTapIntent.fromPayload(
+      'notification:-456',
+      fallbackNotificationId: 1,
+    );
+
+    expect(intent?.notificationId, -456);
+    expect(intent?.reservationId, isNull);
+  });
+
   test(
     'maintained unstarted reservations do not recreate the local reminder',
     () async {

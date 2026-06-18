@@ -5,10 +5,12 @@ import '../../models/reservation.dart';
 import '../../navigation/app_routes.dart';
 import '../../services/auth_session_service.dart';
 import '../../services/fleet_api_service.dart';
+import '../../services/native_notification_service.dart';
 import '../../widgets/fleet_bottom_navigation.dart';
 import 'bookings_screen.dart';
 import 'home_screen.dart';
 import 'immediate_departure_screen.dart';
+import 'notifications_screen.dart';
 import 'profile_screen.dart';
 import 'vehicles_screen.dart';
 
@@ -33,12 +35,21 @@ class _FleetHomeShellState extends State<FleetHomeShell>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    NativeNotificationService.instance.tapIntent.addListener(
+      _handleNativeNotificationTap,
+    );
     NotificationStore.refresh();
     _refreshActiveDepartureState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _handleNativeNotificationTap();
+    });
   }
 
   @override
   void dispose() {
+    NativeNotificationService.instance.tapIntent.removeListener(
+      _handleNativeNotificationTap,
+    );
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -234,5 +245,25 @@ class _FleetHomeShellState extends State<FleetHomeShell>
             _refreshReservationData();
           }
         });
+  }
+
+  void _handleNativeNotificationTap() {
+    final intent = NativeNotificationService.instance.tapIntent.value;
+    if (intent == null || !mounted) {
+      return;
+    }
+
+    NativeNotificationService.instance.consumeTapIntent(intent);
+    setState(() {
+      _currentIndex = 0;
+    });
+    _navigatorKey.currentState?.push(
+      MaterialPageRoute<void>(
+        builder: (context) => NotificationsScreen(
+          initialNotificationId: intent.notificationId,
+          initialReservationId: intent.reservationId,
+        ),
+      ),
+    );
   }
 }
