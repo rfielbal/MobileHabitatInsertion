@@ -79,11 +79,16 @@ class NativeNotificationService implements NativeNotificationSink {
     await initialize();
 
     try {
-      final androidGranted = await _plugin
-          .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin
-          >()
+      final androidPlugin = _androidPlugin;
+      final androidGranted = await androidPlugin
           ?.requestNotificationsPermission();
+      if (androidPlugin != null) {
+        final exactGranted = androidGranted == false
+            ? false
+            : await _requestExactAlarmsPermission(androidPlugin);
+        return (androidGranted ?? true) && exactGranted;
+      }
+
       final iosGranted = await _plugin
           .resolvePlatformSpecificImplementation<
             IOSFlutterLocalNotificationsPlugin
@@ -93,6 +98,8 @@ class NativeNotificationService implements NativeNotificationSink {
       return androidGranted ?? iosGranted ?? await notificationsEnabled();
     } on MissingPluginException {
       return false;
+    } on PlatformException {
+      return false;
     }
   }
 
@@ -101,18 +108,21 @@ class NativeNotificationService implements NativeNotificationSink {
     await initialize();
 
     try {
-      final androidEnabled = await _plugin
-          .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin
-          >()
-          ?.areNotificationsEnabled();
+      final androidPlugin = _androidPlugin;
+      if (androidPlugin != null) {
+        final androidEnabled = await androidPlugin.areNotificationsEnabled();
+        final exactEnabled = await androidPlugin
+            .canScheduleExactNotifications();
+        return (androidEnabled ?? true) && (exactEnabled ?? true);
+      }
+
       final iosSettings = await _plugin
           .resolvePlatformSpecificImplementation<
             IOSFlutterLocalNotificationsPlugin
           >()
           ?.checkPermissions();
 
-      return androidEnabled ?? iosSettings?.isEnabled ?? true;
+      return iosSettings?.isEnabled ?? true;
     } on MissingPluginException {
       return false;
     } on PlatformException {
@@ -128,10 +138,6 @@ class NativeNotificationService implements NativeNotificationSink {
     await initialize();
 
     try {
-      if (!await notificationsEnabled()) {
-        return false;
-      }
-
       await _plugin.show(
         id: notification.id,
         title: notification.title,
@@ -162,23 +168,24 @@ class NativeNotificationService implements NativeNotificationSink {
     _ensureTimeZonesInitialized();
 
     try {
-      if (!await notificationsEnabled()) {
-        return false;
-      }
-
-      await _plugin.zonedSchedule(
-        id: notification.id,
-        title: notification.title,
-        body: notification.body,
-        scheduledDate: timezone.TZDateTime.from(scheduledUtc, timezone.UTC),
-        notificationDetails: _details(badgeCount: badgeCount),
-        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-        payload: _payload(notification),
+      await _zonedScheduleNotification(
+        notification,
+        scheduledUtc: scheduledUtc,
+        badgeCount: badgeCount,
+        androidScheduleMode: await _androidScheduleMode(),
       );
       return true;
     } on MissingPluginException {
       return false;
-    } on PlatformException {
+    } on PlatformException catch (error) {
+      if (error.code == 'exact_alarms_not_permitted') {
+        return _scheduleInexactly(
+          notification,
+          scheduledUtc: scheduledUtc,
+          badgeCount: badgeCount,
+        );
+      }
+
       return false;
     } on ArgumentError {
       return false;
@@ -253,6 +260,90 @@ class NativeNotificationService implements NativeNotificationSink {
 
     timezone_data.initializeTimeZones();
     _timeZonesInitialized = true;
+  }
+
+  AndroidFlutterLocalNotificationsPlugin? get _androidPlugin {
+    return _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+  }
+
+  Future<bool> _requestExactAlarmsPermission(
+    AndroidFlutterLocalNotificationsPlugin androidPlugin,
+  ) async {
+    try {
+      final canScheduleExact = await androidPlugin
+          .canScheduleExactNotifications();
+      if (canScheduleExact == false) {
+        return await androidPlugin.requestExactAlarmsPermission() ?? false;
+      }
+      return true;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
+  Future<AndroidScheduleMode> _androidScheduleMode() async {
+    final androidPlugin = _androidPlugin;
+    if (androidPlugin == null) {
+      return AndroidScheduleMode.exactAllowWhileIdle;
+    }
+
+    try {
+      final canScheduleExact = await androidPlugin
+          .canScheduleExactNotifications();
+      if (canScheduleExact == false) {
+        return AndroidScheduleMode.inexactAllowWhileIdle;
+      }
+    } on MissingPluginException {
+      return AndroidScheduleMode.exactAllowWhileIdle;
+    } on PlatformException {
+      return AndroidScheduleMode.inexactAllowWhileIdle;
+    }
+
+    return AndroidScheduleMode.exactAllowWhileIdle;
+  }
+
+  Future<bool> _scheduleInexactly(
+    AppNotification notification, {
+    required DateTime scheduledUtc,
+    required int badgeCount,
+  }) async {
+    try {
+      await _zonedScheduleNotification(
+        notification,
+        scheduledUtc: scheduledUtc,
+        badgeCount: badgeCount,
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      );
+      return true;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    } on ArgumentError {
+      return false;
+    }
+  }
+
+  Future<void> _zonedScheduleNotification(
+    AppNotification notification, {
+    required DateTime scheduledUtc,
+    required int badgeCount,
+    required AndroidScheduleMode androidScheduleMode,
+  }) {
+    return _plugin.zonedSchedule(
+      id: notification.id,
+      title: notification.title,
+      body: notification.body,
+      scheduledDate: timezone.TZDateTime.from(scheduledUtc, timezone.UTC),
+      notificationDetails: _details(badgeCount: badgeCount),
+      androidScheduleMode: androidScheduleMode,
+      payload: _payload(notification),
+    );
   }
 }
 

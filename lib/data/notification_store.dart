@@ -28,7 +28,7 @@ class NotificationStore {
   static const String _adminAlertedUnstartedReservationsStorageKey =
       'admin_alerted_unstarted_reservation_ids';
   static const String _emittedNativeNotificationsStorageKey =
-      'emitted_native_notification_ids';
+      'emitted_native_notification_ids_v2';
   static const String _remoteNativeNotificationBaselineStorageKey =
       'remote_native_notification_baseline_ready';
   static final Set<int> _dismissedLocalNotificationIds = <int>{};
@@ -495,6 +495,7 @@ class NotificationStore {
       return;
     }
 
+    await _nativeNotifications.cancel(notification.id);
     final scheduled = await _nativeNotifications.schedule(
       notification,
       scheduledAt: scheduledAt,
