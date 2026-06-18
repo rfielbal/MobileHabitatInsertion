@@ -183,33 +183,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
       final choice = await showDialog<_UnstartedReservationChoice>(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Réservation non lancée'),
-          content: Text(
-            'La réservation de ${reservation.vehicle.name} devait commencer à ${_timeLabel(reservation.startAt)}. Voulez-vous la maintenir ou l’annuler ?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Fermer'),
-            ),
-            OutlinedButton(
-              onPressed: () =>
-                  Navigator.of(context).pop(_UnstartedReservationChoice.cancel),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.error,
-                side: const BorderSide(color: AppColors.error),
-              ),
-              child: const Text('Annuler'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(
-                context,
-              ).pop(_UnstartedReservationChoice.maintain),
-              child: const Text('Maintenir'),
-            ),
-          ],
-        ),
+        builder: (context) =>
+            _UnstartedReservationDialog(reservation: reservation),
       );
 
       if (choice == null || !mounted) {
@@ -347,6 +322,153 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 }
 
 enum _UnstartedReservationChoice { maintain, cancel }
+
+class _UnstartedReservationDialog extends StatelessWidget {
+  const _UnstartedReservationDialog({required this.reservation});
+
+  final FleetReservation reservation;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+      contentPadding: const EdgeInsets.fromLTRB(24, 18, 24, 24),
+      title: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            height: 42,
+            width: 42,
+            decoration: BoxDecoration(
+              color: AppColors.primaryFixed,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.pending_actions_outlined,
+              color: AppColors.primary,
+            ),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'Réservation non lancée',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceVariant,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.outlineVariant),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  reservation.vehicle.name,
+                  style: const TextStyle(
+                    color: AppColors.onSurface,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _ReservationDialogInfoRow(
+                  icon: Icons.schedule_outlined,
+                  label: 'Départ prévu',
+                  value: _timeLabel(reservation.startAt),
+                ),
+                const SizedBox(height: 6),
+                _ReservationDialogInfoRow(
+                  icon: Icons.location_on_outlined,
+                  label: 'Site',
+                  value: reservation.location,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Voulez-vous maintenir cette réservation ou l’annuler ?',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.onSurfaceVariant, height: 1.35),
+          ),
+          const SizedBox(height: 18),
+          FilledButton.icon(
+            onPressed: () =>
+                Navigator.of(context).pop(_UnstartedReservationChoice.maintain),
+            icon: const Icon(Icons.check_circle_outline),
+            label: const Text('Maintenir la réservation'),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: () =>
+                Navigator.of(context).pop(_UnstartedReservationChoice.cancel),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.error,
+              side: const BorderSide(color: AppColors.error),
+            ),
+            icon: const Icon(Icons.cancel_outlined),
+            label: const Text('Annuler la réservation'),
+          ),
+          const SizedBox(height: 4),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Fermer'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReservationDialogInfoRow extends StatelessWidget {
+  const _ReservationDialogInfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: AppColors.onSurfaceVariant),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text.rich(
+            TextSpan(
+              text: '$label : ',
+              style: const TextStyle(
+                color: AppColors.onSurfaceVariant,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+              children: [
+                TextSpan(
+                  text: value,
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 class _NotificationCard extends StatelessWidget {
   const _NotificationCard({
