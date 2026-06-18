@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 import '../../data/notification_store.dart';
 import '../../models/reservation.dart';
 import '../../navigation/app_routes.dart';
-import '../../services/auth_session_service.dart';
+import '../../services/auth_api_service.dart';
 import '../../services/fleet_api_service.dart';
 import '../../services/native_notification_service.dart';
+import '../../theme/app_colors.dart';
 import '../../widgets/fleet_bottom_navigation.dart';
 import 'bookings_screen.dart';
 import 'home_screen.dart';
@@ -24,7 +25,7 @@ class FleetHomeShell extends StatefulWidget {
 class _FleetHomeShellState extends State<FleetHomeShell>
     with WidgetsBindingObserver {
   final _navigatorKey = GlobalKey<NavigatorState>();
-  final _authSessionService = const AuthSessionService();
+  final _authApiService = AuthApiService();
   final _fleetApiService = FleetApiService();
   int _currentIndex = 0;
   int _vehicleRefreshVersion = 0;
@@ -95,8 +96,23 @@ class _FleetHomeShellState extends State<FleetHomeShell>
   }
 
   Future<void> _logout() async {
+    try {
+      await _authApiService.signOut();
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Déconnexion impossible. Réessayez dans un instant.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
     NotificationStore.resetReservationSyncState();
-    await _authSessionService.clearSession();
     if (!mounted) {
       return;
     }

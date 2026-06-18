@@ -19,13 +19,21 @@ class AuthApiService {
     );
 
     final token = (response['token'] ?? '').toString();
+    final mobileSessionToken = (response['mobileSessionToken'] ?? '')
+        .toString();
     final user = response['user'];
 
-    if (token.isEmpty || user is! Map<String, dynamic>) {
+    if (token.isEmpty ||
+        mobileSessionToken.isEmpty ||
+        user is! Map<String, dynamic>) {
       throw const FormatException('Réponse de connexion incomplète.');
     }
 
-    final session = _sessionFromUser(user: user, token: token);
+    final session = _sessionFromUser(
+      user: user,
+      token: token,
+      mobileSessionToken: mobileSessionToken,
+    );
 
     await _sessionService.saveSession(session);
     return session;
@@ -35,15 +43,41 @@ class AuthApiService {
     AccountSession currentSession,
   ) async {
     final user = await _apiClient.getMap('/me');
-    final session = _sessionFromUser(user: user, token: currentSession.token);
+    final session = _sessionFromUser(
+      user: user,
+      token: currentSession.token,
+      mobileSessionToken: currentSession.mobileSessionToken,
+    );
 
     await _sessionService.saveSession(session);
     return session;
   }
 
+  Future<void> signOut() async {
+    final session = await _sessionService.readSession();
+    if (session == null || session.isMockSession) {
+      await _sessionService.clearSession();
+      return;
+    }
+
+    if (session.mobileSessionToken.trim().isNotEmpty) {
+      await _apiClient.post(
+        '/mobile/session/logout',
+        authenticated: false,
+        body: {
+          'identifier': session.email,
+          'mobileSessionToken': session.mobileSessionToken,
+        },
+      );
+    }
+
+    await _sessionService.clearSession();
+  }
+
   AccountSession _sessionFromUser({
     required Map<String, dynamic> user,
     required String token,
+    required String mobileSessionToken,
   }) {
     return AccountSession(
       token: token,
@@ -53,6 +87,7 @@ class AuthApiService {
       lastName: (user['nom'] ?? '').toString(),
       role: _roleFromApi(user['roles']),
       pole: (user['pole'] ?? 'Non défini').toString(),
+      mobileSessionToken: mobileSessionToken,
     );
   }
 

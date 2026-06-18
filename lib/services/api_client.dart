@@ -248,6 +248,7 @@ class ApiClient {
       final currentSession = await _sessionService.readSession();
       if (currentSession == null ||
           currentSession.email.trim().isEmpty ||
+          currentSession.mobileSessionToken.trim().isEmpty ||
           currentSession.isMockSession) {
         return false;
       }
@@ -257,7 +258,10 @@ class ApiClient {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
       });
-      request.body = jsonEncode({'identifier': currentSession.email});
+      request.body = jsonEncode({
+        'identifier': currentSession.email,
+        'mobileSessionToken': currentSession.mobileSessionToken,
+      });
 
       final streamedResponse = await _httpClient
           .send(request)
@@ -276,8 +280,13 @@ class ApiClient {
       }
 
       final token = (decoded['token'] ?? '').toString();
+      final mobileSessionToken =
+          (decoded['mobileSessionToken'] ?? currentSession.mobileSessionToken)
+              .toString();
       final user = decoded['user'];
-      if (token.isEmpty || user is! Map<String, dynamic>) {
+      if (token.isEmpty ||
+          mobileSessionToken.isEmpty ||
+          user is! Map<String, dynamic>) {
         return false;
       }
 
@@ -290,6 +299,7 @@ class ApiClient {
           lastName: (user['nom'] ?? currentSession.lastName).toString(),
           role: _roleFromApi(user['roles'], fallback: currentSession.role),
           pole: (user['pole'] ?? currentSession.pole).toString(),
+          mobileSessionToken: mobileSessionToken,
         ),
       );
 

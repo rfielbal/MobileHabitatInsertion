@@ -35,7 +35,11 @@ class _AuthGateState extends State<AuthGate> {
       return true;
     } on ApiException catch (e) {
       if (e.statusCode == 401 || e.statusCode == 403) {
-        await _authSessionService.clearSession();
+        try {
+          await _authApiService.signOut();
+        } catch (_) {
+          await _authSessionService.clearSession();
+        }
         return false;
       }
 

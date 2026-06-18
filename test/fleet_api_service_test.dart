@@ -544,6 +544,7 @@ void main() {
       AuthSessionService.lastNameKey: 'C',
       AuthSessionService.roleKey: 'user',
       AuthSessionService.poleKey: 'Site',
+      AuthSessionService.mobileSessionTokenKey: 'session-token',
     });
 
     final calls = <String>[];
@@ -557,10 +558,14 @@ void main() {
       }
 
       if (request.url.path == '/api/mobile/session') {
-        expect(jsonDecode(request.body), {'identifier': 'g@g.c'});
+        expect(jsonDecode(request.body), {
+          'identifier': 'g@g.c',
+          'mobileSessionToken': 'session-token',
+        });
         return http.Response(
           jsonEncode({
             'token': 'fresh-token',
+            'mobileSessionToken': 'session-token',
             'user': {
               'id': 10,
               'email': 'g@g.c',

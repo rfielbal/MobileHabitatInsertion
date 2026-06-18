@@ -12,6 +12,7 @@ class AccountSession {
     required this.lastName,
     required this.role,
     required this.pole,
+    this.mobileSessionToken = '',
   });
 
   final String token;
@@ -21,6 +22,7 @@ class AccountSession {
   final String lastName;
   final String role;
   final String pole;
+  final String mobileSessionToken;
 
   String get fullName => '$firstName $lastName';
   bool get isMockSession => token.contains('.mock_token_');
@@ -47,6 +49,7 @@ class AuthSessionService {
   static const lastNameKey = 'user_last_name';
   static const roleKey = 'user_role';
   static const poleKey = 'user_pole';
+  static const mobileSessionTokenKey = 'mobile_session_token';
 
   final FlutterSecureStorage _storage;
 
@@ -75,6 +78,14 @@ class AuthSessionService {
     await _storage.write(key: lastNameKey, value: session.lastName);
     await _storage.write(key: roleKey, value: session.role);
     await _storage.write(key: poleKey, value: session.pole);
+    if (session.mobileSessionToken.trim().isEmpty) {
+      await _storage.delete(key: mobileSessionTokenKey);
+    } else {
+      await _storage.write(
+        key: mobileSessionTokenKey,
+        value: session.mobileSessionToken,
+      );
+    }
   }
 
   Future<String?> readToken() async {
@@ -110,6 +121,8 @@ class AuthSessionService {
         role: await _storage.read(key: roleKey) ?? account?.role ?? 'user',
         pole:
             await _storage.read(key: poleKey) ?? account?.pole ?? 'Non défini',
+        mobileSessionToken:
+            await _storage.read(key: mobileSessionTokenKey) ?? '',
       );
     } on MissingPluginException {
       return null;
@@ -124,5 +137,6 @@ class AuthSessionService {
     await _storage.delete(key: lastNameKey);
     await _storage.delete(key: roleKey);
     await _storage.delete(key: poleKey);
+    await _storage.delete(key: mobileSessionTokenKey);
   }
 }
