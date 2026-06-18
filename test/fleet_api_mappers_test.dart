@@ -21,6 +21,24 @@ void main() {
     },
   );
 
+  test('parseApiDate keeps API instants with timezone unambiguous', () {
+    final fromZulu = FleetApiMappers.parseApiDate('2026-06-18T10:20:00Z');
+    final fromParisOffset = FleetApiMappers.parseApiDate(
+      '2026-06-18T12:20:00+02:00',
+    );
+
+    expect(fromZulu?.toUtc(), DateTime.utc(2026, 6, 18, 10, 20));
+    expect(fromParisOffset?.toUtc(), DateTime.utc(2026, 6, 18, 10, 20));
+  });
+
+  test('parseApiDate keeps timezone-less values as local wall time', () {
+    final withoutTimezone = FleetApiMappers.parseApiDate('2026-06-18T12:20:00');
+    final dateOnly = FleetApiMappers.parseApiDate('2026-06-18');
+
+    expect(withoutTimezone, DateTime(2026, 6, 18, 12, 20));
+    expect(dateOnly, DateTime(2026, 6, 18));
+  });
+
   test('vehicle mapper reads current mileage from API', () {
     final vehicle = FleetApiMappers.vehicleFromJson({
       'id': 10,
@@ -142,6 +160,34 @@ void main() {
       );
       expect(reservation.returnedAt, returnedAt);
       expect(reservation.effectiveEndAt, returnedAt);
+    },
+  );
+
+  test(
+    'reservation mapper reads snake case planned and effective return dates',
+    () {
+      final reservation = FleetApiMappers.reservationFromJson({
+        'id': 1,
+        'date_debut_prevue': '2026-06-18T09:00:00Z',
+        'date_fin_prevue': '2026-06-18T17:00:00Z',
+        'date_retour_effectif': '2026-06-18T12:30:00Z',
+        'termine': true,
+        'vehicule': {'id': 10, 'marque': 'Citroën', 'modele': 'C3'},
+      });
+
+      expect(
+        reservation.startAt,
+        DateTime.parse('2026-06-18T09:00:00Z').toLocal(),
+      );
+      expect(
+        reservation.endAt,
+        DateTime.parse('2026-06-18T17:00:00Z').toLocal(),
+      );
+      expect(
+        reservation.returnedAt,
+        DateTime.parse('2026-06-18T12:30:00Z').toLocal(),
+      );
+      expect(reservation.effectiveEndAt, reservation.returnedAt);
     },
   );
 

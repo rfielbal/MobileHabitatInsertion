@@ -293,6 +293,19 @@ class FleetApiMappers {
 
   static String iso(DateTime date) => date.toUtc().toIso8601String();
 
+  static DateTime? parseApiDate(Object? value) {
+    if (value is! String || value.trim().isEmpty) {
+      return null;
+    }
+
+    final parsed = DateTime.tryParse(value.trim());
+    if (parsed == null) {
+      return null;
+    }
+
+    return parsed.isUtc ? parsed.toLocal() : parsed;
+  }
+
   static String _internalNumber(Object? value, String id) {
     final parsed = int.tryParse(_text(value));
     if (parsed != null && parsed > 0) {
@@ -502,10 +515,7 @@ class FleetApiMappers {
   }
 
   static DateTime? _date(Object? value) {
-    if (value is! String || value.trim().isEmpty) {
-      return null;
-    }
-    return DateTime.tryParse(value)?.toLocal();
+    return parseApiDate(value);
   }
 
   static String _text(Object? value, {String fallback = ''}) {

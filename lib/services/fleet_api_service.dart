@@ -1286,7 +1286,7 @@ class FleetApiService {
       return _validDay(day, month);
     }
 
-    final date = DateTime.tryParse(text)?.toLocal();
+    final date = FleetApiMappers.parseApiDate(text);
     if (date == null || date.year != month.year || date.month != month.month) {
       return null;
     }
@@ -1295,12 +1295,7 @@ class FleetApiService {
   }
 
   DateTime? _dateFromApiValue(Object? value) {
-    final text = value?.toString().trim();
-    if (text == null || text.isEmpty) {
-      return null;
-    }
-
-    return DateTime.tryParse(text)?.toLocal();
+    return FleetApiMappers.parseApiDate(value?.toString());
   }
 
   Object? _rangeStartValue(Map<String, dynamic> value) {
