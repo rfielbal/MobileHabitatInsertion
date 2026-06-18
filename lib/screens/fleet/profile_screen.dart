@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../navigation/app_routes.dart';
 import '../../services/auth_session_service.dart';
 import '../../services/fleet_api_service.dart';
 import '../../services/native_notification_service.dart';
@@ -145,6 +146,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ? null
                         : () =>
                               _setNotificationsEnabled(!_notificationsEnabled),
+                  ),
+                  const Divider(height: 16),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(
+                      Icons.privacy_tip_outlined,
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                    title: const Text('Données personnelles'),
+                    subtitle: const Text('Informations RGPD et droits'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () =>
+                        Navigator.of(context).pushNamed(AppRoutes.personalData),
                   ),
                   const Divider(height: 16),
                   ListTile(

@@ -5,6 +5,7 @@ import 'navigation/app_routes.dart';
 import 'screens/fleet/auth_gate.dart';
 import 'screens/fleet/fleet_home_shell.dart';
 import 'screens/fleet/login_screen.dart';
+import 'screens/fleet/personal_data_screen.dart';
 import 'services/api_config.dart';
 import 'services/native_notification_service.dart';
 import 'theme/app_brand.dart';
@@ -33,6 +34,7 @@ class WheelloApp extends StatelessWidget {
       routes: {
         AppRoutes.login: (context) => const LoginScreen(),
         AppRoutes.home: (context) => const FleetHomeShell(),
+        AppRoutes.personalData: (context) => const PersonalDataScreen(),
       },
     );
   }
