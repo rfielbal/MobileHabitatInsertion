@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as timezone_data;
@@ -7,6 +8,8 @@ import '../models/app_notification.dart';
 
 abstract class NativeNotificationSink {
   Future<void> initialize();
+
+  Future<bool> notificationsEnabled();
 
   Future<bool> requestPermissions();
 
@@ -34,6 +37,9 @@ class NativeNotificationService implements NativeNotificationSink {
 
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
+  final ValueNotifier<NativeNotificationTapIntent?> tapIntent = ValueNotifier(
+    null,
+  );
 
   bool _initialized = false;
   bool _timeZonesInitialized = false;
@@ -45,6 +51,7 @@ class NativeNotificationService implements NativeNotificationSink {
     }
 
     try {
+      final launchDetails = await _plugin.getNotificationAppLaunchDetails();
       await _plugin.initialize(
         settings: const InitializationSettings(
           android: AndroidInitializationSettings('@mipmap/ic_launcher'),
@@ -54,8 +61,14 @@ class NativeNotificationService implements NativeNotificationSink {
             requestSoundPermission: false,
           ),
         ),
+        onDidReceiveNotificationResponse: _handleNotificationResponse,
       );
       _initialized = true;
+      final launchResponse = launchDetails?.notificationResponse;
+      if (launchDetails?.didNotificationLaunchApp == true &&
+          launchResponse != null) {
+        _handleNotificationResponse(launchResponse);
+      }
     } on MissingPluginException {
       // Le plugin natif n'est pas disponible pendant certains tests/hot restarts.
     }
@@ -77,8 +90,32 @@ class NativeNotificationService implements NativeNotificationSink {
           >()
           ?.requestPermissions(alert: true, badge: true, sound: true);
 
-      return androidGranted ?? iosGranted ?? true;
+      return androidGranted ?? iosGranted ?? await notificationsEnabled();
     } on MissingPluginException {
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> notificationsEnabled() async {
+    await initialize();
+
+    try {
+      final androidEnabled = await _plugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >()
+          ?.areNotificationsEnabled();
+      final iosSettings = await _plugin
+          .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin
+          >()
+          ?.checkPermissions();
+
+      return androidEnabled ?? iosSettings?.isEnabled ?? true;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
       return false;
     }
   }
@@ -91,6 +128,10 @@ class NativeNotificationService implements NativeNotificationSink {
     await initialize();
 
     try {
+      if (!await notificationsEnabled()) {
+        return false;
+      }
+
       await _plugin.show(
         id: notification.id,
         title: notification.title,
@@ -121,6 +162,10 @@ class NativeNotificationService implements NativeNotificationSink {
     _ensureTimeZonesInitialized();
 
     try {
+      if (!await notificationsEnabled()) {
+        return false;
+      }
+
       await _plugin.zonedSchedule(
         id: notification.id,
         title: notification.title,
@@ -150,6 +195,12 @@ class NativeNotificationService implements NativeNotificationSink {
       return;
     } on PlatformException {
       return;
+    }
+  }
+
+  void consumeTapIntent(NativeNotificationTapIntent intent) {
+    if (tapIntent.value == intent) {
+      tapIntent.value = null;
     }
   }
 
@@ -183,6 +234,18 @@ class NativeNotificationService implements NativeNotificationSink {
     return 'notification:${notification.id}:reservation:$reservationId';
   }
 
+  void _handleNotificationResponse(NotificationResponse response) {
+    final intent = NativeNotificationTapIntent.fromPayload(
+      response.payload,
+      fallbackNotificationId: response.id,
+    );
+    if (intent == null) {
+      return;
+    }
+
+    tapIntent.value = intent;
+  }
+
   void _ensureTimeZonesInitialized() {
     if (_timeZonesInitialized) {
       return;
@@ -190,5 +253,45 @@ class NativeNotificationService implements NativeNotificationSink {
 
     timezone_data.initializeTimeZones();
     _timeZonesInitialized = true;
+  }
+}
+
+class NativeNotificationTapIntent {
+  const NativeNotificationTapIntent({
+    required this.notificationId,
+    this.reservationId,
+  });
+
+  final int notificationId;
+  final String? reservationId;
+
+  static NativeNotificationTapIntent? fromPayload(
+    String? payload, {
+    int? fallbackNotificationId,
+  }) {
+    final parts = payload?.split(':') ?? const <String>[];
+    var notificationId = fallbackNotificationId;
+    String? reservationId;
+
+    if (parts.length >= 2 && parts.first == 'notification') {
+      notificationId = int.tryParse(parts[1]) ?? notificationId;
+    }
+
+    final reservationIndex = parts.indexOf('reservation');
+    if (reservationIndex >= 0 && reservationIndex + 1 < parts.length) {
+      reservationId = parts.sublist(reservationIndex + 1).join(':').trim();
+      if (reservationId.isEmpty) {
+        reservationId = null;
+      }
+    }
+
+    if (notificationId == null) {
+      return null;
+    }
+
+    return NativeNotificationTapIntent(
+      notificationId: notificationId,
+      reservationId: reservationId,
+    );
   }
 }

@@ -110,6 +110,52 @@ void main() {
   );
 
   test(
+    'retries native scheduling when notifications become enabled later',
+    () async {
+      final reservation = _reservation(
+        id: 'native-permission-retry-reservation',
+        startAt: DateTime(2026, 6, 18, 8),
+      );
+      nativeNotifications.enabled = false;
+
+      await NotificationStore.upsertDepartureReminders([
+        reservation,
+      ], DateTime(2026, 6, 18, 8, 10));
+      expect(nativeNotifications.scheduled, isEmpty);
+
+      nativeNotifications.enabled = true;
+      await NotificationStore.upsertDepartureReminders([
+        reservation,
+      ], DateTime(2026, 6, 18, 8, 11));
+
+      expect(nativeNotifications.scheduled, hasLength(1));
+      expect(
+        nativeNotifications.scheduled.single.scheduledAt,
+        DateTime(2026, 6, 18, 8, 15),
+      );
+    },
+  );
+
+  test('parses native notification tap payloads', () {
+    final intent = NativeNotificationTapIntent.fromPayload(
+      'notification:-123:reservation:42',
+    );
+
+    expect(intent?.notificationId, -123);
+    expect(intent?.reservationId, '42');
+  });
+
+  test('parses native notification tap payload without reservation', () {
+    final intent = NativeNotificationTapIntent.fromPayload(
+      'notification:-456',
+      fallbackNotificationId: 1,
+    );
+
+    expect(intent?.notificationId, -456);
+    expect(intent?.reservationId, isNull);
+  });
+
+  test(
     'maintained unstarted reservations do not recreate the local reminder',
     () async {
       final reservation = _reservation(
@@ -137,9 +183,13 @@ class _FakeNativeNotificationSink implements NativeNotificationSink {
   final List<AppNotification> shown = [];
   final List<_ScheduledNativeNotification> scheduled = [];
   final List<int> cancelled = [];
+  var enabled = true;
 
   @override
   Future<void> initialize() async {}
+
+  @override
+  Future<bool> notificationsEnabled() async => enabled;
 
   @override
   Future<bool> requestPermissions() async => true;
@@ -149,6 +199,10 @@ class _FakeNativeNotificationSink implements NativeNotificationSink {
     AppNotification notification, {
     required int badgeCount,
   }) async {
+    if (!enabled) {
+      return false;
+    }
+
     shown.add(notification);
     return true;
   }
@@ -159,6 +213,10 @@ class _FakeNativeNotificationSink implements NativeNotificationSink {
     required DateTime scheduledAt,
     required int badgeCount,
   }) async {
+    if (!enabled) {
+      return false;
+    }
+
     scheduled.add(
       _ScheduledNativeNotification(
         notification: notification,

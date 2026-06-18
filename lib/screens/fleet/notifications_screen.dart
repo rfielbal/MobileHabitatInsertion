@@ -8,7 +8,14 @@ import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
 
 class NotificationsScreen extends StatefulWidget {
-  const NotificationsScreen({super.key});
+  const NotificationsScreen({
+    super.key,
+    this.initialNotificationId,
+    this.initialReservationId,
+  });
+
+  final int? initialNotificationId;
+  final String? initialReservationId;
 
   @override
   State<NotificationsScreen> createState() => _NotificationsScreenState();
@@ -17,11 +24,24 @@ class NotificationsScreen extends StatefulWidget {
 class _NotificationsScreenState extends State<NotificationsScreen> {
   final _fleetApiService = FleetApiService();
   String? _resolvingReservationId;
+  bool _handledInitialNotification = false;
 
   @override
   void initState() {
     super.initState();
-    NotificationStore.refresh();
+    NotificationStore.items.addListener(_tryOpenInitialNotification);
+    NotificationStore.loading.addListener(_tryOpenInitialNotification);
+    NotificationStore.refresh().whenComplete(_tryOpenInitialNotification);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _tryOpenInitialNotification();
+    });
+  }
+
+  @override
+  void dispose() {
+    NotificationStore.items.removeListener(_tryOpenInitialNotification);
+    NotificationStore.loading.removeListener(_tryOpenInitialNotification);
+    super.dispose();
   }
 
   @override
@@ -117,6 +137,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       return;
     }
 
+    await _openUnstartedReservation(
+      reservationId,
+      notificationId: notification.id,
+    );
+  }
+
+  Future<void> _openUnstartedReservation(
+    String reservationId, {
+    int? notificationId,
+  }) async {
     if (_resolvingReservationId != null) {
       return;
     }
@@ -126,7 +156,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     });
 
     try {
-      await NotificationStore.markAsRead(notification.id);
+      if (notificationId != null) {
+        await NotificationStore.markAsRead(notificationId);
+      }
       final reservations = await _fleetApiService.fetchReservations();
       final reservation = _findReservationById(reservations, reservationId);
 
@@ -255,6 +287,62 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         context,
       ).showSnackBar(SnackBar(content: Text('Suppression impossible : $e')));
     }
+  }
+
+  void _tryOpenInitialNotification() {
+    if (_handledInitialNotification || !mounted) {
+      return;
+    }
+
+    final reservationId = widget.initialReservationId;
+    if (reservationId != null && reservationId.trim().isNotEmpty) {
+      _handledInitialNotification = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        _openUnstartedReservation(
+          reservationId,
+          notificationId: widget.initialNotificationId,
+        );
+      });
+      return;
+    }
+
+    final notificationId = widget.initialNotificationId;
+    if (notificationId == null || NotificationStore.loading.value) {
+      return;
+    }
+
+    final notification = _findNotificationById(
+      NotificationStore.items.value,
+      notificationId,
+    );
+    if (notification == null) {
+      _handledInitialNotification = true;
+      return;
+    }
+
+    _handledInitialNotification = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      _openNotification(notification);
+    });
+  }
+
+  AppNotification? _findNotificationById(
+    List<AppNotification> notifications,
+    int notificationId,
+  ) {
+    for (final notification in notifications) {
+      if (notification.id == notificationId) {
+        return notification;
+      }
+    }
+
+    return null;
   }
 }
 
