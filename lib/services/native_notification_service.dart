@@ -8,6 +8,8 @@ import '../models/app_notification.dart';
 abstract class NativeNotificationSink {
   Future<void> initialize();
 
+  Future<bool> notificationsEnabled();
+
   Future<bool> requestPermissions();
 
   Future<bool> show(AppNotification notification, {required int badgeCount});
@@ -77,8 +79,32 @@ class NativeNotificationService implements NativeNotificationSink {
           >()
           ?.requestPermissions(alert: true, badge: true, sound: true);
 
-      return androidGranted ?? iosGranted ?? true;
+      return androidGranted ?? iosGranted ?? await notificationsEnabled();
     } on MissingPluginException {
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> notificationsEnabled() async {
+    await initialize();
+
+    try {
+      final androidEnabled = await _plugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >()
+          ?.areNotificationsEnabled();
+      final iosSettings = await _plugin
+          .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin
+          >()
+          ?.checkPermissions();
+
+      return androidEnabled ?? iosSettings?.isEnabled ?? true;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
       return false;
     }
   }
@@ -91,6 +117,10 @@ class NativeNotificationService implements NativeNotificationSink {
     await initialize();
 
     try {
+      if (!await notificationsEnabled()) {
+        return false;
+      }
+
       await _plugin.show(
         id: notification.id,
         title: notification.title,
@@ -121,6 +151,10 @@ class NativeNotificationService implements NativeNotificationSink {
     _ensureTimeZonesInitialized();
 
     try {
+      if (!await notificationsEnabled()) {
+        return false;
+      }
+
       await _plugin.zonedSchedule(
         id: notification.id,
         title: notification.title,

@@ -50,6 +50,16 @@ class _FleetHomeShellState extends State<FleetHomeShell>
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) {
+      return;
+    }
+
+    NotificationStore.refresh();
+    _refreshActiveDepartureState();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return PopScope<void>(
       canPop: false,

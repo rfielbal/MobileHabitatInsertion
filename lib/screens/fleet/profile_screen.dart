@@ -222,12 +222,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _loadNotificationStatus() async {
     try {
       final status = await Permission.notification.status;
+      final nativeEnabled = await NativeNotificationService.instance
+          .notificationsEnabled();
       if (!mounted) {
         return;
       }
       setState(() {
         _notificationPermissionStatus = status;
-        _notificationsEnabled = status.isGranted;
+        _notificationsEnabled = status.isGranted && nativeEnabled;
         _notificationsLoading = false;
         _permissionPluginAvailable = true;
       });
