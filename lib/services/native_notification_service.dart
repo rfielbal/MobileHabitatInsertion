@@ -34,6 +34,7 @@ class NativeNotificationService implements NativeNotificationSink {
   static const _androidChannelName = 'Alertes de réservation';
   static const _androidChannelDescription =
       'Rappels de départ, de retour et de réservation Wheello';
+  static const _androidNotificationIcon = 'ic_stat_wheello';
 
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
@@ -54,7 +55,7 @@ class NativeNotificationService implements NativeNotificationSink {
       final launchDetails = await _plugin.getNotificationAppLaunchDetails();
       await _plugin.initialize(
         settings: const InitializationSettings(
-          android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+          android: AndroidInitializationSettings(_androidNotificationIcon),
           iOS: DarwinInitializationSettings(
             requestAlertPermission: false,
             requestBadgePermission: false,
@@ -217,6 +218,7 @@ class NativeNotificationService implements NativeNotificationSink {
         _androidChannelId,
         _androidChannelName,
         channelDescription: _androidChannelDescription,
+        icon: _androidNotificationIcon,
         importance: Importance.high,
         priority: Priority.high,
         channelShowBadge: true,
