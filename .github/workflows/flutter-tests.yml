@@ -1,0 +1,46 @@
+name: Flutter tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  flutter-tests:
+    name: Analyze, unit tests, widget tests and golden tests
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.5'
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Run Flutter tests with coverage
+        run: |
+          mkdir -p test_reports
+          flutter test --coverage --machine > test_reports/flutter-tests.json
+
+      - name: Run macOS integration smoke test
+        run: flutter test integration_test/app_smoke_test.dart -d macos
+
+      - name: Upload Flutter test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-test-reports
+          path: |
+            test_reports/
+            coverage/lcov.info
+          if-no-files-found: ignore
