@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/vehicle.dart';
 import '../../services/fleet_api_service.dart';
 import '../../theme/app_colors.dart';
+import '../../utils/vehicle_sort.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/brand_top_bar.dart';
 import '../../widgets/vehicle_card.dart';
@@ -65,7 +66,10 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
     super.dispose();
   }
 
-  List<Vehicle> _filteredVehicles(List<Vehicle> allVehicles) {
+  List<Vehicle> _filteredVehicles(
+    List<Vehicle> allVehicles,
+    List<String> sitePriority,
+  ) {
     final query = _searchController.text.trim().toLowerCase();
     final vehicles = allVehicles.where((vehicle) {
       final matchesQuery =
@@ -86,19 +90,7 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
       return matchesQuery && matchesSite && matchesBrand && matchesStatus;
     }).toList();
 
-    vehicles.sort((a, b) {
-      final statusSort = a.status.sortRank.compareTo(b.status.sortRank);
-      if (statusSort != 0) {
-        return statusSort;
-      }
-
-      final siteSort = a.site.compareTo(b.site);
-      if (siteSort != 0) {
-        return siteSort;
-      }
-
-      return a.name.compareTo(b.name);
-    });
+    sortVehiclesByRecommendation(vehicles, sitePriority: sitePriority);
 
     return vehicles;
   }
@@ -127,8 +119,18 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
   }
 
   List<String> _sitesFromVehicles(List<Vehicle> vehicles) {
-    final values = vehicles.map((vehicle) => vehicle.site).toSet();
-    return values.toList()..sort();
+    final sites = <String>[];
+    final seen = <String>{};
+
+    for (final vehicle in vehicles) {
+      final site = vehicle.site.trim();
+      if (site.isEmpty || !seen.add(site.toLowerCase())) {
+        continue;
+      }
+      sites.add(site);
+    }
+
+    return sites;
   }
 
   List<String> _brands(List<Vehicle> vehicles) {
@@ -187,7 +189,10 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
 
                 return _VehiclesContent(
                   vehicles: data.vehicles,
-                  filteredVehicles: _filteredVehicles(data.vehicles),
+                  filteredVehicles: _filteredVehicles(
+                    data.vehicles,
+                    data.sites,
+                  ),
                   sites: data.sites,
                   brands: _brands(data.vehicles),
                   selectedSite: _selectedSite,

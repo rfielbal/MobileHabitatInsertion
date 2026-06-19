@@ -3,6 +3,7 @@ import 'package:path/path.dart' as p;
 import '../models/reservation.dart';
 import '../models/vehicle.dart';
 import '../utils/reservation_calendar_days.dart';
+import '../utils/vehicle_sort.dart';
 import 'api_client.dart';
 import 'api_exception.dart';
 import 'fleet_api_mappers.dart';
@@ -20,6 +21,7 @@ class FleetApiService {
   Future<List<Vehicle>> fetchVehicles() async {
     final sitesResponse = await _apiClient.getMap('/metier/mes-sites');
     final sites = FleetApiMappers.itemsFromResponse(sitesResponse);
+    final sitePriority = _siteLabelsFromItems(sites);
     final vehiclesById = <String, Vehicle>{};
 
     for (final site in sites) {
@@ -57,13 +59,7 @@ class FleetApiService {
 
     var vehicles = vehiclesById.values.toList();
     vehicles = await _withCurrentReservationState(vehicles);
-    vehicles.sort((a, b) {
-      final statusSort = a.status.sortRank.compareTo(b.status.sortRank);
-      if (statusSort != 0) {
-        return statusSort;
-      }
-      return a.name.compareTo(b.name);
-    });
+    sortVehiclesByRecommendation(vehicles, sitePriority: sitePriority);
     return vehicles;
   }
 
@@ -72,14 +68,7 @@ class FleetApiService {
       '/metier/mes-sites',
       queryParameters: _refreshQueryParameters(),
     );
-    final sites = FleetApiMappers.itemsFromResponse(response)
-        .map(FleetApiMappers.siteLabelFromJson)
-        .where((site) => site.trim().isNotEmpty)
-        .toSet()
-        .toList();
-
-    sites.sort();
-    return sites;
+    return _siteLabelsFromItems(FleetApiMappers.itemsFromResponse(response));
   }
 
   Future<List<FleetReservation>> fetchReservations() async {
@@ -1206,6 +1195,22 @@ class FleetApiService {
 
   Map<String, String> _refreshQueryParameters() {
     return {'_': DateTime.now().millisecondsSinceEpoch.toString()};
+  }
+
+  List<String> _siteLabelsFromItems(List<Map<String, dynamic>> items) {
+    final sites = <String>[];
+    final seen = <String>{};
+
+    for (final item in items) {
+      final site = FleetApiMappers.siteLabelFromJson(item).trim();
+      final normalized = site.toLowerCase();
+      if (site.isEmpty || !seen.add(normalized)) {
+        continue;
+      }
+      sites.add(site);
+    }
+
+    return sites;
   }
 
   Future<List<Vehicle>> _withCurrentReservationState(

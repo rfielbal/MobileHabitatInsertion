@@ -4,7 +4,9 @@ import '../../models/vehicle.dart';
 import '../../services/api_exception.dart';
 import '../../services/fleet_api_service.dart';
 import '../../theme/app_colors.dart';
+import '../../utils/vehicle_sort.dart';
 import '../../widgets/app_card.dart';
+import '../../widgets/app_usage_help_dialog.dart';
 import '../../widgets/bottom_action_bar.dart';
 import '../../widgets/status_chip.dart';
 
@@ -47,7 +49,18 @@ class _ImmediateDepartureScreenState extends State<ImmediateDepartureScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Départ immédiat')),
+      appBar: AppBar(
+        title: const Text('Départ immédiat'),
+        actions: [
+          IconButton(
+            tooltip: 'Guide d’utilisation',
+            onPressed: () =>
+                showAppUsageHelp(context, AppUsageHelpTopic.immediateDeparture),
+            icon: const Icon(Icons.help_outline),
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
       bottomNavigationBar: BottomActionBar(
         children: [
           Expanded(
@@ -230,15 +243,9 @@ class _ImmediateDepartureScreenState extends State<ImmediateDepartureScreen> {
     final availableVehicles = vehicles
         .where((vehicle) => vehicle.status == VehicleStatus.available)
         .toList();
-    availableVehicles.sort((first, second) {
-      final siteSort = first.site.compareTo(second.site);
-      if (siteSort != 0) {
-        return siteSort;
-      }
-      return first.name.compareTo(second.name);
-    });
 
     final sites = await _loadAccessibleSitesFallback(availableVehicles);
+    sortVehiclesByRecommendation(availableVehicles, sitePriority: sites);
     if (mounted && _selectedSite == null && sites.length == 1) {
       setState(() {
         _selectedSite = sites.single;
@@ -271,9 +278,10 @@ class _ImmediateDepartureScreenState extends State<ImmediateDepartureScreen> {
     final sites = vehicles
         .map((vehicle) => vehicle.site.trim())
         .where((site) => site.isNotEmpty)
-        .toSet()
         .toList();
-    sites.sort();
+
+    final seen = <String>{};
+    sites.retainWhere((site) => seen.add(site.toLowerCase()));
     return sites;
   }
 
