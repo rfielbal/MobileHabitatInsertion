@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -6,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'api_config.dart';
 import 'api_exception.dart';
 import 'auth_session_service.dart';
+import 'session_invalidation_notifier.dart';
 
 class ApiClient {
   ApiClient({
@@ -141,12 +143,12 @@ class ApiClient {
       ),
     );
 
-    final streamedResponse = await _httpClient
-        .send(request)
-        .timeout(const Duration(minutes: 2));
-    final response = await http.Response.fromStream(streamedResponse);
-
     try {
+      final streamedResponse = await _httpClient
+          .send(request)
+          .timeout(const Duration(minutes: 2));
+      final response = await http.Response.fromStream(streamedResponse);
+
       return _decodeResponse(response);
     } on ApiException catch (error) {
       if (authenticated &&
@@ -163,7 +165,13 @@ class ApiClient {
         );
       }
 
+      if (authenticated && error.statusCode == 401) {
+        await _invalidateStoredSession();
+      }
+
       rethrow;
+    } catch (error) {
+      throw _maintenanceExceptionFor(error) ?? error;
     }
   }
 
@@ -182,12 +190,12 @@ class ApiClient {
       request.body = jsonEncode(body);
     }
 
-    final streamedResponse = await _httpClient
-        .send(request)
-        .timeout(const Duration(seconds: 20));
-    final response = await http.Response.fromStream(streamedResponse);
-
     try {
+      final streamedResponse = await _httpClient
+          .send(request)
+          .timeout(const Duration(seconds: 20));
+      final response = await http.Response.fromStream(streamedResponse);
+
       return _decodeResponse(response);
     } on ApiException catch (error) {
       if (authenticated &&
@@ -204,7 +212,13 @@ class ApiClient {
         );
       }
 
+      if (authenticated && error.statusCode == 401) {
+        await _invalidateStoredSession();
+      }
+
       rethrow;
+    } catch (error) {
+      throw _maintenanceExceptionFor(error) ?? error;
     }
   }
 
@@ -225,6 +239,25 @@ class ApiClient {
     }
 
     return jsonDecode(response.body) as Object?;
+  }
+
+  ApiException? _maintenanceExceptionFor(Object error) {
+    if (error is TimeoutException ||
+        error is http.ClientException ||
+        error is FormatException) {
+      return ApiException.maintenance();
+    }
+
+    final normalizedError = error.toString().toLowerCase();
+    if (normalizedError.contains('socketexception') ||
+        normalizedError.contains('connection refused') ||
+        normalizedError.contains('connection reset') ||
+        normalizedError.contains('failed host lookup') ||
+        normalizedError.contains('network is unreachable')) {
+      return ApiException.maintenance();
+    }
+
+    return null;
   }
 
   Future<Map<String, String>> _headers({required bool authenticated}) async {
@@ -307,6 +340,11 @@ class ApiClient {
     } catch (_) {
       return false;
     }
+  }
+
+  Future<void> _invalidateStoredSession() async {
+    await _sessionService.clearSession();
+    SessionInvalidationNotifier.instance.notifySessionInvalidated();
   }
 
   String _roleFromApi(Object? rolesValue, {required String fallback}) {

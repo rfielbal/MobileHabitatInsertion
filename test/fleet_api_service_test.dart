@@ -31,6 +31,21 @@ void main() {
     );
   });
 
+  test(
+    'ApiException hides server outage details behind maintenance message',
+    () {
+      final exception = ApiException.fromResponse(
+        statusCode: 503,
+        body: '<html>Service unavailable</html>',
+      );
+
+      expect(
+        exception.message,
+        'Nous sommes en maintenance, veuillez nous excuser',
+      );
+    },
+  );
+
   test('mobile video limit stays below the active PHP multipart limit', () {
     expect(
       ReservationVideoService.maxUploadBytes,

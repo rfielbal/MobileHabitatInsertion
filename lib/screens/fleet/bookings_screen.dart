@@ -5,6 +5,7 @@ import '../../models/reservation.dart';
 import '../../services/fleet_api_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
+import '../../widgets/app_usage_help_dialog.dart';
 import '../../widgets/brand_top_bar.dart';
 import '../../widgets/reservation_band_calendar.dart';
 import '../../widgets/status_chip.dart';
@@ -63,6 +64,8 @@ class _BookingsScreenState extends State<BookingsScreen> {
     return Scaffold(
       appBar: BrandTopBar(
         onNotificationsPressed: () => _openNotifications(context),
+        onHelpPressed: () =>
+            showAppUsageHelp(context, AppUsageHelpTopic.bookings),
       ),
       body: SafeArea(
         child: ListView(
@@ -426,10 +429,11 @@ class _BookingsScreenState extends State<BookingsScreen> {
 
     try {
       await _fleetApiService.deleteReservation(reservation);
+      _locallyDeletedReservationIds.add(reservation.id);
+      await NotificationStore.clearReservationReminders(reservation.id);
       if (!mounted) {
         return;
       }
-      _locallyDeletedReservationIds.add(reservation.id);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Réservation supprimée')));

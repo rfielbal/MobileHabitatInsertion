@@ -3,6 +3,9 @@ import 'dart:convert';
 class ApiException implements Exception {
   const ApiException({required this.message, this.statusCode, this.details});
 
+  static const maintenanceMessage =
+      'Nous sommes en maintenance, veuillez nous excuser';
+
   final String message;
   final int? statusCode;
   final Object? details;
@@ -18,6 +21,10 @@ class ApiException implements Exception {
     required int statusCode,
     required String body,
   }) {
+    if (statusCode >= 500) {
+      return const ApiException(message: maintenanceMessage, statusCode: 503);
+    }
+
     var message = 'Erreur API';
     Object? details;
 
@@ -49,6 +56,10 @@ class ApiException implements Exception {
     );
   }
 
+  factory ApiException.maintenance() {
+    return const ApiException(message: maintenanceMessage, statusCode: 503);
+  }
+
   @override
   String toString() {
     if (statusCode == null) {
@@ -68,7 +79,7 @@ class ApiException implements Exception {
 
     if (plainBody.contains('Composer detected issues in your platform') &&
         plainBody.contains('PHP version')) {
-      return 'API indisponible : la version PHP du serveur est incompatible avec Composer.';
+      return maintenanceMessage;
     }
 
     return plainBody.isEmpty ? 'Erreur API' : _normalizeMessage(plainBody);

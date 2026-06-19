@@ -217,6 +217,27 @@ class FleetApiMappers {
     return null;
   }
 
+  static String? _notificationReservationId(Map<String, dynamic> json) {
+    final directId = _id(
+      json['reservationId'] ??
+          json['reservation_id'] ??
+          json['reservation'] ??
+          json['reservationIri'],
+    );
+    if (directId != null) {
+      return directId;
+    }
+
+    final targetType = _text(
+      json['cibleType'] ?? json['cible_type'] ?? json['targetType'],
+    ).toLowerCase();
+    if (targetType.contains('reservation')) {
+      return _id(json['cibleId'] ?? json['cible_id'] ?? json['targetId']);
+    }
+
+    return null;
+  }
+
   static DateTime? reservationReturnedAt(Map<String, dynamic> json) {
     return _date(json['dateRendu']) ??
         _date(json['dateRetourEffectif']) ??
@@ -260,6 +281,7 @@ class FleetApiMappers {
         ),
         icon: _notificationIcon(type),
         color: _notificationColor(type),
+        reservationId: _notificationReservationId(json),
       ),
     );
   }

@@ -121,6 +121,19 @@ void main() {
     expect(vehicle.knownIssues.single.reportedAtLabel, isNull);
   });
 
+  test('notification mapper reads reservation target id', () {
+    final payload = FleetApiMappers.notificationFromJson({
+      'id': 20,
+      'objet': 'Retour non effectué',
+      'message': 'Le retour doit être confirmé.',
+      'type': 'reservation',
+      'cible_type': 'reservation',
+      'cible_id': 42,
+    });
+
+    expect(payload.notification.reservationId, '42');
+  });
+
   test('reservation mapper uses vehicle mileage as expected start mileage', () {
     final reservation = FleetApiMappers.reservationFromJson({
       'id': 1,

@@ -37,6 +37,7 @@ class NotificationStore {
   static final Set<int> _managedReminderNotificationIds = <int>{};
   static final Set<String> _maintainedUnstartedReservationIds = <String>{};
   static final Set<String> _adminAlertedUnstartedReservationIds = <String>{};
+  static final Set<String> _locallyCancelledReservationIds = <String>{};
   static NativeNotificationSink _nativeNotifications =
       NativeNotificationService.instance;
   static List<FleetReservation>? _lastServerReservations;
@@ -90,7 +91,13 @@ class NotificationStore {
         for (final item in items.value)
           if (!_isLocalNotification(item.id)) item.id,
       };
-      final payloads = await _apiService.fetchNotifications();
+      final payloads = [
+        for (final payload in await _apiService.fetchNotifications())
+          if (!_shouldHideCancelledReservationNotification(
+            payload.notification,
+          ))
+            payload,
+      ];
       final nativeNotifications = [
         for (final payload in payloads)
           if (!payload.read &&
@@ -236,16 +243,33 @@ class NotificationStore {
     );
   }
 
+  static Future<void> clearReservationReminders(String reservationId) async {
+    _locallyCancelledReservationIds.add(reservationId);
+    await clearUnstartedReservationReminder(reservationId);
+    await _deleteFromLocalState(
+      _returnReminderIdFromReservationId(reservationId),
+    );
+  }
+
   static Future<void> syncServerReservations(
     List<FleetReservation> reservations, {
     Set<String> locallyDeletedReservationIds = const {},
   }) async {
+    final ignoredDeletedReservationIds = {
+      ...locallyDeletedReservationIds,
+      ..._locallyCancelledReservationIds,
+    };
+
+    for (final reservationId in ignoredDeletedReservationIds) {
+      await clearReservationReminders(reservationId);
+    }
+
     final previousReservations = _lastServerReservations;
     if (previousReservations != null) {
       final deletedReservations = reservationsDeletedOnServer(
         previousReservations: previousReservations,
         currentReservations: reservations,
-        locallyDeletedReservationIds: locallyDeletedReservationIds,
+        locallyDeletedReservationIds: ignoredDeletedReservationIds,
       );
       await upsertDeletedReservationNotifications(deletedReservations);
     }
@@ -261,6 +285,7 @@ class NotificationStore {
     _managedReminderNotificationIds.clear();
     _maintainedUnstartedReservationIds.clear();
     _adminAlertedUnstartedReservationIds.clear();
+    _locallyCancelledReservationIds.clear();
     _dismissedLocalNotificationIdsLoaded = false;
     _maintainedUnstartedReservationIdsLoaded = false;
     _adminAlertedUnstartedReservationIdsLoaded = false;
@@ -317,6 +342,14 @@ class NotificationStore {
     return id < 0;
   }
 
+  static bool _shouldHideCancelledReservationNotification(
+    AppNotification notification,
+  ) {
+    final reservationId = notification.reservationId;
+    return reservationId != null &&
+        _locallyCancelledReservationIds.contains(reservationId);
+  }
+
   static int _departureReminderId(FleetReservation reservation) {
     return _departureReminderIdFromReservationId(reservation.id);
   }
@@ -342,7 +375,11 @@ class NotificationStore {
   }
 
   static int _returnReminderId(FleetReservation reservation) {
-    return -2000000 - reservation.id.hashCode.abs();
+    return _returnReminderIdFromReservationId(reservation.id);
+  }
+
+  static int _returnReminderIdFromReservationId(String reservationId) {
+    return -2000000 - reservationId.hashCode.abs();
   }
 
   static AppNotification _returnReminderNotification(

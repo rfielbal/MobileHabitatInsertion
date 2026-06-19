@@ -10,10 +10,12 @@ class BrandTopBar extends StatelessWidget implements PreferredSizeWidget {
     super.key,
     required this.onNotificationsPressed,
     this.showBackButton = false,
+    this.onHelpPressed,
   });
 
   final VoidCallback onNotificationsPressed;
   final bool showBackButton;
+  final VoidCallback? onHelpPressed;
 
   @override
   Size get preferredSize => const Size.fromHeight(68);
@@ -65,6 +67,14 @@ class BrandTopBar extends StatelessWidget implements PreferredSizeWidget {
         ],
       ),
       actions: [
+        if (onHelpPressed != null) ...[
+          IconButton(
+            tooltip: 'Guide d’utilisation',
+            onPressed: onHelpPressed,
+            icon: const Icon(Icons.help_outline),
+          ),
+          const SizedBox(width: 2),
+        ],
         AnimatedBuilder(
           animation: Listenable.merge([
             NotificationStore.items,

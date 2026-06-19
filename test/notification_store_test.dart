@@ -74,6 +74,31 @@ void main() {
   });
 
   test(
+    'local cancellation clears reservation reminders and suppresses delete sync',
+    () async {
+      final reservation = _reservation(
+        id: 'locally-cancelled-started-reservation',
+        isStarted: true,
+      );
+
+      await NotificationStore.syncServerReservations([reservation]);
+      await NotificationStore.upsertDepartureReminders([
+        reservation,
+      ], DateTime(2026, 6, 18, 17, 30));
+
+      expect(NotificationStore.items.value, hasLength(1));
+      expect(NotificationStore.items.value.single.title, 'Retour à confirmer');
+
+      await NotificationStore.clearReservationReminders(reservation.id);
+      expect(NotificationStore.items.value, isEmpty);
+      expect(nativeNotifications.cancelled, isNotEmpty);
+
+      await NotificationStore.syncServerReservations(const []);
+      expect(NotificationStore.items.value, isEmpty);
+    },
+  );
+
+  test(
     'creates an actionable notification fifteen minutes after unstarted departure',
     () async {
       final reservation = _reservation(
@@ -242,7 +267,11 @@ class _ScheduledNativeNotification {
   final DateTime scheduledAt;
 }
 
-FleetReservation _reservation({required String id, DateTime? startAt}) {
+FleetReservation _reservation({
+  required String id,
+  DateTime? startAt,
+  bool isStarted = false,
+}) {
   return FleetReservation(
     id: id,
     vehicle: _vehicle,
@@ -253,6 +282,7 @@ FleetReservation _reservation({required String id, DateTime? startAt}) {
     endLabel: 'Jeu 18 Juin, 17:00',
     status: ReservationStatus.upcoming,
     expectedStartMileage: 100,
+    isStarted: isStarted,
   );
 }
 

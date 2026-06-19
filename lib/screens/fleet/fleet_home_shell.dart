@@ -1,11 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../data/notification_store.dart';
 import '../../models/reservation.dart';
 import '../../navigation/app_routes.dart';
 import '../../services/auth_api_service.dart';
+import '../../services/auth_session_service.dart';
 import '../../services/fleet_api_service.dart';
 import '../../services/native_notification_service.dart';
+import '../../services/session_invalidation_notifier.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/fleet_bottom_navigation.dart';
 import 'bookings_screen.dart';
@@ -26,11 +30,14 @@ class _FleetHomeShellState extends State<FleetHomeShell>
     with WidgetsBindingObserver {
   final _navigatorKey = GlobalKey<NavigatorState>();
   final _authApiService = AuthApiService();
+  final _authSessionService = const AuthSessionService();
   final _fleetApiService = FleetApiService();
+  Timer? _sessionGuardTimer;
   int _currentIndex = 0;
   int _vehicleRefreshVersion = 0;
   int _reservationRefreshVersion = 0;
   bool _hasActiveDeparture = true;
+  bool _isCheckingSession = false;
 
   @override
   void initState() {
@@ -38,6 +45,11 @@ class _FleetHomeShellState extends State<FleetHomeShell>
     WidgetsBinding.instance.addObserver(this);
     NativeNotificationService.instance.tapIntent.addListener(
       _handleNativeNotificationTap,
+    );
+    SessionInvalidationNotifier.instance.addListener(_handleSessionInvalidated);
+    _sessionGuardTimer = Timer.periodic(
+      const Duration(seconds: 60),
+      (_) => _verifyCurrentSession(),
     );
     NotificationStore.refresh();
     _refreshActiveDepartureState();
@@ -51,6 +63,10 @@ class _FleetHomeShellState extends State<FleetHomeShell>
     NativeNotificationService.instance.tapIntent.removeListener(
       _handleNativeNotificationTap,
     );
+    SessionInvalidationNotifier.instance.removeListener(
+      _handleSessionInvalidated,
+    );
+    _sessionGuardTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -68,6 +84,7 @@ class _FleetHomeShellState extends State<FleetHomeShell>
     }
 
     NotificationStore.refresh();
+    _verifyCurrentSession();
     _refreshActiveDepartureState();
   }
 
@@ -281,5 +298,37 @@ class _FleetHomeShellState extends State<FleetHomeShell>
         ),
       ),
     );
+  }
+
+  void _handleSessionInvalidated() {
+    NotificationStore.resetReservationSyncState();
+
+    if (!mounted) {
+      return;
+    }
+
+    Navigator.of(
+      context,
+    ).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
+  }
+
+  Future<void> _verifyCurrentSession() async {
+    if (_isCheckingSession) {
+      return;
+    }
+
+    _isCheckingSession = true;
+    try {
+      final session = await _authSessionService.readSession();
+      if (session == null || session.isMockSession) {
+        return;
+      }
+
+      await _authApiService.refreshStoredSession(session);
+    } catch (_) {
+      // ApiClient handles invalid authenticated sessions globally.
+    } finally {
+      _isCheckingSession = false;
+    }
   }
 }

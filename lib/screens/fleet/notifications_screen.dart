@@ -203,9 +203,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           break;
         case _UnstartedReservationChoice.cancel:
           await _fleetApiService.deleteReservation(reservation);
-          await NotificationStore.clearUnstartedReservationReminder(
-            reservation.id,
-          );
+          await NotificationStore.clearReservationReminders(reservation.id);
           if (!mounted) {
             return;
           }
