@@ -10,6 +10,7 @@ import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/brand_top_bar.dart';
 import 'notifications_screen.dart';
+import 'personal_data_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, required this.onLogout});
@@ -157,8 +158,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     title: const Text('Données personnelles'),
                     subtitle: const Text('Informations RGPD et droits'),
                     trailing: const Icon(Icons.chevron_right),
-                    onTap: () =>
-                        Navigator.of(context).pushNamed(AppRoutes.personalData),
+                    onTap: () => _openPersonalData(context),
                   ),
                   const Divider(height: 16),
                   ListTile(
@@ -329,7 +329,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _openNotifications(BuildContext context) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
+        settings: const RouteSettings(name: AppRoutes.notifications),
         builder: (context) => const NotificationsScreen(),
+      ),
+    );
+  }
+
+  void _openPersonalData(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: AppRoutes.personalData),
+        builder: (context) => const PersonalDataScreen(),
       ),
     );
   }
