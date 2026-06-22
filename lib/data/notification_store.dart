@@ -29,6 +29,8 @@ class NotificationStore {
       'admin_alerted_unstarted_reservation_ids';
   static const String _emittedNativeNotificationsStorageKey =
       'emitted_native_notification_ids_v2';
+  static const String _nativeNotificationsDisabledStorageKey =
+      'native_notifications_disabled';
   static const String _remoteNativeNotificationBaselineStorageKey =
       'remote_native_notification_baseline_ready';
   static final Set<int> _dismissedLocalNotificationIds = <int>{};
@@ -45,6 +47,8 @@ class NotificationStore {
   static bool _maintainedUnstartedReservationIdsLoaded = false;
   static bool _adminAlertedUnstartedReservationIdsLoaded = false;
   static bool _emittedNativeNotificationIdsLoaded = false;
+  static bool _nativeNotificationsDisabledLoaded = false;
+  static bool _nativeNotificationsDisabled = false;
   static bool _remoteNativeNotificationBaselineLoaded = false;
   static bool _remoteNativeNotificationBaselineReady = false;
 
@@ -59,6 +63,25 @@ class NotificationStore {
   static bool isUnstartedReservationAction(AppNotification notification) {
     return notification.action ==
         AppNotificationAction.resolveUnstartedReservation;
+  }
+
+  static Future<bool> nativeNotificationsEnabled() async {
+    await _ensureNativeNotificationsDisabledLoaded();
+    return !_nativeNotificationsDisabled;
+  }
+
+  static Future<void> setNativeNotificationsEnabled(bool enabled) async {
+    await _ensureNativeNotificationsDisabledLoaded();
+    await _ensureEmittedNativeNotificationIdsLoaded();
+
+    _nativeNotificationsDisabled = !enabled;
+    await _persistNativeNotificationsDisabled();
+
+    if (!enabled) {
+      _emittedNativeNotificationIds.clear();
+      await _nativeNotifications.cancelAll();
+      await _persistEmittedNativeNotificationIds();
+    }
   }
 
   @visibleForTesting
@@ -286,10 +309,12 @@ class NotificationStore {
     _maintainedUnstartedReservationIds.clear();
     _adminAlertedUnstartedReservationIds.clear();
     _locallyCancelledReservationIds.clear();
+    _nativeNotificationsDisabled = false;
     _dismissedLocalNotificationIdsLoaded = false;
     _maintainedUnstartedReservationIdsLoaded = false;
     _adminAlertedUnstartedReservationIdsLoaded = false;
     _emittedNativeNotificationIdsLoaded = false;
+    _nativeNotificationsDisabledLoaded = false;
     _remoteNativeNotificationBaselineLoaded = false;
     _remoteNativeNotificationBaselineReady = false;
   }
@@ -434,6 +459,10 @@ class NotificationStore {
   static Future<void> _deliverNativeNotifications(
     Iterable<AppNotification> notifications,
   ) async {
+    if (!await nativeNotificationsEnabled()) {
+      return;
+    }
+
     await _ensureEmittedNativeNotificationIdsLoaded();
 
     var changed = false;
@@ -528,6 +557,10 @@ class NotificationStore {
     AppNotification notification,
     DateTime scheduledAt,
   ) async {
+    if (!await nativeNotificationsEnabled()) {
+      return;
+    }
+
     if (_emittedNativeNotificationIds.contains(notification.id)) {
       return;
     }
@@ -555,6 +588,34 @@ class NotificationStore {
 
     if (clearEmitted && _emittedNativeNotificationIds.remove(id)) {
       await _persistEmittedNativeNotificationIds();
+    }
+  }
+
+  static Future<void> _ensureNativeNotificationsDisabledLoaded() async {
+    if (_nativeNotificationsDisabledLoaded) {
+      return;
+    }
+
+    try {
+      final storedValue = await _storage.read(
+        key: _nativeNotificationsDisabledStorageKey,
+      );
+      _nativeNotificationsDisabled = storedValue == 'true';
+    } catch (_) {
+      _nativeNotificationsDisabled = false;
+    } finally {
+      _nativeNotificationsDisabledLoaded = true;
+    }
+  }
+
+  static Future<void> _persistNativeNotificationsDisabled() async {
+    try {
+      await _storage.write(
+        key: _nativeNotificationsDisabledStorageKey,
+        value: _nativeNotificationsDisabled ? 'true' : 'false',
+      );
+    } catch (_) {
+      // L'état en mémoire reste appliqué pour la session courante.
     }
   }
 

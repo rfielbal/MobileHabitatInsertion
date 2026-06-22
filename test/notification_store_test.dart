@@ -161,6 +161,42 @@ void main() {
     },
   );
 
+  test(
+    'disabled native notifications cancel pending alerts and block delivery',
+    () async {
+      final reservation = _reservation(
+        id: 'native-disabled-reservation',
+        startAt: DateTime(2026, 6, 18, 8),
+      );
+
+      await NotificationStore.upsertDepartureReminders([
+        reservation,
+      ], DateTime(2026, 6, 18, 8, 10));
+      expect(nativeNotifications.scheduled, hasLength(1));
+
+      await NotificationStore.setNativeNotificationsEnabled(false);
+      expect(nativeNotifications.cancelAllCount, 1);
+
+      nativeNotifications.shown.clear();
+      nativeNotifications.scheduled.clear();
+      await NotificationStore.upsertDepartureReminders([
+        reservation,
+      ], DateTime(2026, 6, 18, 8, 11));
+      await NotificationStore.upsertDeletedReservationNotifications([
+        _reservation(id: 'native-disabled-deleted-reservation'),
+      ]);
+
+      expect(nativeNotifications.scheduled, isEmpty);
+      expect(nativeNotifications.shown, isEmpty);
+
+      await NotificationStore.setNativeNotificationsEnabled(true);
+      await NotificationStore.upsertDepartureReminders([
+        reservation,
+      ], DateTime(2026, 6, 18, 8, 12));
+      expect(nativeNotifications.scheduled, hasLength(1));
+    },
+  );
+
   test('parses native notification tap payloads', () {
     final intent = NativeNotificationTapIntent.fromPayload(
       'notification:-123:reservation:42',
@@ -208,6 +244,7 @@ class _FakeNativeNotificationSink implements NativeNotificationSink {
   final List<AppNotification> shown = [];
   final List<_ScheduledNativeNotification> scheduled = [];
   final List<int> cancelled = [];
+  var cancelAllCount = 0;
   var enabled = true;
 
   @override
@@ -254,6 +291,11 @@ class _FakeNativeNotificationSink implements NativeNotificationSink {
   @override
   Future<void> cancel(int notificationId) async {
     cancelled.add(notificationId);
+  }
+
+  @override
+  Future<void> cancelAll() async {
+    cancelAllCount++;
   }
 }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../data/notification_store.dart';
 import '../../navigation/app_routes.dart';
 import '../../services/auth_session_service.dart';
 import '../../services/fleet_api_service.dart';
@@ -238,12 +239,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final status = await Permission.notification.status;
       final nativeEnabled = await NativeNotificationService.instance
           .notificationsEnabled();
+      final appEnabled = await NotificationStore.nativeNotificationsEnabled();
       if (!mounted) {
         return;
       }
       setState(() {
         _notificationPermissionStatus = status;
-        _notificationsEnabled = status.isGranted && nativeEnabled;
+        _notificationsEnabled = status.isGranted && nativeEnabled && appEnabled;
         _notificationsLoading = false;
         _permissionPluginAvailable = true;
       });
@@ -254,9 +256,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _setNotificationsEnabled(bool enabled) async {
     if (!enabled) {
+      await NotificationStore.setNativeNotificationsEnabled(false);
+      if (!mounted) {
+        return;
+      }
       setState(() {
         _notificationsEnabled = false;
       });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Notifications désactivées')),
+      );
       return;
     }
 
@@ -273,6 +282,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         if (!nativeGranted) {
           status = PermissionStatus.denied;
         }
+      }
+      if (status.isGranted) {
+        await NotificationStore.setNativeNotificationsEnabled(true);
       }
     } on MissingPluginException {
       _handleMissingPermissionPlugin();

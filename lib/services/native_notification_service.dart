@@ -22,6 +22,8 @@ abstract class NativeNotificationSink {
   });
 
   Future<void> cancel(int notificationId);
+
+  Future<void> cancelAll();
 }
 
 class NativeNotificationService implements NativeNotificationSink {
@@ -199,6 +201,19 @@ class NativeNotificationService implements NativeNotificationSink {
 
     try {
       await _plugin.cancel(id: notificationId);
+    } on MissingPluginException {
+      return;
+    } on PlatformException {
+      return;
+    }
+  }
+
+  @override
+  Future<void> cancelAll() async {
+    await initialize();
+
+    try {
+      await _plugin.cancelAll();
     } on MissingPluginException {
       return;
     } on PlatformException {
