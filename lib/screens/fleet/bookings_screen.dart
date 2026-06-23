@@ -385,10 +385,14 @@ class _BookingsScreenState extends State<BookingsScreen> {
 
   Future<List<FleetReservation>> _fetchReservations() async {
     final reservations = await _fleetApiService.fetchReservations();
-    await NotificationStore.syncServerReservations(
-      reservations,
-      locallyDeletedReservationIds: _locallyDeletedReservationIds,
-    );
+    try {
+      await NotificationStore.syncServerReservations(
+        reservations,
+        locallyDeletedReservationIds: _locallyDeletedReservationIds,
+      );
+    } catch (_) {
+      // Les rappels locaux ne doivent pas empêcher l'affichage du planning.
+    }
 
     final reservationIds = reservations
         .map((reservation) => reservation.id)

@@ -558,8 +558,10 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     required DateTime startAt,
     required DateTime endAt,
   }) async {
+    var reservations = const <FleetReservation>[];
+
     try {
-      final reservations = await _fleetApiService.fetchReservations();
+      reservations = await _fleetApiService.fetchReservations();
       if (userHasOverlappingReservation(
         reservations: reservations,
         startAt: startAt,
@@ -567,34 +569,41 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
       )) {
         return true;
       }
+    } catch (_) {
+      reservations = const [];
+    }
 
-      final availabilityStartAt = startAt.subtract(
-        reservationTurnaroundDuration,
-      );
-      final availabilityEndAt = endAt.add(reservationTurnaroundDuration);
+    final availabilityStartAt = startAt.subtract(reservationTurnaroundDuration);
+    final availabilityEndAt = endAt.add(reservationTurnaroundDuration);
 
+    try {
       return !(await _fleetApiService.isVehicleAvailableForPeriod(
         vehicle: widget.vehicle,
         startAt: availabilityStartAt,
         endAt: availabilityEndAt,
       ));
     } catch (_) {
-      return _rangeContainsUnavailableDayByMonth(
-        startAt: startAt,
-        endAt: endAt,
-      );
+      try {
+        return await _rangeContainsUnavailableDayByMonth(
+          startAt: startAt,
+          endAt: endAt,
+          reservations: reservations,
+        );
+      } catch (_) {
+        return false;
+      }
     }
   }
 
   Future<bool> _rangeContainsUnavailableDayByMonth({
     required DateTime startAt,
     required DateTime endAt,
+    required List<FleetReservation> reservations,
   }) async {
     final availabilityStartAt = startAt.subtract(reservationTurnaroundDuration);
     final availabilityEndAt = endAt.add(reservationTurnaroundDuration);
     var month = DateTime(availabilityStartAt.year, availabilityStartAt.month);
     final lastMonth = DateTime(availabilityEndAt.year, availabilityEndAt.month);
-    final reservations = await _fleetApiService.fetchReservations();
 
     if (userHasOverlappingReservation(
       reservations: reservations,

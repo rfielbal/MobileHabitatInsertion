@@ -259,6 +259,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       });
     } on MissingPluginException {
       _handleMissingPermissionPlugin();
+    } on PlatformException {
+      _handleNotificationPermissionUnavailable();
+    } catch (_) {
+      _handleNotificationPermissionUnavailable();
     }
   }
 
@@ -296,6 +300,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     } on MissingPluginException {
       _handleMissingPermissionPlugin();
+      return;
+    } on PlatformException {
+      _handleNotificationPermissionUnavailable();
+      return;
+    } catch (_) {
+      _handleNotificationPermissionUnavailable();
       return;
     }
 
@@ -344,6 +354,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       ),
     );
+  }
+
+  void _handleNotificationPermissionUnavailable() {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _notificationPermissionStatus = PermissionStatus.denied;
+      _notificationsEnabled = false;
+      _notificationsLoading = false;
+      _permissionPluginAvailable = true;
+    });
   }
 
   Future<void> _openNotifications(BuildContext context) async {
