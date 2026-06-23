@@ -14,9 +14,14 @@ import 'notifications_screen.dart';
 import 'personal_data_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key, required this.onLogout});
+  const ProfileScreen({
+    super.key,
+    required this.onLogout,
+    required this.onOpenReservationFromNotification,
+  });
 
   final Future<void> Function() onLogout;
+  final ValueChanged<String> onOpenReservationFromNotification;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -338,20 +343,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _openNotifications(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
+  Future<void> _openNotifications(BuildContext context) async {
+    final reservationId = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
         settings: const RouteSettings(name: AppRoutes.notifications),
         builder: (context) => const NotificationsScreen(),
       ),
     );
+
+    if (!context.mounted ||
+        reservationId == null ||
+        reservationId.trim().isEmpty) {
+      return;
+    }
+
+    widget.onOpenReservationFromNotification(reservationId);
   }
 
   void _openPersonalData(BuildContext context) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         settings: const RouteSettings(name: AppRoutes.personalData),
-        builder: (context) => const PersonalDataScreen(),
+        builder: (context) => PersonalDataScreen(
+          onOpenReservationFromNotification:
+              widget.onOpenReservationFromNotification,
+        ),
       ),
     );
   }

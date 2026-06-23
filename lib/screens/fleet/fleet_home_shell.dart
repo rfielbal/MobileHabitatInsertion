@@ -36,6 +36,7 @@ class _FleetHomeShellState extends State<FleetHomeShell>
   int _currentIndex = 0;
   int _vehicleRefreshVersion = 0;
   int _reservationRefreshVersion = 0;
+  String? _focusedReservationId;
   bool _hasActiveDeparture = true;
   bool _isCheckingSession = false;
 
@@ -149,20 +150,27 @@ class _FleetHomeShellState extends State<FleetHomeShell>
       0 => HomeScreen(
         onImmediateDeparture: _openImmediateDeparture,
         onPlanReservation: _openReservationPlanning,
+        onOpenReservationFromNotification: _openReservationFromNotification,
         showImmediateDeparture: !_hasActiveDeparture,
       ),
       1 => BookingsScreen(
         key: ValueKey('bookings-$_reservationRefreshVersion'),
         refreshVersion: _reservationRefreshVersion,
+        focusedReservationId: _focusedReservationId,
         onReservationChanged: _refreshVehicleData,
+        onOpenReservationFromNotification: _openReservationFromNotification,
       ),
-      _ => ProfileScreen(onLogout: _logout),
+      _ => ProfileScreen(
+        onLogout: _logout,
+        onOpenReservationFromNotification: _openReservationFromNotification,
+      ),
     };
   }
 
   void _selectTab(int index) {
     if (index == 1) {
       _reservationRefreshVersion++;
+      _focusedReservationId = null;
     }
 
     setState(() {
@@ -270,6 +278,8 @@ class _FleetHomeShellState extends State<FleetHomeShell>
               showBackButton: true,
               closeAfterReservation: true,
               onReservationChanged: _refreshReservationData,
+              onOpenReservationFromNotification:
+                  _openReservationFromNotification,
             ),
           ),
         )
@@ -290,13 +300,40 @@ class _FleetHomeShellState extends State<FleetHomeShell>
     setState(() {
       _currentIndex = 0;
     });
-    _navigatorKey.currentState?.push(
-      MaterialPageRoute<void>(
-        builder: (context) => NotificationsScreen(
-          initialNotificationId: intent.notificationId,
-          initialReservationId: intent.reservationId,
-        ),
-      ),
+    _navigatorKey.currentState
+        ?.push<String>(
+          MaterialPageRoute<String>(
+            builder: (context) => NotificationsScreen(
+              initialNotificationId: intent.notificationId,
+              initialReservationId: intent.reservationId,
+              initialAction: intent.action,
+            ),
+          ),
+        )
+        .then((reservationId) {
+          if (reservationId == null || reservationId.trim().isEmpty) {
+            return;
+          }
+
+          _openReservationFromNotification(reservationId);
+        });
+  }
+
+  void _openReservationFromNotification(String reservationId) {
+    final normalizedId = reservationId.trim();
+    if (normalizedId.isEmpty || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _currentIndex = 1;
+      _reservationRefreshVersion++;
+      _focusedReservationId = normalizedId;
+    });
+
+    _navigatorKey.currentState?.pushAndRemoveUntil(
+      _routeForIndex(1),
+      (route) => false,
     );
   }
 

@@ -12,11 +12,13 @@ class HomeScreen extends StatefulWidget {
     super.key,
     required this.onImmediateDeparture,
     required this.onPlanReservation,
+    required this.onOpenReservationFromNotification,
     this.showImmediateDeparture = true,
   });
 
   final VoidCallback onImmediateDeparture;
   final VoidCallback onPlanReservation;
+  final ValueChanged<String> onOpenReservationFromNotification;
   final bool showImmediateDeparture;
 
   @override
@@ -113,10 +115,18 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  void _openNotifications(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const NotificationsScreen()),
+  Future<void> _openNotifications(BuildContext context) async {
+    final reservationId = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(builder: (_) => const NotificationsScreen()),
     );
+
+    if (!context.mounted ||
+        reservationId == null ||
+        reservationId.trim().isEmpty) {
+      return;
+    }
+
+    widget.onOpenReservationFromNotification(reservationId);
   }
 }
 

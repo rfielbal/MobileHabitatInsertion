@@ -250,12 +250,17 @@ class NativeNotificationService implements NativeNotificationSink {
   }
 
   String _payload(AppNotification notification) {
-    final reservationId = notification.reservationId;
-    if (reservationId == null || reservationId.trim().isEmpty) {
-      return 'notification:${notification.id}';
+    final parts = ['notification', notification.id.toString()];
+    if (notification.action != AppNotificationAction.none) {
+      parts.addAll(['action', notification.action.name]);
     }
 
-    return 'notification:${notification.id}:reservation:$reservationId';
+    final reservationId = notification.reservationId;
+    if (reservationId != null && reservationId.trim().isNotEmpty) {
+      parts.addAll(['reservation', reservationId.trim()]);
+    }
+
+    return parts.join(':');
   }
 
   void _handleNotificationResponse(NotificationResponse response) {
@@ -367,10 +372,12 @@ class NativeNotificationService implements NativeNotificationSink {
 class NativeNotificationTapIntent {
   const NativeNotificationTapIntent({
     required this.notificationId,
+    required this.action,
     this.reservationId,
   });
 
   final int notificationId;
+  final AppNotificationAction action;
   final String? reservationId;
 
   static NativeNotificationTapIntent? fromPayload(
@@ -379,6 +386,7 @@ class NativeNotificationTapIntent {
   }) {
     final parts = payload?.split(':') ?? const <String>[];
     var notificationId = fallbackNotificationId;
+    var action = AppNotificationAction.none;
     String? reservationId;
 
     if (parts.length >= 2 && parts.first == 'notification') {
@@ -393,12 +401,20 @@ class NativeNotificationTapIntent {
       }
     }
 
+    final actionIndex = parts.indexOf('action');
+    if (actionIndex >= 0 && actionIndex + 1 < parts.length) {
+      action = AppNotificationActionParsing.fromPayloadValue(
+        parts[actionIndex + 1],
+      );
+    }
+
     if (notificationId == null) {
       return null;
     }
 
     return NativeNotificationTapIntent(
       notificationId: notificationId,
+      action: action,
       reservationId: reservationId,
     );
   }

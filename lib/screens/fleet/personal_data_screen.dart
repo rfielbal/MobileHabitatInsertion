@@ -7,7 +7,9 @@ import '../../widgets/brand_top_bar.dart';
 import 'notifications_screen.dart';
 
 class PersonalDataScreen extends StatelessWidget {
-  const PersonalDataScreen({super.key});
+  const PersonalDataScreen({super.key, this.onOpenReservationFromNotification});
+
+  final ValueChanged<String>? onOpenReservationFromNotification;
 
   @override
   Widget build(BuildContext context) {
@@ -65,13 +67,21 @@ class PersonalDataScreen extends StatelessWidget {
     );
   }
 
-  void _openNotifications(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
+  Future<void> _openNotifications(BuildContext context) async {
+    final reservationId = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
         settings: const RouteSettings(name: AppRoutes.notifications),
         builder: (_) => const NotificationsScreen(),
       ),
     );
+
+    if (!context.mounted ||
+        reservationId == null ||
+        reservationId.trim().isEmpty) {
+      return;
+    }
+
+    onOpenReservationFromNotification?.call(reservationId);
   }
 }
 

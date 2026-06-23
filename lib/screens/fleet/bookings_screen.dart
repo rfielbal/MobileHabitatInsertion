@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../data/notification_store.dart';
@@ -19,11 +21,15 @@ class BookingsScreen extends StatefulWidget {
   const BookingsScreen({
     super.key,
     this.refreshVersion = 0,
+    this.focusedReservationId,
     this.onReservationChanged,
+    this.onOpenReservationFromNotification,
   });
 
   final int refreshVersion;
+  final String? focusedReservationId;
   final VoidCallback? onReservationChanged;
+  final ValueChanged<String>? onOpenReservationFromNotification;
 
   @override
   State<BookingsScreen> createState() => _BookingsScreenState();
@@ -31,11 +37,18 @@ class BookingsScreen extends StatefulWidget {
 
 class _BookingsScreenState extends State<BookingsScreen> {
   final _fleetApiService = FleetApiService();
+  final _scrollController = ScrollController();
+  final _reservationKeys = <String, GlobalKey>{};
   late Future<List<FleetReservation>> _reservationsFuture;
   late final DateTime _minimumCalendarMonth;
   late DateTime _calendarMonth;
   bool _showHistory = false;
   String? _deletingReservationId;
+  String? _localFocusedReservationId;
+  String? _handledFocusedReservationId;
+  String? _highlightedReservationId;
+  bool _focusNotFoundShown = false;
+  Timer? _highlightTimer;
   final _locallyStartedReservationIds = <String>{};
   final _locallyStartedReservationConstatIds = <String, String>{};
   final _locallyCompletedReservationIds = <String>{};
@@ -51,11 +64,24 @@ class _BookingsScreenState extends State<BookingsScreen> {
   }
 
   @override
+  void dispose() {
+    _highlightTimer?.cancel();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   void didUpdateWidget(covariant BookingsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
 
     if (oldWidget.refreshVersion != widget.refreshVersion) {
       _reloadReservations();
+    }
+
+    if (oldWidget.focusedReservationId != widget.focusedReservationId) {
+      _localFocusedReservationId = null;
+      _handledFocusedReservationId = null;
+      _focusNotFoundShown = false;
     }
   }
 
@@ -69,6 +95,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
       ),
       body: SafeArea(
         child: ListView(
+          controller: _scrollController,
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
           children: [
             const Text(
@@ -95,6 +122,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
                 }
 
                 final allReservations = snapshot.data ?? const [];
+                _scheduleFocusedReservation(allReservations);
                 final upcomingReservations = allReservations
                     .where((reservation) => !reservation.isInHistory)
                     .toList();
@@ -163,13 +191,20 @@ class _BookingsScreenState extends State<BookingsScreen> {
                       )
                     else
                       for (final reservation in reservations) ...[
-                        _ReservationCard(
-                          reservation: reservation,
-                          now: DateTime.now(),
-                          isDeleting: _deletingReservationId == reservation.id,
-                          onPrimaryAction: () => _openReservation(reservation),
-                          onEdit: () => _editReservation(reservation),
-                          onDelete: () => _deleteReservation(reservation),
+                        KeyedSubtree(
+                          key: _keyForReservation(reservation.id),
+                          child: _ReservationCard(
+                            reservation: reservation,
+                            now: DateTime.now(),
+                            isDeleting:
+                                _deletingReservationId == reservation.id,
+                            highlighted:
+                                _highlightedReservationId == reservation.id,
+                            onPrimaryAction: () =>
+                                _openReservation(reservation),
+                            onEdit: () => _editReservation(reservation),
+                            onDelete: () => _deleteReservation(reservation),
+                          ),
                         ),
                         const SizedBox(height: 14),
                       ],
@@ -181,6 +216,98 @@ class _BookingsScreenState extends State<BookingsScreen> {
         ),
       ),
     );
+  }
+
+  GlobalKey _keyForReservation(String reservationId) {
+    return _reservationKeys.putIfAbsent(reservationId, GlobalKey.new);
+  }
+
+  void _scheduleFocusedReservation(List<FleetReservation> reservations) {
+    final targetId = (_localFocusedReservationId ?? widget.focusedReservationId)
+        ?.trim();
+    if (targetId == null ||
+        targetId.isEmpty ||
+        _handledFocusedReservationId == targetId) {
+      return;
+    }
+
+    FleetReservation? targetReservation;
+    for (final reservation in reservations) {
+      if (reservation.id == targetId) {
+        targetReservation = reservation;
+        break;
+      }
+    }
+
+    if (targetReservation == null) {
+      if (!_focusNotFoundShown) {
+        _focusNotFoundShown = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) {
+            return;
+          }
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Réservation introuvable ou déjà supprimée.'),
+            ),
+          );
+        });
+      }
+      return;
+    }
+
+    final targetIsInHistory = targetReservation.isInHistory;
+    if (_showHistory != targetIsInHistory) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _showHistory = targetIsInHistory;
+        });
+      });
+      return;
+    }
+
+    _handledFocusedReservationId = targetId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToReservation(targetId);
+    });
+  }
+
+  Future<void> _scrollToReservation(String reservationId) async {
+    if (!mounted) {
+      return;
+    }
+
+    final targetContext = _reservationKeys[reservationId]?.currentContext;
+    if (targetContext == null) {
+      return;
+    }
+
+    await Scrollable.ensureVisible(
+      targetContext,
+      duration: const Duration(milliseconds: 420),
+      curve: Curves.easeOutCubic,
+      alignment: 0.06,
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _highlightedReservationId = reservationId;
+    });
+    _highlightTimer?.cancel();
+    _highlightTimer = Timer(const Duration(seconds: 4), () {
+      if (!mounted || _highlightedReservationId != reservationId) {
+        return;
+      }
+      setState(() {
+        _highlightedReservationId = null;
+      });
+    });
   }
 
   void _openReservation(FleetReservation reservation) {
@@ -498,12 +625,31 @@ class _BookingsScreenState extends State<BookingsScreen> {
     return '$hour:$minute';
   }
 
-  void _openNotifications(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
+  Future<void> _openNotifications(BuildContext context) async {
+    final reservationId = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
         builder: (context) => const NotificationsScreen(),
       ),
     );
+
+    if (!context.mounted ||
+        reservationId == null ||
+        reservationId.trim().isEmpty) {
+      return;
+    }
+
+    final normalizedId = reservationId.trim();
+    if (widget.onOpenReservationFromNotification != null) {
+      widget.onOpenReservationFromNotification!(normalizedId);
+      return;
+    }
+
+    setState(() {
+      _localFocusedReservationId = normalizedId;
+      _handledFocusedReservationId = null;
+      _focusNotFoundShown = false;
+      _highlightedReservationId = null;
+    });
   }
 }
 
@@ -512,6 +658,7 @@ class _ReservationCard extends StatelessWidget {
     required this.reservation,
     required this.now,
     required this.isDeleting,
+    required this.highlighted,
     required this.onPrimaryAction,
     required this.onEdit,
     required this.onDelete,
@@ -520,6 +667,7 @@ class _ReservationCard extends StatelessWidget {
   final FleetReservation reservation;
   final DateTime now;
   final bool isDeleting;
+  final bool highlighted;
   final VoidCallback onPrimaryAction;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
@@ -528,108 +676,132 @@ class _ReservationCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isCompleted = reservation.isInHistory;
 
-    return AppCard(
-      opacity: isCompleted ? 0.78 : 1,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${reservation.vehicle.internalNumber} • ${reservation.vehicle.name}',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.pin_drop_outlined,
-                          size: 16,
-                          color: AppColors.onSurfaceVariant,
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+      padding: EdgeInsets.all(highlighted ? 3 : 0),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(19),
+        border: Border.all(
+          color: highlighted ? AppColors.primary : AppColors.transparent,
+          width: highlighted ? 2 : 0,
+        ),
+        boxShadow: highlighted
+            ? const [
+                BoxShadow(
+                  color: AppColors.primaryShadow,
+                  blurRadius: 14,
+                  offset: Offset(0, 6),
+                ),
+              ]
+            : null,
+      ),
+      child: AppCard(
+        opacity: isCompleted ? 0.78 : 1,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${reservation.vehicle.internalNumber} • ${reservation.vehicle.name}',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
                         ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            reservation.location,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: AppColors.onSurfaceVariant,
-                              fontSize: 13,
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.pin_drop_outlined,
+                            size: 16,
+                            color: AppColors.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              reservation.location,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: AppColors.onSurfaceVariant,
+                                fontSize: 13,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              StatusChip(
-                label: _statusLabel(reservation),
-                color: _statusColor(reservation),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: _DateBlock(
-                  label: 'Départ',
-                  value: reservation.startLabel,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _DateBlock(label: 'Retour', value: reservation.endLabel),
-              ),
-            ],
-          ),
-          if (!isCompleted) ...[
-            const SizedBox(height: 16),
-            const Divider(height: 1),
-            const SizedBox(height: 12),
-            Wrap(
-              alignment: WrapAlignment.end,
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                if (reservation.canBeEditedAt(now)) ...[
-                  OutlinedButton(
-                    onPressed: isDeleting ? null : onEdit,
-                    child: const Text('Modifier'),
-                  ),
-                ],
-                if (reservation.canBeCancelledAt(now)) ...[
-                  OutlinedButton(
-                    onPressed: isDeleting ? null : onDelete,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.error,
-                      side: const BorderSide(color: AppColors.error),
-                    ),
-                    child: Text(isDeleting ? 'Suppression...' : 'Supprimer'),
-                  ),
-                ],
-                FilledButton(
-                  onPressed: isDeleting ? null : onPrimaryAction,
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size(0, 42),
-                    padding: const EdgeInsets.symmetric(horizontal: 18),
-                  ),
-                  child: Text(_primaryActionLabel(reservation.status)),
+                StatusChip(
+                  label: _statusLabel(reservation),
+                  color: _statusColor(reservation),
                 ),
               ],
             ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: _DateBlock(
+                    label: 'Départ',
+                    value: reservation.startLabel,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _DateBlock(
+                    label: 'Retour',
+                    value: reservation.endLabel,
+                  ),
+                ),
+              ],
+            ),
+            if (!isCompleted) ...[
+              const SizedBox(height: 16),
+              const Divider(height: 1),
+              const SizedBox(height: 12),
+              Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (reservation.canBeEditedAt(now)) ...[
+                    OutlinedButton(
+                      onPressed: isDeleting ? null : onEdit,
+                      child: const Text('Modifier'),
+                    ),
+                  ],
+                  if (reservation.canBeCancelledAt(now)) ...[
+                    OutlinedButton(
+                      onPressed: isDeleting ? null : onDelete,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.error,
+                        side: const BorderSide(color: AppColors.error),
+                      ),
+                      child: Text(isDeleting ? 'Suppression...' : 'Supprimer'),
+                    ),
+                  ],
+                  FilledButton(
+                    onPressed: isDeleting ? null : onPrimaryAction,
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(0, 42),
+                      padding: const EdgeInsets.symmetric(horizontal: 18),
+                    ),
+                    child: Text(_primaryActionLabel(reservation.status)),
+                  ),
+                ],
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

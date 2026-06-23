@@ -45,6 +45,7 @@ void main() {
         home: HomeScreen(
           onImmediateDeparture: () => immediateDepartureCount++,
           onPlanReservation: () => planReservationCount++,
+          onOpenReservationFromNotification: (_) {},
         ),
       ),
     );
@@ -69,6 +70,7 @@ void main() {
           showImmediateDeparture: false,
           onImmediateDeparture: () {},
           onPlanReservation: () {},
+          onOpenReservationFromNotification: (_) {},
         ),
       ),
     );

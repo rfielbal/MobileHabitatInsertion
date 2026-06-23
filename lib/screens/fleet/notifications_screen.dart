@@ -12,10 +12,12 @@ class NotificationsScreen extends StatefulWidget {
     super.key,
     this.initialNotificationId,
     this.initialReservationId,
+    this.initialAction = AppNotificationAction.none,
   });
 
   final int? initialNotificationId;
   final String? initialReservationId;
+  final AppNotificationAction initialAction;
 
   @override
   State<NotificationsScreen> createState() => _NotificationsScreenState();
@@ -113,8 +115,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Future<void> _markAsRead(AppNotification notification) async {
+    await _markNotificationIdAsRead(notification.id);
+  }
+
+  Future<void> _markNotificationIdAsRead(int notificationId) async {
     try {
-      await NotificationStore.markAsRead(notification.id);
+      await NotificationStore.markAsRead(notificationId);
     } catch (e) {
       if (!mounted) {
         return;
@@ -128,11 +134,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Future<void> _openNotification(AppNotification notification) async {
     if (!NotificationStore.isUnstartedReservationAction(notification)) {
       await _markAsRead(notification);
+      final reservationId = _navigableReservationId(notification);
+      if (reservationId != null && mounted) {
+        Navigator.of(context).pop(reservationId);
+      }
       return;
     }
 
-    final reservationId = notification.reservationId;
-    if (reservationId == null || reservationId.trim().isEmpty) {
+    final reservationId = notification.reservationId?.trim();
+    if (reservationId == null || reservationId.isEmpty) {
       await _markAsRead(notification);
       return;
     }
@@ -228,6 +238,25 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
+  String? _navigableReservationId(AppNotification notification) {
+    final reservationId = notification.reservationId?.trim();
+    if (reservationId == null || reservationId.isEmpty) {
+      return null;
+    }
+
+    if (_isReservationDeletionNotification(notification)) {
+      return null;
+    }
+
+    return reservationId;
+  }
+
+  bool _isReservationDeletionNotification(AppNotification notification) {
+    final text = '${notification.title} ${notification.body}'.toLowerCase();
+    return (text.contains('réservation') || text.contains('reservation')) &&
+        text.contains('supprim');
+  }
+
   FleetReservation? _findReservationById(
     List<FleetReservation> reservations,
     String reservationId,
@@ -268,40 +297,60 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
 
     final reservationId = widget.initialReservationId;
-    if (reservationId != null && reservationId.trim().isNotEmpty) {
-      _handledInitialNotification = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) {
-          return;
-        }
-        _openUnstartedReservation(
-          reservationId,
-          notificationId: widget.initialNotificationId,
-        );
-      });
-      return;
-    }
-
     final notificationId = widget.initialNotificationId;
-    if (notificationId == null || NotificationStore.loading.value) {
+    if (NotificationStore.loading.value) {
       return;
     }
 
-    final notification = _findNotificationById(
-      NotificationStore.items.value,
-      notificationId,
-    );
-    if (notification == null) {
-      _handledInitialNotification = true;
+    if (notificationId != null) {
+      final notification = _findNotificationById(
+        NotificationStore.items.value,
+        notificationId,
+      );
+      if (notification != null) {
+        _handledInitialNotification = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) {
+            return;
+          }
+          _openNotification(notification);
+        });
+        return;
+      }
+    }
+
+    final normalizedReservationId = reservationId?.trim();
+    if (normalizedReservationId == null || normalizedReservationId.isEmpty) {
+      if (notificationId != null) {
+        _handledInitialNotification = true;
+      }
       return;
     }
 
     _handledInitialNotification = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) {
         return;
       }
-      _openNotification(notification);
+
+      if (widget.initialAction ==
+          AppNotificationAction.resolveUnstartedReservation) {
+        await _openUnstartedReservation(
+          normalizedReservationId,
+          notificationId: widget.initialNotificationId,
+        );
+        return;
+      }
+
+      final notificationId = widget.initialNotificationId;
+      if (notificationId != null) {
+        await _markNotificationIdAsRead(notificationId);
+      }
+
+      if (!mounted) {
+        return;
+      }
+      Navigator.of(context).pop(normalizedReservationId);
     });
   }
 

@@ -17,6 +17,7 @@ class VehiclesScreen extends StatefulWidget {
     this.filterCommandVersion = 0,
     this.statusFilter,
     this.onReservationChanged,
+    this.onOpenReservationFromNotification,
     this.showBackButton = false,
     this.closeAfterReservation = false,
   });
@@ -25,6 +26,7 @@ class VehiclesScreen extends StatefulWidget {
   final int filterCommandVersion;
   final VehicleStatus? statusFilter;
   final VoidCallback? onReservationChanged;
+  final ValueChanged<String>? onOpenReservationFromNotification;
   final bool showBackButton;
   final bool closeAfterReservation;
 
@@ -256,12 +258,20 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
         });
   }
 
-  void _openNotifications(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
+  Future<void> _openNotifications(BuildContext context) async {
+    final reservationId = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
         builder: (context) => const NotificationsScreen(),
       ),
     );
+
+    if (!context.mounted ||
+        reservationId == null ||
+        reservationId.trim().isEmpty) {
+      return;
+    }
+
+    widget.onOpenReservationFromNotification?.call(reservationId);
   }
 }
 

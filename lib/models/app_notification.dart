@@ -2,6 +2,16 @@ import 'package:flutter/material.dart';
 
 enum AppNotificationAction { none, resolveUnstartedReservation }
 
+extension AppNotificationActionParsing on AppNotificationAction {
+  static AppNotificationAction fromPayloadValue(String? value) {
+    return switch (value) {
+      'resolveUnstartedReservation' =>
+        AppNotificationAction.resolveUnstartedReservation,
+      _ => AppNotificationAction.none,
+    };
+  }
+}
+
 class AppNotification {
   const AppNotification({
     required this.id,

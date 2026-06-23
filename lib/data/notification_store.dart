@@ -418,6 +418,7 @@ class NotificationStore {
       timeLabel: 'Maintenant',
       icon: Icons.assignment_return_outlined,
       color: AppColors.maintenance,
+      reservationId: reservation.id,
     );
   }
 
