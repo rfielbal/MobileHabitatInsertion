@@ -84,7 +84,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   children: [
                     if (error != null) ...[
                       _NotificationsError(
-                        message: 'Impossible de synchroniser les notifications',
+                        message: error,
                         onRetry: NotificationStore.refresh,
                       ),
                       const SizedBox(height: 12),

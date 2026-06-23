@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/notification_store.dart';
 import '../../models/reservation.dart';
+import '../../services/api_exception.dart';
 import '../../services/fleet_api_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
@@ -118,7 +119,10 @@ class _BookingsScreenState extends State<BookingsScreen> {
                 }
 
                 if (snapshot.hasError) {
-                  return _BookingsError(onRetry: _reloadReservations);
+                  return _BookingsError(
+                    message: _reservationErrorMessage(snapshot.error),
+                    onRetry: _reloadReservations,
+                  );
                 }
 
                 final allReservations = snapshot.data ?? const [];
@@ -450,6 +454,19 @@ class _BookingsScreenState extends State<BookingsScreen> {
       DateTime.now(),
     );
     return reservationsWithLocalState;
+  }
+
+  String _reservationErrorMessage(Object? error) {
+    if (error is ApiException) {
+      return error.message;
+    }
+
+    final message = error?.toString().trim() ?? '';
+    if (message.isEmpty) {
+      return 'Impossible de charger les réservations depuis l’API.';
+    }
+
+    return message;
   }
 
   void _openPickupForm(FleetReservation reservation) {
@@ -905,8 +922,9 @@ class _ReservationCalendarSection extends StatelessWidget {
 }
 
 class _BookingsError extends StatelessWidget {
-  const _BookingsError({required this.onRetry});
+  const _BookingsError({required this.message, required this.onRetry});
 
+  final String message;
   final VoidCallback onRetry;
 
   @override
@@ -920,10 +938,10 @@ class _BookingsError extends StatelessWidget {
             size: 34,
           ),
           const SizedBox(height: 12),
-          const Text(
-            'Impossible de charger les réservations depuis l’API.',
+          Text(
+            message,
             textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.onSurfaceVariant),
+            style: const TextStyle(color: AppColors.onSurfaceVariant),
           ),
           const SizedBox(height: 12),
           OutlinedButton.icon(

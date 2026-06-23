@@ -86,10 +86,11 @@ class NativeNotificationService implements NativeNotificationSink {
       final androidGranted = await androidPlugin
           ?.requestNotificationsPermission();
       if (androidPlugin != null) {
-        final exactGranted = androidGranted == false
-            ? false
-            : await _requestExactAlarmsPermission(androidPlugin);
-        return (androidGranted ?? true) && exactGranted;
+        if (androidGranted != false) {
+          await _requestExactAlarmsPermission(androidPlugin);
+        }
+
+        return androidGranted ?? true;
       }
 
       final iosGranted = await _plugin
@@ -114,9 +115,7 @@ class NativeNotificationService implements NativeNotificationSink {
       final androidPlugin = _androidPlugin;
       if (androidPlugin != null) {
         final androidEnabled = await androidPlugin.areNotificationsEnabled();
-        final exactEnabled = await androidPlugin
-            .canScheduleExactNotifications();
-        return (androidEnabled ?? true) && (exactEnabled ?? true);
+        return androidEnabled ?? true;
       }
 
       final iosSettings = await _plugin

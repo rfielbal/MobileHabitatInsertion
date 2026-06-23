@@ -238,13 +238,19 @@ class ApiClient {
       return null;
     }
 
-    return jsonDecode(response.body) as Object?;
+    try {
+      return jsonDecode(response.body) as Object?;
+    } on FormatException {
+      throw ApiException(
+        message: 'Réponse API invalide.',
+        statusCode: response.statusCode,
+        details: response.body,
+      );
+    }
   }
 
   ApiException? _maintenanceExceptionFor(Object error) {
-    if (error is TimeoutException ||
-        error is http.ClientException ||
-        error is FormatException) {
+    if (error is TimeoutException || error is http.ClientException) {
       return ApiException.maintenance();
     }
 
