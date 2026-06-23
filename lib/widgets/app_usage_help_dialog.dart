@@ -3,7 +3,14 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import 'app_card.dart';
 
-enum AppUsageHelpTopic { home, bookings, immediateDeparture }
+enum AppUsageHelpTopic {
+  home,
+  vehicles,
+  bookings,
+  immediateDeparture,
+  profile,
+  personalData,
+}
 
 Future<void> showAppUsageHelp(BuildContext context, AppUsageHelpTopic topic) {
   final content = _contentForTopic(topic);
@@ -97,6 +104,33 @@ _GuideContent _contentForTopic(AppUsageHelpTopic topic) {
       tip:
           'Si un bouton n’apparaît pas, c’est que l’action n’est pas encore disponible pour votre réservation.',
     ),
+    AppUsageHelpTopic.vehicles => const _GuideContent(
+      title: 'Guide des véhicules',
+      intro:
+          'Cette page permet de consulter le parc accessible et de lancer une réservation classique.',
+      steps: [
+        _GuideStepData(
+          icon: Icons.search,
+          title: 'Rechercher',
+          body:
+              'Utilisez la recherche pour retrouver un véhicule par numéro, modèle ou plaque.',
+        ),
+        _GuideStepData(
+          icon: Icons.tune_outlined,
+          title: 'Filtrer',
+          body:
+              'Affinez la liste par site, statut ou marque pour ne garder que les véhicules pertinents.',
+        ),
+        _GuideStepData(
+          icon: Icons.calendar_month_outlined,
+          title: 'Réserver',
+          body:
+              'Ouvrez la fiche d’un véhicule pour consulter ses disponibilités et choisir votre créneau.',
+        ),
+      ],
+      tip:
+          'Les véhicules les plus proches et les moins kilométrés sont proposés en priorité.',
+    ),
     AppUsageHelpTopic.bookings => const _GuideContent(
       title: 'Guide des réservations',
       intro:
@@ -156,6 +190,60 @@ _GuideContent _contentForTopic(AppUsageHelpTopic topic) {
       ],
       tip:
           'Si la validation échoue, le véhicule a peut-être été réservé entre-temps.',
+    ),
+    AppUsageHelpTopic.profile => const _GuideContent(
+      title: 'Guide du profil',
+      intro:
+          'Cette page regroupe vos informations de compte et vos préférences locales.',
+      steps: [
+        _GuideStepData(
+          icon: Icons.person_outline,
+          title: 'Informations',
+          body:
+              'Vérifiez votre identité, votre pôle et les sites auxquels vous êtes rattaché.',
+        ),
+        _GuideStepData(
+          icon: Icons.notifications_none,
+          title: 'Notifications',
+          body:
+              'Activez ou désactivez les notifications locales selon vos besoins.',
+        ),
+        _GuideStepData(
+          icon: Icons.privacy_tip_outlined,
+          title: 'Données personnelles',
+          body:
+              'Consultez les informations RGPD et les droits liés à l’utilisation de Wheello.',
+        ),
+      ],
+      tip:
+          'Si une information de compte est incorrecte, contactez un administrateur.',
+    ),
+    AppUsageHelpTopic.personalData => const _GuideContent(
+      title: 'Guide des données personnelles',
+      intro:
+          'Cette page explique quelles données sont utilisées dans Wheello et pourquoi.',
+      steps: [
+        _GuideStepData(
+          icon: Icons.info_outline,
+          title: 'Finalité',
+          body:
+              'Les données servent à gérer les réservations, trajets, constats, signalements et notifications.',
+        ),
+        _GuideStepData(
+          icon: Icons.folder_outlined,
+          title: 'Données concernées',
+          body:
+              'Les informations listées décrivent les données nécessaires au fonctionnement de l’application.',
+        ),
+        _GuideStepData(
+          icon: Icons.contact_support_outlined,
+          title: 'Vos droits',
+          body:
+              'Pour exercer vos droits, passez par le contact interne indiqué par votre structure.',
+        ),
+      ],
+      tip:
+          'Cette page est informative : elle ne modifie pas vos réservations ni vos paramètres.',
     ),
   };
 }

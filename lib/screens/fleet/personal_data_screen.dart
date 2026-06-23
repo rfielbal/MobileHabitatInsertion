@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../navigation/app_routes.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
+import '../../widgets/app_usage_help_dialog.dart';
 import '../../widgets/brand_top_bar.dart';
 import 'notifications_screen.dart';
 
@@ -17,6 +18,8 @@ class PersonalDataScreen extends StatelessWidget {
       appBar: BrandTopBar(
         showBackButton: true,
         onNotificationsPressed: () => _openNotifications(context),
+        onHelpPressed: () =>
+            showAppUsageHelp(context, AppUsageHelpTopic.personalData),
       ),
       body: SafeArea(
         child: ListView(

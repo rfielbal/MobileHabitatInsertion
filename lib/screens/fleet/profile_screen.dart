@@ -9,6 +9,7 @@ import '../../services/fleet_api_service.dart';
 import '../../services/native_notification_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
+import '../../widgets/app_usage_help_dialog.dart';
 import '../../widgets/brand_top_bar.dart';
 import 'notifications_screen.dart';
 import 'personal_data_screen.dart';
@@ -52,6 +53,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       appBar: BrandTopBar(
         onNotificationsPressed: () => _openNotifications(context),
+        onHelpPressed: () =>
+            showAppUsageHelp(context, AppUsageHelpTopic.profile),
       ),
       body: SafeArea(
         child: ListView(

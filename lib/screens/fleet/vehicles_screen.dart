@@ -5,6 +5,7 @@ import '../../services/fleet_api_service.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/vehicle_sort.dart';
 import '../../widgets/app_card.dart';
+import '../../widgets/app_usage_help_dialog.dart';
 import '../../widgets/brand_top_bar.dart';
 import '../../widgets/vehicle_card.dart';
 import 'notifications_screen.dart';
@@ -145,6 +146,8 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
     return Scaffold(
       appBar: BrandTopBar(
         onNotificationsPressed: () => _openNotifications(context),
+        onHelpPressed: () =>
+            showAppUsageHelp(context, AppUsageHelpTopic.vehicles),
         showBackButton: widget.showBackButton,
       ),
       body: SafeArea(
