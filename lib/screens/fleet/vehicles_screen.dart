@@ -72,6 +72,9 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
   List<Vehicle> _filteredVehicles(
     List<Vehicle> allVehicles,
     List<String> sitePriority,
+    String selectedSite,
+    String? selectedBrand,
+    VehicleStatus? selectedStatus,
   ) {
     final query = _searchController.text.trim().toLowerCase();
     final vehicles = allVehicles.where((vehicle) {
@@ -83,12 +86,11 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
           vehicle.model.toLowerCase().contains(query) ||
           vehicle.site.toLowerCase().contains(query) ||
           vehicle.plateNumber.toLowerCase().contains(query);
-      final matchesSite =
-          _selectedSite == null || vehicle.site == _selectedSite;
+      final matchesSite = vehicle.site == selectedSite;
       final matchesBrand =
-          _selectedBrand == null || vehicle.brand == _selectedBrand;
+          selectedBrand == null || vehicle.brand == selectedBrand;
       final matchesStatus =
-          _selectedStatus == null || vehicle.status == _selectedStatus;
+          selectedStatus == null || vehicle.status == selectedStatus;
 
       return matchesQuery && matchesSite && matchesBrand && matchesStatus;
     }).toList();
@@ -191,18 +193,35 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
                 }
 
                 final data = snapshot.data ?? const _VehiclesData.empty();
+                final brands = _brands(data.vehicles);
+                final selectedSite = data.sites.contains(_selectedSite)
+                    ? _selectedSite
+                    : null;
+                final selectedBrand = brands.contains(_selectedBrand)
+                    ? _selectedBrand
+                    : null;
+                final selectedStatus =
+                    _selectedStatus != null &&
+                        _selectedStatus!.canBeUsedAsFilter
+                    ? _selectedStatus
+                    : null;
 
                 return _VehiclesContent(
                   vehicles: data.vehicles,
-                  filteredVehicles: _filteredVehicles(
-                    data.vehicles,
-                    data.sites,
-                  ),
+                  filteredVehicles: selectedSite == null
+                      ? const []
+                      : _filteredVehicles(
+                          data.vehicles,
+                          data.sites,
+                          selectedSite,
+                          selectedBrand,
+                          selectedStatus,
+                        ),
                   sites: data.sites,
-                  brands: _brands(data.vehicles),
-                  selectedSite: _selectedSite,
-                  selectedBrand: _selectedBrand,
-                  selectedStatus: _selectedStatus,
+                  brands: brands,
+                  selectedSite: selectedSite,
+                  selectedBrand: selectedBrand,
+                  selectedStatus: selectedStatus,
                   onSiteChanged: (value) =>
                       setState(() => _selectedSite = value),
                   onBrandChanged: (value) =>
@@ -342,7 +361,9 @@ class _VehiclesContent extends StatelessWidget {
           onReset: onReset,
         ),
         const SizedBox(height: 18),
-        if (filteredVehicles.isEmpty)
+        if (selectedSite == null)
+          const _SelectDepartureSitePrompt()
+        else if (filteredVehicles.isEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 32),
             child: Center(
@@ -358,6 +379,27 @@ class _VehiclesContent extends StatelessWidget {
             const SizedBox(height: 14),
           ],
       ],
+    );
+  }
+}
+
+class _SelectDepartureSitePrompt extends StatelessWidget {
+  const _SelectDepartureSitePrompt();
+
+  @override
+  Widget build(BuildContext context) {
+    return const AppCard(
+      child: Column(
+        children: [
+          Icon(Icons.location_on_outlined, color: AppColors.primary, size: 34),
+          SizedBox(height: 12),
+          Text(
+            'Sélectionnez un site de départ pour afficher les véhicules disponibles.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.onSurfaceVariant),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -432,12 +474,9 @@ class _VehicleFilters extends StatelessWidget {
               child: DropdownButtonFormField<String>(
                 initialValue: selectedSite,
                 isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Site'),
+                decoration: const InputDecoration(labelText: 'Site de départ'),
+                hint: const Text('Sélectionner'),
                 items: [
-                  const DropdownMenuItem<String>(
-                    value: null,
-                    child: Text('Tous'),
-                  ),
                   for (final site in sites)
                     DropdownMenuItem(value: site, child: Text(site)),
                 ],
