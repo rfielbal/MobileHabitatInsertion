@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../data/mobile_update_store.dart';
 import '../../data/notification_store.dart';
 import '../../models/reservation.dart';
 import '../../navigation/app_routes.dart';
@@ -33,6 +34,7 @@ class _FleetHomeShellState extends State<FleetHomeShell>
   final _authSessionService = const AuthSessionService();
   final _fleetApiService = FleetApiService();
   Timer? _sessionGuardTimer;
+  Timer? _mobileUpdateTimer;
   int _currentIndex = 0;
   int _vehicleRefreshVersion = 0;
   int _reservationRefreshVersion = 0;
@@ -52,7 +54,12 @@ class _FleetHomeShellState extends State<FleetHomeShell>
       const Duration(seconds: 60),
       (_) => _verifyCurrentSession(),
     );
+    _mobileUpdateTimer = Timer.periodic(
+      const Duration(minutes: 5),
+      (_) => MobileUpdateStore.refresh(),
+    );
     NotificationStore.refresh();
+    MobileUpdateStore.refresh();
     _refreshActiveDepartureState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _handleNativeNotificationTap();
@@ -68,6 +75,7 @@ class _FleetHomeShellState extends State<FleetHomeShell>
       _handleSessionInvalidated,
     );
     _sessionGuardTimer?.cancel();
+    _mobileUpdateTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -85,6 +93,7 @@ class _FleetHomeShellState extends State<FleetHomeShell>
     }
 
     NotificationStore.refresh();
+    MobileUpdateStore.refresh();
     _verifyCurrentSession();
     _refreshActiveDepartureState();
   }
@@ -131,6 +140,7 @@ class _FleetHomeShellState extends State<FleetHomeShell>
     }
 
     NotificationStore.resetReservationSyncState();
+    MobileUpdateStore.reset();
     if (!mounted) {
       return;
     }

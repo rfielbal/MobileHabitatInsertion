@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../data/mobile_update_store.dart';
 import '../data/notification_store.dart';
+import '../models/mobile_update.dart';
 import '../theme/app_assets.dart';
 import '../theme/app_brand.dart';
 import '../theme/app_colors.dart';
@@ -77,6 +80,20 @@ class BrandTopBar extends StatelessWidget implements PreferredSizeWidget {
         ],
         AnimatedBuilder(
           animation: Listenable.merge([
+            MobileUpdateStore.info,
+            MobileUpdateStore.loading,
+          ]),
+          builder: (context, _) {
+            return IconButton(
+              tooltip: 'Mises à jour',
+              onPressed: () => _showMobileUpdateSheet(context),
+              icon: _UpdateIcon(count: MobileUpdateStore.pendingCount),
+            );
+          },
+        ),
+        const SizedBox(width: 2),
+        AnimatedBuilder(
+          animation: Listenable.merge([
             NotificationStore.items,
             NotificationStore.readIds,
           ]),
@@ -92,6 +109,35 @@ class BrandTopBar extends StatelessWidget implements PreferredSizeWidget {
         ),
         const SizedBox(width: 4),
       ],
+    );
+  }
+}
+
+void _showMobileUpdateSheet(BuildContext context) {
+  showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    backgroundColor: AppColors.surfaceLowest,
+    builder: (context) => const _MobileUpdateSheet(),
+  );
+}
+
+class _UpdateIcon extends StatelessWidget {
+  const _UpdateIcon({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    if (count <= 0) {
+      return const Icon(Icons.system_update_alt);
+    }
+
+    return Badge(
+      label: Text(count > 9 ? '9+' : '$count'),
+      backgroundColor: AppColors.error,
+      textColor: AppColors.onPrimary,
+      child: const Icon(Icons.system_update_alt),
     );
   }
 }
@@ -114,4 +160,290 @@ class _NotificationIcon extends StatelessWidget {
       child: const Icon(Icons.notifications_none),
     );
   }
+}
+
+class _MobileUpdateSheet extends StatefulWidget {
+  const _MobileUpdateSheet();
+
+  @override
+  State<_MobileUpdateSheet> createState() => _MobileUpdateSheetState();
+}
+
+class _MobileUpdateSheetState extends State<_MobileUpdateSheet> {
+  @override
+  void initState() {
+    super.initState();
+    MobileUpdateStore.refresh();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([
+        MobileUpdateStore.info,
+        MobileUpdateStore.loading,
+        MobileUpdateStore.error,
+      ]),
+      builder: (context, _) {
+        final info = MobileUpdateStore.info.value;
+        final loading = MobileUpdateStore.loading.value;
+        final error = MobileUpdateStore.error.value;
+
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _MobileUpdateHeader(info: info, loading: loading, error: error),
+                const SizedBox(height: 18),
+                if (loading && info == null)
+                  const LinearProgressIndicator(minHeight: 3)
+                else
+                  _MobileUpdateDetails(info: info, error: error),
+                const SizedBox(height: 18),
+                _MobileUpdateActions(
+                  info: info,
+                  loading: loading,
+                  onDownload: _openDownload,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _openDownload(MobileUpdateInfo info) async {
+    final url = info.downloadUrl;
+    if (url == null) {
+      return;
+    }
+
+    final opened = await launchUrl(url, mode: LaunchMode.externalApplication);
+    if (!opened || !mounted) {
+      return;
+    }
+
+    Navigator.of(context).pop();
+  }
+}
+
+class _MobileUpdateHeader extends StatelessWidget {
+  const _MobileUpdateHeader({
+    required this.info,
+    required this.loading,
+    required this.error,
+  });
+
+  final MobileUpdateInfo? info;
+  final bool loading;
+  final String? error;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = _status;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: status.color.withValues(alpha: 0.12),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(status.icon, color: status.color),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                status.title,
+                style: const TextStyle(
+                  color: AppColors.onSurface,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                status.subtitle,
+                style: const TextStyle(
+                  color: AppColors.onSurfaceVariant,
+                  fontSize: 14,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  _MobileUpdateStatus get _status {
+    if (loading && info == null) {
+      return const _MobileUpdateStatus(
+        icon: Icons.sync,
+        color: AppColors.primary,
+        title: 'Vérification en cours',
+        subtitle: 'Recherche de la dernière version disponible.',
+      );
+    }
+
+    if (error != null && info == null) {
+      return const _MobileUpdateStatus(
+        icon: Icons.cloud_off_outlined,
+        color: AppColors.maintenance,
+        title: 'Vérification indisponible',
+        subtitle: 'Nous sommes en maintenance, veuillez nous excuser',
+      );
+    }
+
+    if (info?.updateAvailable == true) {
+      return const _MobileUpdateStatus(
+        icon: Icons.system_update_alt,
+        color: AppColors.error,
+        title: 'Mise à jour disponible',
+        subtitle: 'Une nouvelle version de Wheello peut être téléchargée.',
+      );
+    }
+
+    if (info?.apkAvailable == true) {
+      return const _MobileUpdateStatus(
+        icon: Icons.check_circle_outline,
+        color: AppColors.available,
+        title: 'Application à jour',
+        subtitle: 'La version installée correspond à la version publiée.',
+      );
+    }
+
+    return const _MobileUpdateStatus(
+      icon: Icons.info_outline,
+      color: AppColors.outline,
+      title: 'Aucune version publiée',
+      subtitle: 'Le téléchargement sera disponible après dépôt de l’APK.',
+    );
+  }
+}
+
+class _MobileUpdateDetails extends StatelessWidget {
+  const _MobileUpdateDetails({required this.info, required this.error});
+
+  final MobileUpdateInfo? info;
+  final String? error;
+
+  @override
+  Widget build(BuildContext context) {
+    final updateInfo = info;
+    if (updateInfo == null) {
+      return Text(
+        error ?? 'Statut de mise à jour indisponible.',
+        style: const TextStyle(color: AppColors.onSurfaceVariant),
+      );
+    }
+
+    final rows = <String>[
+      if (updateInfo.currentVersionName != null)
+        'Version installée : ${updateInfo.currentVersionName}+${updateInfo.currentVersionCode}'
+      else
+        'Code installé : ${updateInfo.currentVersionCode}',
+      if (updateInfo.latestVersionName != null)
+        'Version publiée : ${updateInfo.latestVersionName}${updateInfo.latestVersionCode != null ? '+${updateInfo.latestVersionCode}' : ''}',
+      if (updateInfo.apkSizeLabel != null)
+        'Taille : ${updateInfo.apkSizeLabel}',
+    ];
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceLow,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final row in rows) ...[
+            Text(
+              row,
+              style: const TextStyle(color: AppColors.onSurface, fontSize: 14),
+            ),
+            const SizedBox(height: 6),
+          ],
+          if (updateInfo.releaseNotes != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              updateInfo.releaseNotes!,
+              style: const TextStyle(
+                color: AppColors.onSurfaceVariant,
+                fontSize: 14,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _MobileUpdateActions extends StatelessWidget {
+  const _MobileUpdateActions({
+    required this.info,
+    required this.loading,
+    required this.onDownload,
+  });
+
+  final MobileUpdateInfo? info;
+  final bool loading;
+  final ValueChanged<MobileUpdateInfo> onDownload;
+
+  @override
+  Widget build(BuildContext context) {
+    final canDownload =
+        info?.updateAvailable == true && info?.downloadUrl != null;
+
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: loading ? null : MobileUpdateStore.refresh,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Vérifier'),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: FilledButton.icon(
+            onPressed: canDownload ? () => onDownload(info!) : null,
+            icon: const Icon(Icons.download),
+            label: const Text('Télécharger'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MobileUpdateStatus {
+  const _MobileUpdateStatus({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
 }
