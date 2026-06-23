@@ -203,7 +203,18 @@ void main() {
     );
 
     expect(intent?.notificationId, -123);
+    expect(intent?.action, AppNotificationAction.none);
     expect(intent?.reservationId, '42');
+  });
+
+  test('parses native notification action tap payloads', () {
+    final intent = NativeNotificationTapIntent.fromPayload(
+      'notification:-789:action:resolveUnstartedReservation:reservation:84',
+    );
+
+    expect(intent?.notificationId, -789);
+    expect(intent?.action, AppNotificationAction.resolveUnstartedReservation);
+    expect(intent?.reservationId, '84');
   });
 
   test('parses native notification tap payload without reservation', () {
@@ -213,6 +224,7 @@ void main() {
     );
 
     expect(intent?.notificationId, -456);
+    expect(intent?.action, AppNotificationAction.none);
     expect(intent?.reservationId, isNull);
   });
 
