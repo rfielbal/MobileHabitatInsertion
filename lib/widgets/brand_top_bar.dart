@@ -417,37 +417,83 @@ class _MobileUpdateDetails extends StatelessWidget {
       );
     }
 
-    final rows = <String>[
-      if (updateInfo.currentVersionName != null)
-        'Version installée : ${updateInfo.currentVersionName}+${updateInfo.currentVersionCode}'
-      else
-        'Code installé : ${updateInfo.currentVersionCode}',
-      if (updateInfo.latestVersionName != null)
-        'Version publiée : ${updateInfo.latestVersionName}${updateInfo.latestVersionCode != null ? '+${updateInfo.latestVersionCode}' : ''}',
-      if (updateInfo.apkSizeLabel != null)
-        'Taille : ${updateInfo.apkSizeLabel}',
-    ];
+    final currentVersion = _readableVersion(
+      updateInfo.currentVersionName,
+      updateInfo.currentVersionCode,
+    );
+    final latestVersion = _readableVersion(
+      updateInfo.latestVersionName,
+      updateInfo.latestVersionCode,
+    );
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surfaceLow,
+        color: AppColors.surfaceLowest,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: AppColors.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final row in rows) ...[
-            Text(
-              row,
-              style: const TextStyle(color: AppColors.onSurface, fontSize: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _VersionTile(
+                  label: 'Votre application',
+                  version: currentVersion,
+                  icon: Icons.phone_android,
+                  color: AppColors.onSurfaceVariant,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: Icon(
+                  updateInfo.updateAvailable
+                      ? Icons.arrow_forward
+                      : Icons.check,
+                  color: updateInfo.updateAvailable
+                      ? AppColors.primary
+                      : AppColors.available,
+                  size: 22,
+                ),
+              ),
+              Expanded(
+                child: _VersionTile(
+                  label: updateInfo.updateAvailable
+                      ? 'Nouvelle version'
+                      : 'Version publiée',
+                  version: latestVersion,
+                  icon: updateInfo.updateAvailable
+                      ? Icons.system_update_alt
+                      : Icons.verified_outlined,
+                  color: updateInfo.updateAvailable
+                      ? AppColors.primary
+                      : AppColors.available,
+                ),
+              ),
+            ],
+          ),
+          if (updateInfo.apkSizeLabel != null) ...[
+            const SizedBox(height: 14),
+            _UpdateInfoPill(
+              icon: Icons.download_outlined,
+              label: 'Téléchargement',
+              value: updateInfo.apkSizeLabel!,
             ),
-            const SizedBox(height: 6),
           ],
           if (updateInfo.releaseNotes != null) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: 14),
+            const Text(
+              'Ce qui change',
+              style: TextStyle(
+                color: AppColors.onSurface,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 6),
             Text(
               updateInfo.releaseNotes!,
               style: const TextStyle(
@@ -468,6 +514,120 @@ class _MobileUpdateDetails extends StatelessWidget {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  String _readableVersion(String? versionName, int? versionCode) {
+    if (versionName != null && versionName.trim().isNotEmpty) {
+      return versionName.trim();
+    }
+
+    if (versionCode != null) {
+      return 'Version $versionCode';
+    }
+
+    return 'Non connue';
+  }
+}
+
+class _VersionTile extends StatelessWidget {
+  const _VersionTile({
+    required this.label,
+    required this.version,
+    required this.icon,
+    required this.color,
+  });
+
+  final String label;
+  final String version;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppColors.onSurfaceVariant,
+              fontSize: 12,
+              height: 1.2,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            version,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppColors.onSurface,
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+              height: 1.1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _UpdateInfoPill extends StatelessWidget {
+  const _UpdateInfoPill({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceLow,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: AppColors.primary, size: 18),
+          const SizedBox(width: 8),
+          Text(
+            '$label : ',
+            style: const TextStyle(
+              color: AppColors.onSurfaceVariant,
+              fontSize: 13,
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.onSurface,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
         ],
       ),
     );
