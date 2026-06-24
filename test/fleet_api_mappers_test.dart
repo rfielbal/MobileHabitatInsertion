@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mobile_habitat_insertion/models/app_notification.dart';
 import 'package:mobile_habitat_insertion/models/reservation.dart';
 import 'package:mobile_habitat_insertion/models/vehicle.dart';
 import 'package:mobile_habitat_insertion/services/fleet_api_mappers.dart';
@@ -132,6 +133,20 @@ void main() {
     });
 
     expect(payload.notification.reservationId, '42');
+  });
+
+  test('notification mapper maps mobile update action', () {
+    final payload = FleetApiMappers.notificationFromJson({
+      'id': 21,
+      'objet': 'Mise à jour disponible',
+      'message': 'Une nouvelle version de Wheello est disponible.',
+      'type': 'mobile_update',
+      'cible_type': 'mobile_update',
+      'cible_id': 5,
+    });
+
+    expect(payload.notification.action, AppNotificationAction.openMobileUpdate);
+    expect(payload.notification.reservationId, isNull);
   });
 
   test('reservation mapper uses vehicle mileage as expected start mileage', () {

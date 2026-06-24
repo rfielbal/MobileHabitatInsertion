@@ -35,6 +35,7 @@ class _FleetHomeShellState extends State<FleetHomeShell>
   final _fleetApiService = FleetApiService();
   Timer? _sessionGuardTimer;
   Timer? _mobileUpdateTimer;
+  Timer? _notificationRefreshTimer;
   int _currentIndex = 0;
   int _vehicleRefreshVersion = 0;
   int _reservationRefreshVersion = 0;
@@ -58,6 +59,10 @@ class _FleetHomeShellState extends State<FleetHomeShell>
       const Duration(minutes: 5),
       (_) => MobileUpdateStore.refresh(),
     );
+    _notificationRefreshTimer = Timer.periodic(
+      const Duration(minutes: 5),
+      (_) => NotificationStore.refresh(),
+    );
     NotificationStore.refresh();
     MobileUpdateStore.refresh();
     _refreshActiveDepartureState();
@@ -76,6 +81,7 @@ class _FleetHomeShellState extends State<FleetHomeShell>
     );
     _sessionGuardTimer?.cancel();
     _mobileUpdateTimer?.cancel();
+    _notificationRefreshTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

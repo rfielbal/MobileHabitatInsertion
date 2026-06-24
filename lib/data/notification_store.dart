@@ -65,6 +65,10 @@ class NotificationStore {
         AppNotificationAction.resolveUnstartedReservation;
   }
 
+  static bool isMobileUpdateAction(AppNotification notification) {
+    return notification.action == AppNotificationAction.openMobileUpdate;
+  }
+
   static Future<bool> nativeNotificationsEnabled() async {
     await _ensureNativeNotificationsDisabledLoaded();
     return !_nativeNotificationsDisabled;

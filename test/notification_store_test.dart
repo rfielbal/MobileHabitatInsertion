@@ -217,6 +217,16 @@ void main() {
     expect(intent?.reservationId, '84');
   });
 
+  test('parses native mobile update notification tap payloads', () {
+    final intent = NativeNotificationTapIntent.fromPayload(
+      'notification:42:action:openMobileUpdate',
+    );
+
+    expect(intent?.notificationId, 42);
+    expect(intent?.action, AppNotificationAction.openMobileUpdate);
+    expect(intent?.reservationId, isNull);
+  });
+
   test('parses native notification tap payload without reservation', () {
     final intent = NativeNotificationTapIntent.fromPayload(
       'notification:-456',

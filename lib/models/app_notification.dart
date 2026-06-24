@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 
-enum AppNotificationAction { none, resolveUnstartedReservation }
+enum AppNotificationAction {
+  none,
+  resolveUnstartedReservation,
+  openMobileUpdate,
+}
 
 extension AppNotificationActionParsing on AppNotificationAction {
   static AppNotificationAction fromPayloadValue(String? value) {
     return switch (value) {
       'resolveUnstartedReservation' =>
         AppNotificationAction.resolveUnstartedReservation,
+      'openMobileUpdate' => AppNotificationAction.openMobileUpdate,
       _ => AppNotificationAction.none,
     };
   }

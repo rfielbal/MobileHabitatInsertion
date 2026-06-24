@@ -281,6 +281,7 @@ class FleetApiMappers {
         ),
         icon: _notificationIcon(type),
         color: _notificationColor(type),
+        action: _notificationAction(type, json),
         reservationId: _notificationReservationId(json),
       ),
     );
@@ -438,6 +439,7 @@ class FleetApiMappers {
       'reservation' => Icons.event_available,
       'constat' => Icons.assignment_turned_in_outlined,
       'signalement' => Icons.warning_amber,
+      'mobile_update' => Icons.system_update_alt,
       'mdp' => Icons.lock_reset,
       _ => Icons.notifications_none,
     };
@@ -447,7 +449,27 @@ class FleetApiMappers {
     return switch (type) {
       'signalement' => AppColors.maintenance,
       'constat' => AppColors.available,
+      'mobile_update' => AppColors.primary,
       _ => AppColors.primary,
+    };
+  }
+
+  static AppNotificationAction _notificationAction(
+    String type,
+    Map<String, dynamic> json,
+  ) {
+    final explicitAction = AppNotificationActionParsing.fromPayloadValue(
+      _text(json['action']),
+    );
+    if (explicitAction != AppNotificationAction.none) {
+      return explicitAction;
+    }
+
+    return switch (type) {
+      'mobile_update' ||
+      'app_update' ||
+      'apk' => AppNotificationAction.openMobileUpdate,
+      _ => AppNotificationAction.none,
     };
   }
 

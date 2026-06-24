@@ -6,6 +6,7 @@ import '../../models/reservation.dart';
 import '../../services/fleet_api_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
+import '../../widgets/brand_top_bar.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({
@@ -132,6 +133,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Future<void> _openNotification(AppNotification notification) async {
+    if (NotificationStore.isMobileUpdateAction(notification)) {
+      await _openMobileUpdateNotification(notification.id);
+      return;
+    }
+
     if (!NotificationStore.isUnstartedReservationAction(notification)) {
       await _markAsRead(notification);
       final reservationId = _navigableReservationId(notification);
@@ -151,6 +157,18 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       reservationId,
       notificationId: notification.id,
     );
+  }
+
+  Future<void> _openMobileUpdateNotification(int? notificationId) async {
+    if (notificationId != null) {
+      await _markNotificationIdAsRead(notificationId);
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    showMobileUpdateSheet(context);
   }
 
   Future<void> _openUnstartedReservation(
@@ -321,6 +339,18 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
     final normalizedReservationId = reservationId?.trim();
     if (normalizedReservationId == null || normalizedReservationId.isEmpty) {
+      if (widget.initialAction == AppNotificationAction.openMobileUpdate) {
+        _handledInitialNotification = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          if (!mounted) {
+            return;
+          }
+
+          await _openMobileUpdateNotification(notificationId);
+        });
+        return;
+      }
+
       if (notificationId != null) {
         _handledInitialNotification = true;
       }

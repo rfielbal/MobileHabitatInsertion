@@ -88,7 +88,7 @@ class BrandTopBar extends StatelessWidget implements PreferredSizeWidget {
           builder: (context, _) {
             return IconButton(
               tooltip: 'Mises à jour',
-              onPressed: () => _showMobileUpdateSheet(context),
+              onPressed: () => showMobileUpdateSheet(context),
               icon: _UpdateIcon(count: MobileUpdateStore.pendingCount),
             );
           },
@@ -115,7 +115,7 @@ class BrandTopBar extends StatelessWidget implements PreferredSizeWidget {
   }
 }
 
-void _showMobileUpdateSheet(BuildContext context) {
+void showMobileUpdateSheet(BuildContext context) {
   showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
