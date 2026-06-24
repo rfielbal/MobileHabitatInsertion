@@ -32,24 +32,31 @@ class MobileUpdateInfo {
     required int fallbackCurrentVersionCode,
     required String? fallbackCurrentVersionName,
   }) {
-    final currentVersionCode =
-        _intValue(json['currentVersionCode']) ?? fallbackCurrentVersionCode;
+    final currentVersionCode = fallbackCurrentVersionCode;
+    final currentVersionName =
+        fallbackCurrentVersionName?.trim().isEmpty == true
+        ? null
+        : fallbackCurrentVersionName?.trim();
     final latestVersionCode = _intValue(json['latestVersionCode']);
-    final updateAvailable =
-        json['updateAvailable'] == true ||
-        (json['update_available'] == true) ||
-        (latestVersionCode != null && latestVersionCode > currentVersionCode);
+    final latestVersionName = _stringValue(json['latestVersionName']);
+    final serverUpdateAvailable =
+        json['updateAvailable'] == true || json['update_available'] == true;
+    final updateAvailable = _isUpdateAvailable(
+      serverUpdateAvailable: serverUpdateAvailable,
+      currentVersionCode: currentVersionCode,
+      currentVersionName: currentVersionName,
+      latestVersionCode: latestVersionCode,
+      latestVersionName: latestVersionName,
+    );
 
     return MobileUpdateInfo(
       apkAvailable:
           json['apkAvailable'] == true || json['apk_available'] == true,
       updateAvailable: updateAvailable,
       currentVersionCode: currentVersionCode,
-      currentVersionName:
-          _stringValue(json['currentVersionName']) ??
-          fallbackCurrentVersionName,
+      currentVersionName: currentVersionName,
       latestVersionCode: latestVersionCode,
-      latestVersionName: _stringValue(json['latestVersionName']),
+      latestVersionName: latestVersionName,
       releaseNotes: _stringValue(json['releaseNotes']),
       apkSizeBytes: _intValue(json['apkSize']),
       apkSizeLabel: _stringValue(json['apkSizeFormatted']),
@@ -70,6 +77,64 @@ class MobileUpdateInfo {
       return int.tryParse(value.trim());
     }
     return null;
+  }
+
+  static bool _isUpdateAvailable({
+    required bool serverUpdateAvailable,
+    required int currentVersionCode,
+    required String? currentVersionName,
+    required int? latestVersionCode,
+    required String? latestVersionName,
+  }) {
+    if (latestVersionCode != null) {
+      if (latestVersionCode != currentVersionCode) {
+        return latestVersionCode > currentVersionCode;
+      }
+
+      return false;
+    }
+
+    if (currentVersionName != null && latestVersionName != null) {
+      final comparison = _compareVersionNames(
+        latestVersionName,
+        currentVersionName,
+      );
+
+      if (comparison != 0) {
+        return comparison > 0;
+      }
+
+      return false;
+    }
+
+    return serverUpdateAvailable;
+  }
+
+  static int _compareVersionNames(String latest, String current) {
+    final latestParts = _versionParts(latest);
+    final currentParts = _versionParts(current);
+    final length = latestParts.length > currentParts.length
+        ? latestParts.length
+        : currentParts.length;
+
+    for (var index = 0; index < length; index++) {
+      final latestPart = index < latestParts.length ? latestParts[index] : 0;
+      final currentPart = index < currentParts.length ? currentParts[index] : 0;
+
+      if (latestPart != currentPart) {
+        return latestPart.compareTo(currentPart);
+      }
+    }
+
+    return latest.trim().compareTo(current.trim());
+  }
+
+  static List<int> _versionParts(String value) {
+    return value
+        .split(RegExp(r'[^0-9]+'))
+        .where((part) => part.isNotEmpty)
+        .map((part) => int.tryParse(part) ?? 0)
+        .toList(growable: false);
   }
 
   static String? _stringValue(Object? value) {
