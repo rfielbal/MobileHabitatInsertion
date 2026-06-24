@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../data/mobile_update_store.dart';
@@ -266,10 +268,16 @@ class _MobileUpdateSheetState extends State<_MobileUpdateSheet> {
         _installing = false;
         _downloadProgress = null;
       });
+      unawaited(
+        Future<void>.delayed(
+          const Duration(seconds: 2),
+          MobileUpdateStore.refresh,
+        ),
+      );
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Téléchargement terminé. Validez l’installation Android.',
+            'Téléchargement terminé. Validez l’installation Android, puis rouvrez Wheello.',
           ),
         ),
       );
