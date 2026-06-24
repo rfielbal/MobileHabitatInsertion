@@ -7,7 +7,9 @@ class MobileUpdateInfo {
     this.latestVersionCode,
     this.latestVersionName,
     this.releaseNotes,
+    this.apkSizeBytes,
     this.apkSizeLabel,
+    this.apkSha256,
     this.uploadedAt,
     this.downloadUrl,
   });
@@ -19,7 +21,9 @@ class MobileUpdateInfo {
   final int? latestVersionCode;
   final String? latestVersionName;
   final String? releaseNotes;
+  final int? apkSizeBytes;
   final String? apkSizeLabel;
+  final String? apkSha256;
   final DateTime? uploadedAt;
   final Uri? downloadUrl;
 
@@ -47,7 +51,9 @@ class MobileUpdateInfo {
       latestVersionCode: latestVersionCode,
       latestVersionName: _stringValue(json['latestVersionName']),
       releaseNotes: _stringValue(json['releaseNotes']),
+      apkSizeBytes: _intValue(json['apkSize']),
       apkSizeLabel: _stringValue(json['apkSizeFormatted']),
+      apkSha256: _sha256Value(json['apkSha256']),
       uploadedAt: _dateValue(json['uploadedAt']),
       downloadUrl: _uriValue(json['downloadUrl']),
     );
@@ -91,5 +97,14 @@ class MobileUpdateInfo {
     }
 
     return uri;
+  }
+
+  static String? _sha256Value(Object? value) {
+    final normalized = _stringValue(value)?.toLowerCase();
+    if (normalized == null || !RegExp(r'^[a-f0-9]{64}$').hasMatch(normalized)) {
+      return null;
+    }
+
+    return normalized;
   }
 }

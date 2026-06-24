@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
@@ -121,6 +122,85 @@ class ApiClient {
     await _sendJson(method: 'DELETE', path: path, authenticated: authenticated);
   }
 
+  Future<void> downloadToFile(
+    String path, {
+    required String destinationPath,
+    Map<String, String>? queryParameters,
+    bool authenticated = true,
+    bool retryOnExpiredToken = true,
+    void Function(int receivedBytes, int? totalBytes)? onProgress,
+  }) async {
+    final request = http.Request('GET', _uri(path, queryParameters));
+    final headers = await _headers(authenticated: authenticated);
+    headers.remove('Content-Type');
+    headers['Accept'] =
+        'application/vnd.android.package-archive, application/octet-stream';
+    request.headers.addAll(headers);
+
+    final file = File(destinationPath);
+
+    try {
+      final streamedResponse = await _httpClient
+          .send(request)
+          .timeout(const Duration(seconds: 30));
+
+      if (streamedResponse.statusCode < 200 ||
+          streamedResponse.statusCode >= 300) {
+        final body = await streamedResponse.stream.bytesToString();
+        throw ApiException.fromResponse(
+          statusCode: streamedResponse.statusCode,
+          body: body,
+        );
+      }
+
+      await file.parent.create(recursive: true);
+      final sink = file.openWrite();
+      var receivedBytes = 0;
+      final totalBytes =
+          streamedResponse.contentLength != null &&
+              streamedResponse.contentLength! > 0
+          ? streamedResponse.contentLength
+          : null;
+
+      try {
+        await for (final chunk in streamedResponse.stream.timeout(
+          const Duration(minutes: 5),
+        )) {
+          receivedBytes += chunk.length;
+          sink.add(chunk);
+          onProgress?.call(receivedBytes, totalBytes);
+        }
+      } finally {
+        await sink.close();
+      }
+    } on ApiException catch (error) {
+      await _deletePartialFile(file);
+
+      if (authenticated &&
+          retryOnExpiredToken &&
+          error.isExpiredAuthentication &&
+          await _refreshStoredSession()) {
+        return downloadToFile(
+          path,
+          destinationPath: destinationPath,
+          queryParameters: queryParameters,
+          authenticated: authenticated,
+          retryOnExpiredToken: false,
+          onProgress: onProgress,
+        );
+      }
+
+      if (authenticated && error.statusCode == 401) {
+        await _invalidateStoredSession();
+      }
+
+      rethrow;
+    } catch (error) {
+      await _deletePartialFile(file);
+      throw _maintenanceExceptionFor(error) ?? error;
+    }
+  }
+
   Future<Object?> postMultipart(
     String path, {
     required String fileField,
@@ -172,6 +252,16 @@ class ApiClient {
       rethrow;
     } catch (error) {
       throw _maintenanceExceptionFor(error) ?? error;
+    }
+  }
+
+  Future<void> _deletePartialFile(File file) async {
+    try {
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (_) {
+      // Le prochain téléchargement écrasera le fichier incomplet.
     }
   }
 

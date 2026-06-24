@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../data/mobile_update_store.dart';
 import '../data/notification_store.dart';
 import '../models/mobile_update.dart';
+import '../services/mobile_update_download_service.dart';
 import '../theme/app_assets.dart';
 import '../theme/app_brand.dart';
 import '../theme/app_colors.dart';
@@ -170,6 +170,11 @@ class _MobileUpdateSheet extends StatefulWidget {
 }
 
 class _MobileUpdateSheetState extends State<_MobileUpdateSheet> {
+  final _downloadService = MobileUpdateDownloadService();
+  bool _installing = false;
+  double? _downloadProgress;
+  String? _installError;
+
   @override
   void initState() {
     super.initState();
@@ -197,17 +202,28 @@ class _MobileUpdateSheetState extends State<_MobileUpdateSheet> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _MobileUpdateHeader(info: info, loading: loading, error: error),
+                _MobileUpdateHeader(
+                  info: info,
+                  loading: loading,
+                  installing: _installing,
+                  error: error,
+                ),
                 const SizedBox(height: 18),
                 if (loading && info == null)
                   const LinearProgressIndicator(minHeight: 3)
+                else if (_installing)
+                  _MobileUpdateProgress(progress: _downloadProgress)
                 else
-                  _MobileUpdateDetails(info: info, error: error),
+                  _MobileUpdateDetails(
+                    info: info,
+                    error: _installError ?? error,
+                  ),
                 const SizedBox(height: 18),
                 _MobileUpdateActions(
                   info: info,
                   loading: loading,
-                  onDownload: _openDownload,
+                  installing: _installing,
+                  onInstall: _installUpdate,
                 ),
               ],
             ),
@@ -217,18 +233,57 @@ class _MobileUpdateSheetState extends State<_MobileUpdateSheet> {
     );
   }
 
-  Future<void> _openDownload(MobileUpdateInfo info) async {
-    final url = info.downloadUrl;
-    if (url == null) {
+  Future<void> _installUpdate(MobileUpdateInfo info) async {
+    if (_installing) {
       return;
     }
 
-    final opened = await launchUrl(url, mode: LaunchMode.externalApplication);
-    if (!opened || !mounted) {
-      return;
-    }
+    setState(() {
+      _installing = true;
+      _downloadProgress = null;
+      _installError = null;
+    });
 
-    Navigator.of(context).pop();
+    try {
+      await _downloadService.downloadVerifyAndOpen(
+        info,
+        onProgress: (progress) {
+          if (!mounted) {
+            return;
+          }
+
+          setState(() {
+            _downloadProgress = progress.ratio;
+          });
+        },
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _installing = false;
+        _downloadProgress = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Téléchargement terminé. Validez l’installation Android.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _installing = false;
+        _downloadProgress = null;
+        _installError = error.toString();
+      });
+    }
   }
 }
 
@@ -236,11 +291,13 @@ class _MobileUpdateHeader extends StatelessWidget {
   const _MobileUpdateHeader({
     required this.info,
     required this.loading,
+    required this.installing,
     required this.error,
   });
 
   final MobileUpdateInfo? info;
   final bool loading;
+  final bool installing;
   final String? error;
 
   @override
@@ -289,6 +346,16 @@ class _MobileUpdateHeader extends StatelessWidget {
   }
 
   _MobileUpdateStatus get _status {
+    if (installing) {
+      return const _MobileUpdateStatus(
+        icon: Icons.download,
+        color: AppColors.primary,
+        title: 'Téléchargement sécurisé',
+        subtitle:
+            'L’APK est récupéré depuis l’API, puis vérifié avant installation.',
+      );
+    }
+
     if (loading && info == null) {
       return const _MobileUpdateStatus(
         icon: Icons.sync,
@@ -390,6 +457,54 @@ class _MobileUpdateDetails extends StatelessWidget {
               ),
             ),
           ],
+          if (updateInfo.updateAvailable && updateInfo.apkSha256 == null) ...[
+            const SizedBox(height: 8),
+            const Text(
+              'Téléchargement direct indisponible : empreinte de sécurité manquante.',
+              style: TextStyle(
+                color: AppColors.error,
+                fontSize: 13,
+                height: 1.35,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _MobileUpdateProgress extends StatelessWidget {
+  const _MobileUpdateProgress({required this.progress});
+
+  final double? progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = progress;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceLow,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          LinearProgressIndicator(value: value),
+          const SizedBox(height: 10),
+          Text(
+            value == null
+                ? 'Préparation du téléchargement sécurisé'
+                : 'Téléchargement ${(value * 100).clamp(0, 100).toStringAsFixed(0)} %',
+            style: const TextStyle(
+              color: AppColors.onSurfaceVariant,
+              fontSize: 14,
+            ),
+          ),
         ],
       ),
     );
@@ -400,23 +515,25 @@ class _MobileUpdateActions extends StatelessWidget {
   const _MobileUpdateActions({
     required this.info,
     required this.loading,
-    required this.onDownload,
+    required this.installing,
+    required this.onInstall,
   });
 
   final MobileUpdateInfo? info;
   final bool loading;
-  final ValueChanged<MobileUpdateInfo> onDownload;
+  final bool installing;
+  final ValueChanged<MobileUpdateInfo> onInstall;
 
   @override
   Widget build(BuildContext context) {
-    final canDownload =
-        info?.updateAvailable == true && info?.downloadUrl != null;
+    final canInstall =
+        info?.updateAvailable == true && info?.apkSha256 != null && !installing;
 
     return Row(
       children: [
         Expanded(
           child: OutlinedButton.icon(
-            onPressed: loading ? null : MobileUpdateStore.refresh,
+            onPressed: loading || installing ? null : MobileUpdateStore.refresh,
             icon: const Icon(Icons.refresh),
             label: const Text('Vérifier'),
           ),
@@ -424,9 +541,15 @@ class _MobileUpdateActions extends StatelessWidget {
         const SizedBox(width: 12),
         Expanded(
           child: FilledButton.icon(
-            onPressed: canDownload ? () => onDownload(info!) : null,
-            icon: const Icon(Icons.download),
-            label: const Text('Télécharger'),
+            onPressed: canInstall ? () => onInstall(info!) : null,
+            icon: installing
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.system_update_alt),
+            label: Text(installing ? 'Téléchargement' : 'Installer'),
           ),
         ),
       ],
