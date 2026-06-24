@@ -46,10 +46,11 @@ class NativeNotificationService implements NativeNotificationSink {
 
   bool _initialized = false;
   bool _timeZonesInitialized = false;
+  bool _nativeNotificationsUnavailable = false;
 
   @override
   Future<void> initialize() async {
-    if (_initialized) {
+    if (_initialized || _nativeNotificationsUnavailable) {
       return;
     }
 
@@ -73,15 +74,21 @@ class NativeNotificationService implements NativeNotificationSink {
         _handleNotificationResponse(launchResponse);
       }
     } on MissingPluginException {
+      _nativeNotificationsUnavailable = true;
       // Le plugin natif n'est pas disponible pendant certains tests/hot restarts.
+    } on PlatformException catch (error) {
+      _handlePlatformNotificationError(error);
     }
   }
 
   @override
   Future<bool> requestPermissions() async {
-    await initialize();
-
     try {
+      await initialize();
+      if (_nativeNotificationsUnavailable) {
+        return false;
+      }
+
       final androidPlugin = _androidPlugin;
       final androidGranted = await androidPlugin
           ?.requestNotificationsPermission();
@@ -102,16 +109,20 @@ class NativeNotificationService implements NativeNotificationSink {
       return androidGranted ?? iosGranted ?? await notificationsEnabled();
     } on MissingPluginException {
       return false;
-    } on PlatformException {
+    } on PlatformException catch (error) {
+      _handlePlatformNotificationError(error);
       return false;
     }
   }
 
   @override
   Future<bool> notificationsEnabled() async {
-    await initialize();
-
     try {
+      await initialize();
+      if (_nativeNotificationsUnavailable) {
+        return false;
+      }
+
       final androidPlugin = _androidPlugin;
       if (androidPlugin != null) {
         final androidEnabled = await androidPlugin.areNotificationsEnabled();
@@ -127,7 +138,8 @@ class NativeNotificationService implements NativeNotificationSink {
       return iosSettings?.isEnabled ?? true;
     } on MissingPluginException {
       return false;
-    } on PlatformException {
+    } on PlatformException catch (error) {
+      _handlePlatformNotificationError(error);
       return false;
     }
   }
@@ -137,9 +149,12 @@ class NativeNotificationService implements NativeNotificationSink {
     AppNotification notification, {
     required int badgeCount,
   }) async {
-    await initialize();
-
     try {
+      await initialize();
+      if (_nativeNotificationsUnavailable) {
+        return false;
+      }
+
       await _plugin.show(
         id: notification.id,
         title: notification.title,
@@ -150,7 +165,8 @@ class NativeNotificationService implements NativeNotificationSink {
       return true;
     } on MissingPluginException {
       return false;
-    } on PlatformException {
+    } on PlatformException catch (error) {
+      _handlePlatformNotificationError(error);
       return false;
     }
   }
@@ -166,10 +182,13 @@ class NativeNotificationService implements NativeNotificationSink {
       return show(notification, badgeCount: badgeCount);
     }
 
-    await initialize();
-    _ensureTimeZonesInitialized();
-
     try {
+      await initialize();
+      if (_nativeNotificationsUnavailable) {
+        return false;
+      }
+      _ensureTimeZonesInitialized();
+
       await _zonedScheduleNotification(
         notification,
         scheduledUtc: scheduledUtc,
@@ -180,6 +199,7 @@ class NativeNotificationService implements NativeNotificationSink {
     } on MissingPluginException {
       return false;
     } on PlatformException catch (error) {
+      _handlePlatformNotificationError(error);
       if (error.code == 'exact_alarms_not_permitted') {
         return _scheduleInexactly(
           notification,
@@ -196,26 +216,34 @@ class NativeNotificationService implements NativeNotificationSink {
 
   @override
   Future<void> cancel(int notificationId) async {
-    await initialize();
-
     try {
+      await initialize();
+      if (_nativeNotificationsUnavailable) {
+        return;
+      }
+
       await _plugin.cancel(id: notificationId);
     } on MissingPluginException {
       return;
-    } on PlatformException {
+    } on PlatformException catch (error) {
+      _handlePlatformNotificationError(error);
       return;
     }
   }
 
   @override
   Future<void> cancelAll() async {
-    await initialize();
-
     try {
+      await initialize();
+      if (_nativeNotificationsUnavailable) {
+        return;
+      }
+
       await _plugin.cancelAll();
     } on MissingPluginException {
       return;
-    } on PlatformException {
+    } on PlatformException catch (error) {
+      _handlePlatformNotificationError(error);
       return;
     }
   }
@@ -304,6 +332,12 @@ class NativeNotificationService implements NativeNotificationSink {
       return false;
     } on PlatformException {
       return false;
+    }
+  }
+
+  void _handlePlatformNotificationError(PlatformException error) {
+    if (error.code == 'invalid_icon') {
+      _nativeNotificationsUnavailable = true;
     }
   }
 

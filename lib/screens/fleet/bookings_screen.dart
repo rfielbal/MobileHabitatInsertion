@@ -449,10 +449,14 @@ class _BookingsScreenState extends State<BookingsScreen> {
         else
           reservation,
     ];
-    await NotificationStore.upsertDepartureReminders(
-      reservationsWithLocalState,
-      DateTime.now(),
-    );
+    try {
+      await NotificationStore.upsertDepartureReminders(
+        reservationsWithLocalState,
+        DateTime.now(),
+      );
+    } catch (_) {
+      // Les rappels locaux ne doivent pas remplacer les données API par une erreur native.
+    }
     return reservationsWithLocalState;
   }
 
