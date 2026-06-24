@@ -268,16 +268,11 @@ class _MobileUpdateSheetState extends State<_MobileUpdateSheet> {
         _installing = false;
         _downloadProgress = null;
       });
-      unawaited(
-        Future<void>.delayed(
-          const Duration(seconds: 2),
-          MobileUpdateStore.refresh,
-        ),
-      );
+      unawaited(_refreshAfterInstallerReturns());
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Téléchargement terminé. Validez l’installation Android, puis rouvrez Wheello.',
+            'Téléchargement terminé. Validez l’installation Android.',
           ),
         ),
       );
@@ -291,6 +286,17 @@ class _MobileUpdateSheetState extends State<_MobileUpdateSheet> {
         _downloadProgress = null;
         _installError = error.toString();
       });
+    }
+  }
+
+  Future<void> _refreshAfterInstallerReturns() async {
+    for (final delay in const [Duration(seconds: 2), Duration(seconds: 8)]) {
+      await Future<void>.delayed(delay);
+      if (!mounted) {
+        return;
+      }
+
+      await MobileUpdateStore.refresh();
     }
   }
 }
