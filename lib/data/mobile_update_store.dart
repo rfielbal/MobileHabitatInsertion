@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 
 import '../models/mobile_update.dart';
+import '../services/installed_app_version_service.dart';
 import '../services/mobile_update_api_service.dart';
 
 class MobileUpdateStore {
@@ -15,6 +15,8 @@ class MobileUpdateStore {
       ValueNotifier<DateTime?>(null);
 
   static final MobileUpdateApiService _apiService = MobileUpdateApiService();
+  static const InstalledAppVersionService _installedVersionService =
+      InstalledAppVersionService();
   static bool _refreshing = false;
 
   static int get pendingCount {
@@ -31,15 +33,11 @@ class MobileUpdateStore {
     error.value = null;
 
     try {
-      final packageInfo = await PackageInfo.fromPlatform();
-      final currentVersionCode = int.tryParse(packageInfo.buildNumber) ?? 0;
-      final currentVersionName = packageInfo.version.trim().isEmpty
-          ? null
-          : packageInfo.version.trim();
+      final installedVersion = await _installedVersionService.read();
 
       info.value = await _apiService.fetchUpdateStatus(
-        currentVersionCode: currentVersionCode,
-        currentVersionName: currentVersionName,
+        currentVersionCode: installedVersion.versionCode,
+        currentVersionName: installedVersion.versionName,
       );
       lastCheckedAt.value = DateTime.now();
     } catch (_) {
