@@ -65,16 +65,9 @@ void main() {
     'startConstat sends reservation start when confirmed after end',
     () async {
       Map<String, dynamic>? sentBody;
-      Map<String, dynamic>? statusBody;
       final service = _serviceWithMockClient((request) async {
         if (request.method == 'GET') {
           return _emptyConstatsResponse();
-        }
-
-        if (request.method == 'PATCH') {
-          expect(request.url.path, '/api/metier/reservations/10');
-          statusBody = jsonDecode(request.body) as Map<String, dynamic>;
-          return http.Response('{}', 200);
         }
 
         expect(request.method, 'POST');
@@ -93,16 +86,11 @@ void main() {
       );
 
       expect(sentBody?['datePrise'], FleetApiMappers.iso(reservation.startAt));
-      expect(statusBody, {'demarre': true, 'termine': false});
     },
   );
 
   test('startConstat keeps the created constat id for return', () async {
     final service = _serviceWithMockClient((request) async {
-      if (request.method == 'PATCH') {
-        return http.Response('{}', 200);
-      }
-
       expect(request.method, 'POST');
       expect(request.url.path, '/api/metier/constats/demarrer');
       return http.Response(jsonEncode({'id': 99, 'reservationId': 10}), 201);
@@ -125,10 +113,6 @@ void main() {
       final service = _serviceWithMockClient((request) async {
         if (request.method == 'GET') {
           return _emptyConstatsResponse();
-        }
-
-        if (request.method == 'PATCH') {
-          return http.Response('{}', 200);
         }
 
         expect(request.method, 'POST');
@@ -156,10 +140,6 @@ void main() {
       final service = _serviceWithMockClient((request) async {
         if (request.method == 'GET') {
           return _emptyConstatsResponse();
-        }
-
-        if (request.method == 'PATCH') {
-          return http.Response('{}', 200);
         }
 
         expect(request.method, 'POST');
@@ -265,7 +245,7 @@ void main() {
       );
 
       expect(startRequests, 1);
-      expect(statusRequests, 1);
+      expect(statusRequests, 0);
     },
   );
 
@@ -273,7 +253,6 @@ void main() {
     'finishConstat sends a return date inside period when confirmed late',
     () async {
       Map<String, dynamic>? sentBody;
-      Map<String, dynamic>? statusBody;
       final service = _serviceWithMockClient((request) async {
         if (request.method == 'GET') {
           return http.Response(
@@ -296,10 +275,7 @@ void main() {
           return http.Response('{}', 200);
         }
 
-        expect(request.method, 'PATCH');
-        expect(request.url.path, '/api/metier/reservations/10');
-        statusBody = jsonDecode(request.body) as Map<String, dynamic>;
-        return http.Response('{}', 200);
+        fail('finishConstat should not patch the reservation status.');
       });
       final reservation = _reservation(
         startAt: DateTime(2026, 6, 18, 8, 30),
@@ -318,15 +294,14 @@ void main() {
         sentBody?['dateRendu'],
         FleetApiMappers.iso(DateTime(2026, 6, 18, 8, 39, 59)),
       );
-      expect(statusBody, {'termine': true, 'demarre': false});
     },
   );
 
   test(
-    'finishConstat fails when the termine patch is rejected after return post',
+    'finishConstat relies on the return endpoint for reservation status',
     () async {
       var returnRequests = 0;
-      var statusRequests = 0;
+      var patchRequests = 0;
       final service = _serviceWithMockClient((request) async {
         if (request.method == 'GET') {
           return http.Response(
@@ -349,7 +324,7 @@ void main() {
         }
 
         if (request.method == 'PATCH') {
-          statusRequests++;
+          patchRequests++;
           return http.Response('{"detail":"Forbidden"}', 403);
         }
 
@@ -362,17 +337,14 @@ void main() {
         constatId: '99',
       );
 
-      await expectLater(
-        service.finishConstat(
-          reservation: reservation,
-          mileage: 120,
-          confirmedAt: DateTime(2026, 6, 18, 8, 39),
-        ),
-        throwsA(isA<ApiException>()),
+      await service.finishConstat(
+        reservation: reservation,
+        mileage: 120,
+        confirmedAt: DateTime(2026, 6, 18, 8, 39),
       );
 
       expect(returnRequests, 1);
-      expect(statusRequests, 1);
+      expect(patchRequests, 0);
     },
   );
 
@@ -634,7 +606,6 @@ void main() {
       await videoFile.writeAsBytes([0, 1, 2, 3, 4]);
 
       Map<String, dynamic>? startBody;
-      Map<String, dynamic>? statusBody;
       final service = _serviceWithMockClient((request) async {
         if (request.method == 'GET') {
           return _emptyConstatsResponse();
@@ -642,12 +613,6 @@ void main() {
 
         if (request.url.path == '/api/metier/videos') {
           fail('A departure constat should not upload a video.');
-        }
-
-        if (request.method == 'PATCH') {
-          expect(request.url.path, '/api/metier/reservations/10');
-          statusBody = jsonDecode(request.body) as Map<String, dynamic>;
-          return http.Response('{}', 200);
         }
 
         expect(request.method, 'POST');
@@ -672,13 +637,11 @@ void main() {
       );
 
       expect(startBody?.containsKey('depart'), isFalse);
-      expect(statusBody, {'demarre': true, 'termine': false});
     },
   );
 
   test('finishConstat sends return without uploading video', () async {
     Map<String, dynamic>? returnBody;
-    Map<String, dynamic>? statusBody;
     final service = _serviceWithMockClient((request) async {
       if (request.method == 'GET') {
         return http.Response(
@@ -704,10 +667,7 @@ void main() {
         return http.Response('{}', 200);
       }
 
-      expect(request.method, 'PATCH');
-      expect(request.url.path, '/api/metier/reservations/10');
-      statusBody = jsonDecode(request.body) as Map<String, dynamic>;
-      return http.Response('{}', 200);
+      fail('finishConstat should not patch the reservation status.');
     });
     final reservation = _reservation(
       startAt: DateTime(2026, 6, 18, 8, 30),
@@ -723,7 +683,6 @@ void main() {
     );
 
     expect(returnBody?.containsKey('arrive'), isFalse);
-    expect(statusBody, {'termine': true, 'demarre': false});
   });
 
   test('finishConstat sends charging confirmation when provided', () async {
@@ -1122,7 +1081,6 @@ void main() {
       'vehiculeId': 1,
       'dateDebut': FleetApiMappers.iso(startAt),
       'dateFin': FleetApiMappers.iso(endAt),
-      'type': 'reservation',
     });
     expect(reservation.id, '99');
   });
@@ -1133,7 +1091,6 @@ void main() {
       final calls = <String>[];
       Map<String, dynamic>? reservationBody;
       Map<String, dynamic>? startBody;
-      Map<String, dynamic>? statusBody;
       final startAt = DateTime(2026, 6, 18, 9, 15);
       final endAt = DateTime(2026, 6, 18, 12, 30);
       final service = _serviceWithMockClient((request) async {
@@ -1172,12 +1129,6 @@ void main() {
           return http.Response(jsonEncode({'id': 42}), 201);
         }
 
-        if (request.method == 'PATCH' &&
-            request.url.path == '/api/metier/reservations/88') {
-          statusBody = jsonDecode(request.body) as Map<String, dynamic>;
-          return http.Response('{}', 200);
-        }
-
         return http.Response('{}', 404);
       });
 
@@ -1191,7 +1142,6 @@ void main() {
         'GET /api/metier/vehicules-disponibles',
         'POST /api/metier/reservations',
         'POST /api/metier/constats/demarrer',
-        'PATCH /api/metier/reservations/88',
       ]);
       expect(reservationBody?['dateDebut'], FleetApiMappers.iso(startAt));
       expect(reservationBody?['dateFin'], FleetApiMappers.iso(endAt));
@@ -1199,7 +1149,6 @@ void main() {
       expect(startBody?['vehiculeId'], 1);
       expect(startBody?['datePrise'], FleetApiMappers.iso(startAt));
       expect(startBody?['kmDebut'], 100);
-      expect(statusBody, {'demarre': true, 'termine': false});
       expect(reservation.id, '88');
       expect(reservation.isStarted, isTrue);
       expect(reservation.constatId, '42');

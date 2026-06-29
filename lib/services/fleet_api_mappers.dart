@@ -18,13 +18,6 @@ class ApiNotificationPayload {
 class FleetApiMappers {
   const FleetApiMappers._();
 
-  static const _peugeotImage =
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuCxpRQJXrqL-wN7xx1p1bkH1cNCYmWMRVsYSo-19HMwsjfzN3l1ASoOmMoBGheYEb4pYB7v6bLzPE0Khw6Sp9lIWDJgzo4xhnVDxekG-s69GoIMlTA_fevIFbqutRwpZ1reWtBzup3XE_oBY6kUqZAM-rYYBBvtM3ZMPUV4YIT7GdQlfIKjITFV7ZMlsR3WeD8C1o_Z6eN6_I7MCVLDV8RFzr_Tu-e-5vSKSbvs2qCBnCc9WSrc_fQS2Ag1XbFBeLGltLq4BSpq5SA';
-  static const _renaultImage =
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuBiyM9r4xFyExLo0IIX3GlqmuTF0PnSgWaJt0ryFZ-P4Ih9uQRXQErs8ma7f4humcwYlfsI0ei3ca95sXj3bCagMQuH0O3U_E6YtDx13pxuPcWelzASUonT_JzZmTpCIdlPVlToKTAmLVp0nWI1lHddO6WEt4-y0lemSZezL9IjCaGOorvjyXJ7_xh5ft8D7G0xmd8F2Dez6G8LqwfQVI9wgRwpgNuhyvnkabFWnNDrdIaLJNimSNxBjMvftejZzksHyPvBuhjbLa4';
-  static const _defaultImage =
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuA6ikFZGTeJ3t9WXCFzs7QwE5RmxmwhmMrds9cT1VeSWC3GFSzCBROKnxFnyM1LRabjlF6lJtD9ucTNVdDwCdI7OETAE5V7knOoGDxZGbOPbZDWiablFhqNU86OjVAxbgut_wOybL7J2XHHLPKryrp8ZuP9riYBpAx7lxTmF9UU0QqsmPHpV288g8AiZbGp14UQh-Q61-qCzGqoSywRIadaNzwYEBHSMPlkEnCPE2Nu2IcOAFVK07ZTkxL2Wf9xpDtxQnHAj3tarac';
-
   static Vehicle vehicleFromJson(Map<String, dynamic> json) {
     final id = _text(json['id'], fallback: '0');
     final brand = _text(json['marque'], fallback: 'Véhicule');
@@ -473,15 +466,8 @@ class FleetApiMappers {
     };
   }
 
-  static String _imageForBrand(String brand) {
-    final lower = brand.toLowerCase();
-    if (lower.contains('peugeot')) {
-      return _peugeotImage;
-    }
-    if (lower.contains('renault')) {
-      return _renaultImage;
-    }
-    return _defaultImage;
+  static String _imageForBrand(String _) {
+    return '';
   }
 
   static String? _imageFromApi(Map<String, dynamic> json) {

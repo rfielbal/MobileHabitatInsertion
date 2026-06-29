@@ -4,16 +4,11 @@ import '../models/vehicle.dart';
 class MockFleetData {
   const MockFleetData._();
 
-  static const _peugeotImage =
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuCxpRQJXrqL-wN7xx1p1bkH1cNCYmWMRVsYSo-19HMwsjfzN3l1ASoOmMoBGheYEb4pYB7v6bLzPE0Khw6Sp9lIWDJgzo4xhnVDxekG-s69GoIMlTA_fevIFbqutRwpZ1reWtBzup3XE_oBY6kUqZAM-rYYBBvtM3ZMPUV4YIT7GdQlfIKjITFV7ZMlsR3WeD8C1o_Z6eN6_I7MCVLDV8RFzr_Tu-e-5vSKSbvs2qCBnCc9WSrc_fQS2Ag1XbFBeLGltLq4BSpq5SA';
-  static const _kangooImage =
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuBiyM9r4xFyExLo0IIX3GlqmuTF0PnSgWaJt0ryFZ-P4Ih9uQRXQErs8ma7f4humcwYlfsI0ei3ca95sXj3bCagMQuH0O3U_E6YtDx13pxuPcWelzASUonT_JzZmTpCIdlPVlToKTAmLVp0nWI1lHddO6WEt4-y0lemSZezL9IjCaGOorvjyXJ7_xh5ft8D7G0xmd8F2Dez6G8LqwfQVI9wgRwpgNuhyvnkabFWnNDrdIaLJNimSNxBjMvftejZzksHyPvBuhjbLa4';
-  static const _teslaImage =
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuBrewX-yu5TLyyairug1agxvF6BiHznK3OHzTZKEtfA3ilsfDOoS1tPKcB7XtqUi50zv98u8TxR93vUkUUuMq5ge71jNgGLFfkNwG8VUryQ6RgCfS-bzX-SJAzv9tDnQonwmIa4GavZ6OqIa6m58SBTd7qVB0HrUXhAd9Y5zmc1dnibCt7Yb-6JdG2IrFn8fmp06o6jlDMfKno2qoK7NfJ3K4Hl1i_7f-hiViuHYZNI3RZND6MfRb81Px6tQwQSo6l0zVApLwT6vAo';
-  static const _golfImage =
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuCjLA8C2FYSi47eHRAVFHj6-scNSpaUHxLl2C76Q2E1fwEnfeZWLMRqoGCQPb2HvEyNQKcquXmgjV93AGecMarcem-wk2CBZ4IFQ5P4fQo480PsfkrvjmHyfEPYRXeOjueDEZuV3rk3oXmkOUF0nTcPl668d_8euY4YhO5KUp_kNwt053GeIHXIaQuH9HP1nJ9DYUt4zft4sCv25uXNFzd8GHy6Sqy7PoHYl3hwyXA8V45J4S71HIVA-VkZH7GO7YPD6wZbB80lLKw';
-  static const _detailPeugeotImage =
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuA6ikFZGTeJ3t9WXCFzs7QwE5RmxmwhmMrds9cT1VeSWC3GFSzCBROKnxFnyM1LRabjlF6lJtD9ucTNVdDwCdI7OETAE5V7knOoGDxZGbOPbZDWiablFhqNU86OjVAxbgut_wOybL7J2XHHLPKryrp8ZuP9riYBpAx7lxTmF9UU0QqsmPHpV288g8AiZbGp14UQh-Q61-qCzGqoSywRIadaNzwYEBHSMPlkEnCPE2Nu2IcOAFVK07ZTkxL2Wf9xpDtxQnHAj3tarac';
+  static const _peugeotImage = '';
+  static const _kangooImage = '';
+  static const _teslaImage = '';
+  static const _golfImage = '';
+  static const _detailPeugeotImage = '';
 
   static final vehicles = <Vehicle>[
     Vehicle(

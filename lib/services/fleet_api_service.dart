@@ -160,7 +160,6 @@ class FleetApiService {
         'vehiculeId': int.tryParse(vehicle.id) ?? vehicle.id,
         'dateDebut': FleetApiMappers.iso(startAt),
         'dateFin': FleetApiMappers.iso(endAt),
-        'type': 'reservation',
       },
     );
 
@@ -377,7 +376,6 @@ class FleetApiService {
             int.tryParse(reservation.vehicle.id) ?? reservation.vehicle.id,
         'dateDebut': FleetApiMappers.iso(startAt),
         'dateFin': FleetApiMappers.iso(endAt),
-        'type': 'reservation',
       },
     );
 
@@ -464,8 +462,6 @@ class FleetApiService {
     );
     final constatId = _constatIdFromStartResponse(response);
 
-    await _markReservationStarted(reservation);
-
     return reservation.copyWith(
       isStarted: true,
       isTerminated: false,
@@ -494,8 +490,6 @@ class FleetApiService {
     }
 
     await _apiClient.post('/metier/constats/$constatId/terminer', body: body);
-
-    await _markReservationTerminated(reservation);
   }
 
   DateTime _pickupTimestampInsideReservation(
@@ -635,20 +629,6 @@ class FleetApiService {
   String? _nullableText(Object? value) {
     final text = _textFromApiValue(value);
     return text.isEmpty ? null : text;
-  }
-
-  Future<void> _markReservationTerminated(FleetReservation reservation) async {
-    await _apiClient.patch(
-      '/metier/reservations/${reservation.id}',
-      body: {'termine': true, 'demarre': false},
-    );
-  }
-
-  Future<void> _markReservationStarted(FleetReservation reservation) async {
-    await _apiClient.patch(
-      '/metier/reservations/${reservation.id}',
-      body: {'demarre': true, 'termine': false},
-    );
   }
 
   String _constatIdForReturn(FleetReservation reservation) {

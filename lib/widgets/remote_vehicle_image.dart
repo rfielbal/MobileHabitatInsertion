@@ -20,6 +20,13 @@ class RemoteVehicleImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (imageUrl.trim().isEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(borderRadius),
+        child: _VehicleImagePlaceholder(height: height, width: width),
+      );
+    }
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
       child: Image.network(
@@ -28,16 +35,28 @@ class RemoteVehicleImage extends StatelessWidget {
         width: width,
         fit: fit,
         errorBuilder: (context, error, stackTrace) {
-          return Container(
-            height: height,
-            width: width,
-            color: AppColors.surfaceHigh,
-            child: const Icon(
-              Icons.directions_car,
-              color: AppColors.onSurfaceVariant,
-            ),
-          );
+          return _VehicleImagePlaceholder(height: height, width: width);
         },
+      ),
+    );
+  }
+}
+
+class _VehicleImagePlaceholder extends StatelessWidget {
+  const _VehicleImagePlaceholder({this.height, this.width});
+
+  final double? height;
+  final double? width;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: height,
+      width: width,
+      color: AppColors.surfaceHigh,
+      child: const Icon(
+        Icons.directions_car,
+        color: AppColors.onSurfaceVariant,
       ),
     );
   }
