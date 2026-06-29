@@ -95,6 +95,12 @@ _GuideContent _contentForTopic(AppUsageHelpTopic topic) {
               'À utiliser pour réserver un véhicule plus tard. Vous choisissez le véhicule, les dates et les horaires.',
         ),
         _GuideStepData(
+          icon: Icons.help_outline,
+          title: 'Guide d’utilisation',
+          body:
+              'Ouvrez le guide complet pour retrouver les principaux parcours de l’application.',
+        ),
+        _GuideStepData(
           icon: Icons.notifications_none,
           title: 'Notifications',
           body:

@@ -11,6 +11,7 @@ import '../../theme/app_colors.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/app_usage_help_dialog.dart';
 import '../../widgets/brand_top_bar.dart';
+import 'app_guide_screen.dart';
 import 'notifications_screen.dart';
 import 'personal_data_screen.dart';
 
@@ -132,6 +133,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
             AppCard(
               child: Column(
                 children: [
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(
+                      Icons.help_outline,
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                    title: const Text('Guide d’utilisation'),
+                    subtitle: const Text('Comprendre les principales actions'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _openAppGuide(context),
+                  ),
+                  const Divider(height: 16),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(
@@ -391,6 +404,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
       MaterialPageRoute<void>(
         settings: const RouteSettings(name: AppRoutes.personalData),
         builder: (context) => PersonalDataScreen(
+          onOpenReservationFromNotification:
+              widget.onOpenReservationFromNotification,
+        ),
+      ),
+    );
+  }
+
+  void _openAppGuide(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: AppRoutes.appGuide),
+        builder: (context) => AppGuideScreen(
           onOpenReservationFromNotification:
               widget.onOpenReservationFromNotification,
         ),

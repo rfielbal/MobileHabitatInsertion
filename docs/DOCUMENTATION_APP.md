@@ -1242,20 +1242,16 @@ La date de rendu est bornée :
 - après la fin prévue -> `endAt - 1 seconde` ;
 - pendant la réservation -> heure confirmée.
 
-### Patch statut réservation
+### Statut de réservation
 
-Après le retour, `_markReservationCompleted` essaye plusieurs variantes :
+Le client mobile ne patche plus directement le statut de la réservation après le départ ou le retour.
 
-```dart
-{'statue': 'terminé'}
-{'statue': 'termine'}
-{'statut': 'terminé'}
-{'statut': 'termine'}
-{'statu': 'terminé'}
-{'statu': 'termine'}
-```
+La source de vérité est côté API :
 
-Si ces patchs échouent, `finishConstat` ne lève pas forcément une erreur après le POST retour. Le retour véhicule reste donc validé côté constat même si le statut réservation n'a pas été mis à jour.
+- `POST /metier/constats/demarrer` démarre le constat et met à jour l'état serveur attendu ;
+- `POST /metier/constats/{id}/terminer` termine le constat, met à jour le retour et libère le véhicule si les règles métier sont satisfaites.
+
+Ce choix évite les doubles écritures et limite le risque de désynchronisation entre réservation, constat et véhicule.
 
 ## 11.11 Signalements et vidéos
 
@@ -1734,6 +1730,8 @@ Affiche :
 - e-mail ;
 - pôle ;
 - sites rattachés ;
+- accès au guide d’utilisation complet ;
+- accès aux données personnelles ;
 - interrupteur notifications ;
 - déconnexion.
 
@@ -1747,7 +1745,49 @@ Le switch notification utilise `permission_handler`.
 
 En cas de `MissingPluginException`, l'UI indique qu'une relance complète est nécessaire. C'est utile en développement après ajout de plugin natif.
 
-## 14.12 NotificationsScreen
+## 14.12 AppGuideScreen
+
+Fichier : [`lib/screens/fleet/app_guide_screen.dart`](../lib/screens/fleet/app_guide_screen.dart)
+
+Ce guide complet est accessible depuis :
+
+```text
+Profil > Guide d’utilisation
+```
+
+Il explique les principaux parcours de l’application :
+
+- accueil ;
+- véhicules ;
+- réservation classique ;
+- départ immédiat ;
+- départ et retour ;
+- signalements ;
+- notifications ;
+- données personnelles.
+
+Il complète les aides contextuelles affichées par l’icône `?` sur les pages principales.
+
+## 14.13 PersonalDataScreen
+
+Fichier : [`lib/screens/fleet/personal_data_screen.dart`](../lib/screens/fleet/personal_data_screen.dart)
+
+Cette page informe l’utilisateur sur les données personnelles traitées dans Wheello :
+
+- responsable et contact interne ;
+- finalités ;
+- données utilisées ;
+- durées ;
+- accès ;
+- droits.
+
+Elle est accessible depuis :
+
+```text
+Profil > Données personnelles
+```
+
+## 14.14 NotificationsScreen
 
 Fichier : [`lib/screens/fleet/notifications_screen.dart`](../lib/screens/fleet/notifications_screen.dart)
 
@@ -2187,7 +2227,7 @@ Commande :
 À la dernière exécution locale :
 
 ```text
-78 tests passed
+168 tests passed
 ```
 
 Analyse statique :
@@ -2266,7 +2306,7 @@ Couvre notamment :
 - bornage date de départ dans la période ;
 - non-création d'un second constat ;
 - bornage date de retour ;
-- retour réussi même si patch statut refusé ;
+- retour qui s’appuie sur l’endpoint serveur sans patch statut redondant ;
 - upload vidéo multipart ;
 - constats ouverts/fermés par id réservation et par véhicule ;
 - statut terminé ;
@@ -2424,11 +2464,11 @@ La vidéo n'est utilisée que pour les signalements.
 
 C'est cohérent avec l'interface, mais il faut que le backend accepte cette convention.
 
-## 22.5 Images véhicules distantes
+## 22.5 Images véhicules
 
-Les images sont des URLs distantes codées dans les mappers/mocks. Si ces URLs expirent ou changent, `RemoteVehicleImage` affiche une icône de secours.
+Les images doivent venir de l'API ou des assets locaux du projet.
 
-Pour une app production, mieux vaut que l'API fournisse l'image du véhicule ou qu'un asset local soit utilisé.
+Les anciens fallbacks distants codés dans les mappers/mocks ont été retirés. Si aucune image fiable n'est fournie, `RemoteVehicleImage` affiche un visuel de secours local.
 
 ## 22.6 Permissions iOS
 
@@ -2508,7 +2548,7 @@ Puis relancer tous les tests. Beaucoup de règles en dépendent :
 
 Exemple : envoyer carburant, propreté, clés, commentaires.
 
-## 23.4 Brancher des images API
+## 23.4 Brancher ou modifier les images API
 
 À modifier :
 
@@ -2521,7 +2561,7 @@ Ajouter une lecture de champ image, par exemple :
 - `photo`
 - `photoUrl`
 
-Fallback : conserver `_imageForBrand`.
+Fallback attendu : laisser une chaîne vide ou une valeur absente, afin d'utiliser le visuel local de secours.
 
 ## 23.5 Stabiliser l'historique des réservations
 
@@ -2851,7 +2891,7 @@ Points à consolider :
 - décider si les cases retour doivent être obligatoires ;
 - transmettre carburant/propreté/clés si métier nécessaire ;
 - compléter permissions iOS pour caméra/micro ;
-- remplacer images distantes codées en dur par données backend ou assets maintenus ;
+- alimenter durablement les images véhicules via l'API ou des assets maintenus ;
 - clarifier le comportement offline/session quand `/me` échoue.
 
 ---
@@ -2912,6 +2952,8 @@ Wheello fonctionne comme une application mobile métier connectée à une API Ha
 | [`lib/screens/fleet/return_vehicle_screen.dart`](../lib/screens/fleet/return_vehicle_screen.dart) | Retour véhicule |
 | [`lib/screens/fleet/report_issue_screen.dart`](../lib/screens/fleet/report_issue_screen.dart) | Signalement anomalie |
 | [`lib/screens/fleet/profile_screen.dart`](../lib/screens/fleet/profile_screen.dart) | Profil et permissions |
+| [`lib/screens/fleet/app_guide_screen.dart`](../lib/screens/fleet/app_guide_screen.dart) | Guide d’utilisation complet |
+| [`lib/screens/fleet/personal_data_screen.dart`](../lib/screens/fleet/personal_data_screen.dart) | Données personnelles |
 | [`lib/screens/fleet/notifications_screen.dart`](../lib/screens/fleet/notifications_screen.dart) | Notifications |
 | [`lib/widgets/availability_calendar.dart`](../lib/widgets/availability_calendar.dart) | Calendrier sélection disponibilité |
 | [`lib/widgets/reservation_band_calendar.dart`](../lib/widgets/reservation_band_calendar.dart) | Calendrier visuel réservations |
@@ -2929,7 +2971,7 @@ Derniers contrôles effectués avant rédaction :
 
 ```text
 flutter test
-78 tests passed
+168 tests passed
 ```
 
 ```text

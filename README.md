@@ -25,7 +25,7 @@ L'application permet de consulter les véhicules disponibles, créer et modifier
 - Statut "En usage" calculé depuis les constats ouverts/non fermés.
 - Signalement d'anomalie avec vidéo optionnelle.
 - Notifications API et rappels locaux de départ/retour.
-- Profil utilisateur, sites rattachés, permissions notifications et déconnexion.
+- Profil utilisateur, guide d'utilisation, données personnelles, sites rattachés, permissions notifications et déconnexion.
 
 ## Stack technique
 
@@ -310,7 +310,7 @@ flutter test
 À la dernière validation locale :
 
 ```text
-78 tests passed
+168 tests passed
 ```
 
 Analyse statique :
@@ -332,6 +332,12 @@ Une documentation détaillée du projet est disponible ici :
 [docs/DOCUMENTATION_APP.md](docs/DOCUMENTATION_APP.md)
 
 Elle couvre l'architecture, les modèles, les services, les écrans, les widgets, les flux métier, les règles de réservation, les endpoints API et les points de vigilance.
+
+Le guide utilisateur mobile est disponible ici :
+
+[docs/GUIDE_UTILISATEUR_APP.md](docs/GUIDE_UTILISATEUR_APP.md)
+
+Il correspond au guide visible dans l'application depuis `Profil > Guide d’utilisation`.
 
 ## Points de vigilance
 
