@@ -50,7 +50,7 @@ class AppGuideScreen extends StatelessWidget {
               icon: Icons.directions_car_outlined,
               title: 'Véhicules',
               body:
-                  'Recherchez un véhicule, filtrez par site ou statut, puis ouvrez sa fiche pour voir ses informations et ses disponibilités.',
+                  'Recherchez un véhicule, filtrez par site ou marque, puis ouvrez sa fiche pour voir ses informations et ses disponibilités.',
             ),
             _GuideSection(
               icon: Icons.calendar_month_outlined,

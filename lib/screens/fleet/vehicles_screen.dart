@@ -16,7 +16,6 @@ class VehiclesScreen extends StatefulWidget {
     super.key,
     this.refreshVersion = 0,
     this.filterCommandVersion = 0,
-    this.statusFilter,
     this.onReservationChanged,
     this.onOpenReservationFromNotification,
     this.showBackButton = false,
@@ -25,7 +24,6 @@ class VehiclesScreen extends StatefulWidget {
 
   final int refreshVersion;
   final int filterCommandVersion;
-  final VehicleStatus? statusFilter;
   final VoidCallback? onReservationChanged;
   final ValueChanged<String>? onOpenReservationFromNotification;
   final bool showBackButton;
@@ -41,12 +39,11 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
   late Future<_VehiclesData> _vehiclesFuture;
   String? _selectedSite;
   String? _selectedBrand;
-  VehicleStatus? _selectedStatus;
 
   @override
   void initState() {
     super.initState();
-    _applyExternalFilter(widget.statusFilter);
+    _resetSelection();
     _vehiclesFuture = _loadVehicles();
   }
 
@@ -59,7 +56,7 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
     }
 
     if (oldWidget.filterCommandVersion != widget.filterCommandVersion) {
-      _applyExternalFilter(widget.statusFilter);
+      _resetSelection();
     }
   }
 
@@ -74,7 +71,6 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
     List<String> sitePriority,
     String selectedSite,
     String? selectedBrand,
-    VehicleStatus? selectedStatus,
   ) {
     final query = _searchController.text.trim().toLowerCase();
     final vehicles = allVehicles.where((vehicle) {
@@ -89,10 +85,8 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
       final matchesSite = vehicle.site == selectedSite;
       final matchesBrand =
           selectedBrand == null || vehicle.brand == selectedBrand;
-      final matchesStatus =
-          selectedStatus == null || vehicle.status == selectedStatus;
 
-      return matchesQuery && matchesSite && matchesBrand && matchesStatus;
+      return matchesQuery && matchesSite && matchesBrand;
     }).toList();
 
     sortVehiclesByRecommendation(vehicles, sitePriority: sitePriority);
@@ -200,11 +194,6 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
                 final selectedBrand = brands.contains(_selectedBrand)
                     ? _selectedBrand
                     : null;
-                final selectedStatus =
-                    _selectedStatus != null &&
-                        _selectedStatus!.canBeUsedAsFilter
-                    ? _selectedStatus
-                    : null;
 
                 return _VehiclesContent(
                   vehicles: data.vehicles,
@@ -215,19 +204,15 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
                           data.sites,
                           selectedSite,
                           selectedBrand,
-                          selectedStatus,
                         ),
                   sites: data.sites,
                   brands: brands,
                   selectedSite: selectedSite,
                   selectedBrand: selectedBrand,
-                  selectedStatus: selectedStatus,
                   onSiteChanged: (value) =>
                       setState(() => _selectedSite = value),
                   onBrandChanged: (value) =>
                       setState(() => _selectedBrand = value),
-                  onStatusChanged: (value) =>
-                      setState(() => _selectedStatus = value),
                   onReset: _resetFilters,
                   onVehicleTap: _openVehicle,
                   onRefresh: _reloadVehicles,
@@ -248,15 +233,14 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
 
   void _resetFilters() {
     setState(() {
-      _applyExternalFilter(null);
+      _resetSelection();
     });
   }
 
-  void _applyExternalFilter(VehicleStatus? statusFilter) {
+  void _resetSelection() {
     _searchController.clear();
     _selectedSite = null;
     _selectedBrand = null;
-    _selectedStatus = statusFilter;
   }
 
   void _openVehicle(Vehicle vehicle) {
@@ -314,10 +298,8 @@ class _VehiclesContent extends StatelessWidget {
     required this.brands,
     required this.selectedSite,
     required this.selectedBrand,
-    required this.selectedStatus,
     required this.onSiteChanged,
     required this.onBrandChanged,
-    required this.onStatusChanged,
     required this.onReset,
     required this.onVehicleTap,
     required this.onRefresh,
@@ -329,10 +311,8 @@ class _VehiclesContent extends StatelessWidget {
   final List<String> brands;
   final String? selectedSite;
   final String? selectedBrand;
-  final VehicleStatus? selectedStatus;
   final ValueChanged<String?> onSiteChanged;
   final ValueChanged<String?> onBrandChanged;
-  final ValueChanged<VehicleStatus?> onStatusChanged;
   final VoidCallback onReset;
   final ValueChanged<Vehicle> onVehicleTap;
   final VoidCallback onRefresh;
@@ -354,10 +334,8 @@ class _VehiclesContent extends StatelessWidget {
           brands: brands,
           selectedSite: selectedSite,
           selectedBrand: selectedBrand,
-          selectedStatus: selectedStatus,
           onSiteChanged: onSiteChanged,
           onBrandChanged: onBrandChanged,
-          onStatusChanged: onStatusChanged,
           onReset: onReset,
         ),
         const SizedBox(height: 18),
@@ -444,10 +422,8 @@ class _VehicleFilters extends StatelessWidget {
     required this.brands,
     required this.selectedSite,
     required this.selectedBrand,
-    required this.selectedStatus,
     required this.onSiteChanged,
     required this.onBrandChanged,
-    required this.onStatusChanged,
     required this.onReset,
   });
 
@@ -455,16 +431,13 @@ class _VehicleFilters extends StatelessWidget {
   final List<String> brands;
   final String? selectedSite;
   final String? selectedBrand;
-  final VehicleStatus? selectedStatus;
   final ValueChanged<String?> onSiteChanged;
   final ValueChanged<String?> onBrandChanged;
-  final ValueChanged<VehicleStatus?> onStatusChanged;
   final VoidCallback onReset;
 
   @override
   Widget build(BuildContext context) {
-    final hasFilters =
-        selectedSite != null || selectedBrand != null || selectedStatus != null;
+    final hasFilters = selectedSite != null || selectedBrand != null;
 
     return Column(
       children: [
@@ -485,29 +458,6 @@ class _VehicleFilters extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: DropdownButtonFormField<VehicleStatus>(
-                initialValue: selectedStatus,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Statut'),
-                items: [
-                  const DropdownMenuItem<VehicleStatus>(
-                    value: null,
-                    child: Text('Tous'),
-                  ),
-                  for (final status in VehicleStatus.values.where(
-                    (status) => status.canBeUsedAsFilter,
-                  ))
-                    DropdownMenuItem(value: status, child: Text(status.label)),
-                ],
-                onChanged: onStatusChanged,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
               child: DropdownButtonFormField<String>(
                 initialValue: selectedBrand,
                 isExpanded: true,
@@ -523,13 +473,16 @@ class _VehicleFilters extends StatelessWidget {
                 onChanged: onBrandChanged,
               ),
             ),
-            const SizedBox(width: 12),
-            IconButton.outlined(
-              tooltip: 'Réinitialiser les filtres',
-              onPressed: hasFilters ? onReset : null,
-              icon: const Icon(Icons.filter_alt_off_outlined),
-            ),
           ],
+        ),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerRight,
+          child: IconButton.outlined(
+            tooltip: 'Réinitialiser les filtres',
+            onPressed: hasFilters ? onReset : null,
+            icon: const Icon(Icons.filter_alt_off_outlined),
+          ),
         ),
       ],
     );

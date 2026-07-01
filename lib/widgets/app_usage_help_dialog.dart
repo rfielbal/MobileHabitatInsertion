@@ -125,7 +125,7 @@ _GuideContent _contentForTopic(AppUsageHelpTopic topic) {
           icon: Icons.tune_outlined,
           title: 'Filtrer',
           body:
-              'Affinez la liste par site, statut ou marque pour ne garder que les véhicules pertinents.',
+              'Affinez la liste par site ou marque pour ne garder que les véhicules pertinents.',
         ),
         _GuideStepData(
           icon: Icons.calendar_month_outlined,
