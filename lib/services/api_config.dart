@@ -6,6 +6,7 @@ class ApiConfig {
 
   static const environmentFile = 'assets/.env.local';
   static const baseUrlEnvKey = 'API_BASE_URL';
+  static const _compileTimeBaseUrl = String.fromEnvironment(baseUrlEnvKey);
 
   static Future<void> loadEnvironment() async {
     try {
@@ -42,6 +43,10 @@ class ApiConfig {
   }
 
   static String _readBaseUrl() {
+    if (_compileTimeBaseUrl.trim().isNotEmpty) {
+      return _compileTimeBaseUrl;
+    }
+
     String? rawBaseUrl;
 
     try {
