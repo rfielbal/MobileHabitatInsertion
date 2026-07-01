@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
 class ApiException implements Exception {
   const ApiException({required this.message, this.statusCode, this.details});
 
@@ -21,7 +23,7 @@ class ApiException implements Exception {
     required int statusCode,
     required String body,
   }) {
-    if (statusCode >= 500) {
+    if (statusCode >= 500 && !kDebugMode) {
       return const ApiException(message: maintenanceMessage, statusCode: 503);
     }
 
