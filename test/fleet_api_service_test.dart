@@ -1575,6 +1575,33 @@ void main() {
   );
 
   test(
+    'fetchVehicleAvailabilityForMonth maps in-use status as reserved',
+    () async {
+      final service = _serviceWithMockClient((request) async {
+        if (request.url.path == '/api/metier/vehicules/1/disponibilites') {
+          return http.Response(
+            jsonEncode({
+              'jours': [
+                {'date': '2026-07-10', 'statut': 'en_utilisation'},
+              ],
+            }),
+            200,
+          );
+        }
+
+        return http.Response('{}', 404);
+      });
+
+      final availability = await service.fetchVehicleAvailabilityForMonth(
+        vehicle: _vehicle,
+        month: DateTime(2026, 7),
+      );
+
+      expect(availability[10], AvailabilityStatus.reserved);
+    },
+  );
+
+  test(
     'fetchVehicleAvailabilityForMonth marks only one day for same-day reservations',
     () async {
       final service = _serviceWithMockClient((request) async {

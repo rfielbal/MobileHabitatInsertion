@@ -30,7 +30,7 @@ class _ImmediateDepartureScreenState extends State<ImmediateDepartureScreen> {
   late final FleetApiService _fleetApiService;
   late final DateTime Function() _now;
   late Future<_ImmediateDepartureData> _departureDataFuture;
-  late TimeOfDay _returnTime;
+  late DateTime _returnAt;
 
   String? _selectedSite;
   Vehicle? _selectedVehicle;
@@ -42,7 +42,7 @@ class _ImmediateDepartureScreenState extends State<ImmediateDepartureScreen> {
     super.initState();
     _fleetApiService = widget._fleetApiService ?? FleetApiService();
     _now = widget._now ?? DateTime.now;
-    _returnTime = _defaultReturnTime(_now());
+    _returnAt = _defaultReturnAt(_now());
     _departureDataFuture = _loadDepartureData();
   }
 
@@ -106,7 +106,7 @@ class _ImmediateDepartureScreenState extends State<ImmediateDepartureScreen> {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Choisissez le site de départ, le véhicule disponible, puis indiquez uniquement l’heure de retour prévue.',
+                  'Choisissez le site de départ, le véhicule disponible, puis indiquez la date et l’heure de retour prévues.',
                   style: TextStyle(
                     color: AppColors.onSurfaceVariant,
                     fontSize: 14,
@@ -183,48 +183,65 @@ class _ImmediateDepartureScreenState extends State<ImmediateDepartureScreen> {
                   title: 'Retour prévu',
                   child: AppCard(
                     padding: const EdgeInsets.all(14),
-                    child: Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          height: 46,
-                          width: 46,
-                          decoration: const BoxDecoration(
-                            color: AppColors.primaryFixed,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.schedule,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Aujourd’hui',
-                                style: TextStyle(
-                                  color: AppColors.onSurfaceVariant,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                ),
+                        Row(
+                          children: [
+                            Container(
+                              height: 46,
+                              width: 46,
+                              decoration: const BoxDecoration(
+                                color: AppColors.primaryFixed,
+                                shape: BoxShape.circle,
                               ),
-                              Text(
-                                _returnTime.format(context),
-                                style: const TextStyle(
-                                  color: AppColors.onSurface,
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.w800,
-                                ),
+                              child: const Icon(
+                                Icons.event_available_outlined,
+                                color: AppColors.primary,
                               ),
-                            ],
-                          ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _returnDateLabel(_returnAt),
+                                    style: const TextStyle(
+                                      color: AppColors.onSurfaceVariant,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  Text(
+                                    _returnTimeLabel(context, _returnAt),
+                                    style: const TextStyle(
+                                      color: AppColors.onSurface,
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                        OutlinedButton.icon(
-                          onPressed: _pickReturnTime,
-                          icon: const Icon(Icons.edit_calendar_outlined),
-                          label: const Text('Modifier'),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: _pickReturnDate,
+                              icon: const Icon(Icons.calendar_month_outlined),
+                              label: const Text('Date'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: _pickReturnTime,
+                              icon: const Icon(Icons.schedule),
+                              label: const Text('Heure'),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -300,10 +317,10 @@ class _ImmediateDepartureScreenState extends State<ImmediateDepartureScreen> {
       _selectedVehicle = vehicle;
       _error = null;
     });
-    _adjustReturnTimeBeforeNextDeparture(vehicle);
+    _adjustReturnAtBeforeNextDeparture(vehicle);
   }
 
-  Future<void> _adjustReturnTimeBeforeNextDeparture(Vehicle vehicle) async {
+  Future<void> _adjustReturnAtBeforeNextDeparture(Vehicle vehicle) async {
     final selectedVehicleId = vehicle.id;
     final now = _now();
 
@@ -313,22 +330,21 @@ class _ImmediateDepartureScreenState extends State<ImmediateDepartureScreen> {
             vehicle: vehicle,
             month: now,
           );
-      DateTime? nextDepartureToday;
+      DateTime? nextDeparture;
       for (final startAt in startTimes) {
-        if (DateUtils.isSameDay(startAt, now) && startAt.isAfter(now)) {
-          nextDepartureToday = startAt;
+        if (startAt.isAfter(now)) {
+          nextDeparture = startAt;
           break;
         }
       }
 
-      if (nextDepartureToday == null) {
+      if (nextDeparture == null) {
         return;
       }
 
-      final suggestedReturn = nextDepartureToday.subtract(
-        const Duration(hours: 1),
-      );
-      if (!suggestedReturn.isAfter(now)) {
+      final suggestedReturn = nextDeparture.subtract(const Duration(hours: 1));
+      if (!suggestedReturn.isAfter(now) ||
+          !suggestedReturn.isBefore(_returnAt)) {
         return;
       }
 
@@ -337,25 +353,69 @@ class _ImmediateDepartureScreenState extends State<ImmediateDepartureScreen> {
       }
 
       setState(() {
-        _returnTime = TimeOfDay.fromDateTime(suggestedReturn);
+        _returnAt = suggestedReturn;
       });
     } catch (_) {
-      // L'heure par défaut reste valable ; la validation API protège le créneau.
+      // Le retour prévu par défaut reste valable ; la validation API protège le créneau.
     }
   }
 
-  Future<void> _pickReturnTime() async {
-    final picked = await showTimePicker(
+  Future<void> _pickReturnDate() async {
+    final now = _now();
+    final picked = await showDatePicker(
       context: context,
-      initialTime: _returnTime,
+      initialDate: _dateOnly(_returnAt),
+      firstDate: _dateOnly(now),
+      lastDate: _dateOnly(now).add(const Duration(days: 90)),
     );
 
     if (picked == null || !mounted) {
       return;
     }
 
+    final nextReturnAt = DateTime(
+      picked.year,
+      picked.month,
+      picked.day,
+      _returnAt.hour,
+      _returnAt.minute,
+    );
+
     setState(() {
-      _returnTime = picked;
+      _returnAt = nextReturnAt.isAfter(now)
+          ? nextReturnAt
+          : _defaultReturnAt(now);
+      _error = null;
+    });
+  }
+
+  Future<void> _pickReturnTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_returnAt),
+    );
+
+    if (picked == null || !mounted) {
+      return;
+    }
+
+    final nextReturnAt = DateTime(
+      _returnAt.year,
+      _returnAt.month,
+      _returnAt.day,
+      picked.hour,
+      picked.minute,
+    );
+
+    if (!nextReturnAt.isAfter(_now())) {
+      setState(() {
+        _error = 'Le retour prévu doit être après l’heure actuelle.';
+      });
+      return;
+    }
+
+    setState(() {
+      _returnAt = nextReturnAt;
       _error = null;
     });
   }
@@ -376,10 +436,10 @@ class _ImmediateDepartureScreenState extends State<ImmediateDepartureScreen> {
     }
 
     final startAt = _now();
-    final returnAt = _returnDateTime(startAt);
+    final returnAt = _returnAt;
     if (!startAt.isBefore(returnAt)) {
       setState(() {
-        _error = 'L’heure de retour doit être après l’heure actuelle.';
+        _error = 'Le retour prévu doit être après l’heure actuelle.';
       });
       return;
     }
@@ -423,35 +483,65 @@ class _ImmediateDepartureScreenState extends State<ImmediateDepartureScreen> {
     }
   }
 
-  DateTime _returnDateTime(DateTime startAt) {
-    return DateTime(
-      startAt.year,
-      startAt.month,
-      startAt.day,
-      _returnTime.hour,
-      _returnTime.minute,
-    );
+  DateTime _defaultReturnAt(DateTime now) {
+    if (now.hour < 16) {
+      final todayAtSix = DateTime(now.year, now.month, now.day, 18);
+      if (todayAtSix.isAfter(now)) {
+        return todayAtSix;
+      }
+    }
+
+    return _roundUpToNextHalfHour(now.add(const Duration(hours: 2)));
   }
 
-  TimeOfDay _defaultReturnTime(DateTime now) {
-    if (now.hour < 16) {
-      return const TimeOfDay(hour: 18, minute: 0);
+  DateTime _roundUpToNextHalfHour(DateTime value) {
+    final base = DateTime(value.year, value.month, value.day, value.hour);
+    final hasSubMinute =
+        value.second != 0 || value.millisecond != 0 || value.microsecond != 0;
+    if (value.minute == 0 && !hasSubMinute) {
+      return base;
+    }
+    if (value.minute < 30 || (value.minute == 30 && !hasSubMinute)) {
+      return base.add(const Duration(minutes: 30));
+    }
+    return base.add(const Duration(hours: 1));
+  }
+
+  DateTime _dateOnly(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
+  }
+
+  String _returnDateLabel(DateTime date) {
+    final today = _dateOnly(_now());
+    final target = _dateOnly(date);
+    if (target == today) {
+      return 'Aujourd’hui';
+    }
+    if (target == today.add(const Duration(days: 1))) {
+      return 'Demain';
     }
 
-    final suggested = now.add(const Duration(hours: 2));
-    if (suggested.day != now.day) {
-      return const TimeOfDay(hour: 23, minute: 45);
-    }
+    const weekDays = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+    const months = [
+      'janvier',
+      'février',
+      'mars',
+      'avril',
+      'mai',
+      'juin',
+      'juillet',
+      'août',
+      'septembre',
+      'octobre',
+      'novembre',
+      'décembre',
+    ];
 
-    final roundedMinute = suggested.minute <= 30 ? 30 : 0;
-    final roundedHour = roundedMinute == 0
-        ? suggested.hour + 1
-        : suggested.hour;
-    if (roundedHour >= 24) {
-      return const TimeOfDay(hour: 23, minute: 45);
-    }
+    return '${weekDays[date.weekday - 1]} ${date.day} ${months[date.month - 1]}';
+  }
 
-    return TimeOfDay(hour: roundedHour, minute: roundedMinute);
+  String _returnTimeLabel(BuildContext context, DateTime date) {
+    return TimeOfDay.fromDateTime(date).format(context);
   }
 
   void _reloadVehicles() {

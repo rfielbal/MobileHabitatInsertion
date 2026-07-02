@@ -395,7 +395,7 @@ class FleetApiService {
 
     if (!startAt.isBefore(returnAt)) {
       throw const ApiException(
-        message: 'L’heure de retour doit être après l’heure actuelle.',
+        message: 'Le retour prévu doit être après l’heure actuelle.',
       );
     }
 
@@ -1330,6 +1330,9 @@ class FleetApiService {
     if (status.contains('reserve') ||
         status.contains('réserv') ||
         status.contains('reservation') ||
+        status.contains('utilisation') ||
+        status.contains('usage') ||
+        status.contains('occup') ||
         status.contains('booked') ||
         status.contains('unavailable') ||
         status.contains('indisponible')) {

@@ -182,10 +182,10 @@ _GuideContent _contentForTopic(AppUsageHelpTopic topic) {
               'Prenez un véhicule libre dans la liste. Si aucun véhicule n’apparaît, essayez un autre site ou réservez plus tard.',
         ),
         _GuideStepData(
-          icon: Icons.schedule,
+          icon: Icons.event_available_outlined,
           title: 'Indiquer le retour prévu',
           body:
-              'Choisissez l’heure de retour estimée. Elle doit rester après l’heure actuelle et avant le prochain créneau réservé.',
+              'Choisissez la date et l’heure de retour estimées. Le retour prévu doit rester après l’heure actuelle et avant le prochain créneau réservé.',
         ),
         _GuideStepData(
           icon: Icons.play_circle_outline,
