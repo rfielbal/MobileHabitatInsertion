@@ -118,9 +118,20 @@ class BrandTopBar extends StatelessWidget implements PreferredSizeWidget {
 void showMobileUpdateSheet(BuildContext context) {
   showModalBottomSheet<void>(
     context: context,
+    isScrollControlled: true,
     showDragHandle: true,
     backgroundColor: AppColors.surfaceLowest,
-    builder: (context) => const _MobileUpdateSheet(),
+    builder: (context) {
+      return DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.78,
+        minChildSize: 0.45,
+        maxChildSize: 0.92,
+        builder: (context, scrollController) {
+          return _MobileUpdateSheet(scrollController: scrollController);
+        },
+      );
+    },
   );
 }
 
@@ -165,7 +176,9 @@ class _NotificationIcon extends StatelessWidget {
 }
 
 class _MobileUpdateSheet extends StatefulWidget {
-  const _MobileUpdateSheet();
+  const _MobileUpdateSheet({required this.scrollController});
+
+  final ScrollController scrollController;
 
   @override
   State<_MobileUpdateSheet> createState() => _MobileUpdateSheetState();
@@ -198,7 +211,8 @@ class _MobileUpdateSheetState extends State<_MobileUpdateSheet> {
 
         return SafeArea(
           top: false,
-          child: Padding(
+          child: SingleChildScrollView(
+            controller: widget.scrollController,
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -268,7 +282,7 @@ class _MobileUpdateSheetState extends State<_MobileUpdateSheet> {
         _installing = false;
         _downloadProgress = null;
       });
-      unawaited(_refreshAfterInstallerReturns());
+      unawaited(_refreshAfterInstallerReturns(info));
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -289,7 +303,9 @@ class _MobileUpdateSheetState extends State<_MobileUpdateSheet> {
     }
   }
 
-  Future<void> _refreshAfterInstallerReturns() async {
+  Future<void> _refreshAfterInstallerReturns(
+    MobileUpdateInfo attemptedInfo,
+  ) async {
     for (final delay in const [Duration(seconds: 2), Duration(seconds: 8)]) {
       await Future<void>.delayed(delay);
       if (!mounted) {
@@ -297,6 +313,19 @@ class _MobileUpdateSheetState extends State<_MobileUpdateSheet> {
       }
 
       await MobileUpdateStore.refresh();
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    final refreshedInfo = MobileUpdateStore.info.value;
+    if (refreshedInfo?.updateAvailable == true &&
+        refreshedInfo?.latestVersionCode == attemptedInfo.latestVersionCode) {
+      setState(() {
+        _installError =
+            'Installation non confirmée. Si Android a affiché « Application non installée », l’APK publié n’est probablement pas signé avec la même clé que l’application installée.';
+      });
     }
   }
 }

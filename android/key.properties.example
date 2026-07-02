@@ -1,0 +1,4 @@
+storeFile=wheello-release.jks
+storePassword=change-me
+keyAlias=wheello
+keyPassword=change-me

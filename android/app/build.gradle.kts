@@ -1,8 +1,22 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
+}
+
+fun releaseSigningProperty(name: String): String? {
+    return (keystoreProperties.getProperty(name) ?: providers.environmentVariable("WHEELLO_${name.uppercase()}").orNull)
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
 }
 
 android {
@@ -32,11 +46,35 @@ android {
         multiDexEnabled = true
     }
 
+    signingConfigs {
+        create("release") {
+            val releaseStoreFile = releaseSigningProperty("storeFile")
+            if (releaseStoreFile != null) {
+                storeFile = rootProject.file(releaseStoreFile)
+            }
+            storePassword = releaseSigningProperty("storePassword")
+            keyAlias = releaseSigningProperty("keyAlias")
+            keyPassword = releaseSigningProperty("keyPassword")
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            val releaseSigning = signingConfigs.getByName("release")
+            val releaseStoreFile = releaseSigning.storeFile
+            if (releaseStoreFile == null ||
+                !releaseStoreFile.exists() ||
+                releaseSigning.storePassword.isNullOrBlank() ||
+                releaseSigning.keyAlias.isNullOrBlank() ||
+                releaseSigning.keyPassword.isNullOrBlank()
+            ) {
+                throw GradleException(
+                    "Configuration de signature release manquante. " +
+                        "Créez android/key.properties à partir de android/key.properties.example " +
+                        "et utilisez toujours la même clé pour les APK Wheello."
+                )
+            }
+            signingConfig = releaseSigning
         }
     }
 }
